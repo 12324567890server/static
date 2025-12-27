@@ -14,14 +14,17 @@ const textInput = document.getElementById("text");
 const sendBtn = document.getElementById("send");
 const typingDiv = document.getElementById("typing");
 
-// === ЗАГРУЗКА ===
+// === ЗАГРУЗКА СООБЩЕНИЙ ===
 async function loadMessages() {
   const { data, error } = await supabase
     .from("messages")
     .select("*")
     .order("created_at", { ascending: true });
 
-  if (error) return;
+  if (error) {
+    console.error(error);
+    return;
+  }
 
   messagesDiv.innerHTML = "";
 
@@ -35,7 +38,6 @@ async function loadMessages() {
       minute: "2-digit"
     });
 
-    // 🔥 ВАЖНО: ОБРАТНЫЕ КАВЫЧКИ
     div.innerHTML = 
       <div class="username">${msg.username}</div>
       <div>${msg.text}</div>
@@ -52,13 +54,14 @@ async function loadMessages() {
 sendBtn.onclick = async () => {
   const username = usernameInput.value.trim();
   const text = textInput.value.trim();
+
   if (!username || !text) return;
 
   await supabase.from("messages").insert([{ username, text }]);
   textInput.value = "";
 };
 
-// === ИМИТАЦИЯ "ПЕЧАТАЕТ" ===
+// === ПЕЧАТАЕТ ===
 textInput.addEventListener("input", () => {
   typingDiv.style.display = "block";
   clearTimeout(window.typingTimer);
