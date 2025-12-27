@@ -16,25 +16,26 @@ const typingDiv = document.getElementById("typing");
 
 // === ЗАГРУЗКА ===
 async function loadMessages() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("messages")
     .select("*")
     .order("created_at", { ascending: true });
+
+  if (error) return;
 
   messagesDiv.innerHTML = "";
 
   data.forEach(msg => {
     const div = document.createElement("div");
     div.className =
-      "message " +
-      (msg.username === usernameInput.value ? "me" : "other");
+      "message " + (msg.username === usernameInput.value ? "me" : "other");
 
     const time = new Date(msg.created_at).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit"
     });
 
-    // 🔥 ВАЖНО: шаблонная строка
+    // 🔥 ВАЖНО: ОБРАТНЫЕ КАВЫЧКИ
     div.innerHTML = 
       <div class="username">${msg.username}</div>
       <div>${msg.text}</div>
@@ -57,7 +58,7 @@ sendBtn.onclick = async () => {
   textInput.value = "";
 };
 
-// === ПЕЧАТАЕТ ===
+// === ИМИТАЦИЯ "ПЕЧАТАЕТ" ===
 textInput.addEventListener("input", () => {
   typingDiv.style.display = "block";
   clearTimeout(window.typingTimer);
