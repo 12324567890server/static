@@ -10,34 +10,31 @@ const messagesDiv = document.getElementById("messages");
 const usernameInput = document.getElementById("username");
 const textInput = document.getElementById("text");
 const sendBtn = document.getElementById("send");
-const typing = document.getElementById("typing");
-
-let lastUser = "";
-
-function formatTime(dateStr) {
-  const d = new Date(dateStr);
-  return d.getHours().toString().padStart(2,"0") + ":" +
-         d.getMinutes().toString().padStart(2,"0");
-}
+const typingDiv = document.getElementById("typing");
 
 async function loadMessages() {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("messages")
     .select("*")
     .order("created_at", { ascending: true });
-
-  if (error) return;
 
   messagesDiv.innerHTML = "";
 
   data.forEach(msg => {
     const div = document.createElement("div");
-    div.className = "msg " + (msg.username === lastUser ? "right" : "left");
+    div.className = "message " +
+      (msg.username === usernameInput.value ? "me" : "other");
 
-    div.innerHTML =
-      '<div class="nick">' + msg.username + '</div>' +
-      '<div>' + msg.text + '</div>' +
-      '<div class="time">' + formatTime(msg.created_at) + '</div>';
+    const time = new Date(msg.created_at).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    div.innerHTML = 
+      <div class="username">${msg.username}</div>
+      <div>${msg.text}</div>
+      <div class="time">${time}</div>
+    ;
 
     messagesDiv.appendChild(div);
   });
@@ -45,21 +42,22 @@ async function loadMessages() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-sendBtn.onclick = async function () {
+sendBtn.onclick = async () => {
   const username = usernameInput.value.trim();
   const text = textInput.value.trim();
   if (!username || !text) return;
 
-  lastUser = username;
-  typing.style.display = "block";
-
-  await supabase.from("messages").insert([
-    { username: username, text: text }
-  ]);
-
-  typing.style.display = "none";
+  await supabase.from("messages").insert([{ username, text }]);
   textInput.value = "";
 };
+
+textInput.addEventListener("input", () => {
+  typingDiv.style.display = "block";
+  clearTimeout(window.typingTimer);
+  window.typingTimer = setTimeout(() => {
+    typingDiv.style.display = "none";
+  }, 1000);
+});
 
 loadMessages();
 setInterval(loadMessages, 2000);
