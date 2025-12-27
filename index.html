@@ -4,30 +4,28 @@
   <meta charset="UTF-8" />
   <title>StanDeep Chat</title>
 
-  <!-- ВАЖНО для телефонов -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- ВАЖНО: мобильная адаптация -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css" />
 
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-  <div class="chat-container">
-    <div class="chat-header">StanDeep Chat</div>
+<div class="app">
+  <header class="header">StanDeep Chat</header>
 
-    <div id="messages" class="chat-messages"></div>
+  <div id="messages" class="messages"></div>
 
-    <div class="typing" id="typing">Кто-то печатает…</div>
-
-    <div class="chat-input">
-      <input id="username" placeholder="Ник">
-      <input id="text" placeholder="Сообщение">
-      <button id="send">➤</button>
-    </div>
+  <div class="input-bar">
+    <input id="username" placeholder="Ваше имя" />
+    <input id="text" placeholder="Введите сообщение..." />
+    <button id="send">Отправить</button>
   </div>
+</div>
 
-  <script src="chat.js"></script>
+<script src="chat.js"></script>
 </body>
 </html>
