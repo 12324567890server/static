@@ -1,18 +1,18 @@
 const SUPABASE_URL = "https://bncysgnqsgpdpuupzgqj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR";
 
+// ✅ создаём клиент ОДИН РАЗ
 const supabase = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_KEY
 );
 
-// ===== Элементы =====
 const messagesDiv = document.getElementById("messages");
 const usernameInput = document.getElementById("username");
 const textInput = document.getElementById("text");
 const sendBtn = document.getElementById("send");
 
-// ===== Загрузка сообщений =====
+// 📥 загрузка сообщений
 async function loadMessages() {
   const { data, error } = await supabase
     .from("messages")
@@ -25,7 +25,6 @@ async function loadMessages() {
   }
 
   messagesDiv.innerHTML = "";
-
   data.forEach(msg => {
     const div = document.createElement("div");
     div.textContent = msg.username + ": " + msg.text;
@@ -35,7 +34,7 @@ async function loadMessages() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// ===== Отправка сообщения =====
+// 📤 отправка сообщения
 sendBtn.onclick = async () => {
   const username = usernameInput.value.trim();
   const text = textInput.value.trim();
@@ -43,13 +42,12 @@ sendBtn.onclick = async () => {
   if (!username || !text) return;
 
   await supabase.from("messages").insert([
-    { username: username, text: text }
+    { username, text }
   ]);
 
   textInput.value = "";
-  loadMessages();
 };
 
-// ===== Запуск =====
+// ⏱ сразу и каждые 2 секунды
 loadMessages();
 setInterval(loadMessages, 2000);
