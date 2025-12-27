@@ -41,13 +41,11 @@ async function loadMessages() {
 }
 
 sendBtn.onclick = async () => {
-  if (!usernameInput.value || !textInput.value) return;
+  const username = usernameInput.value.trim();
+  const text = textInput.value.trim();
+  if (!username || !text) return;
 
-  await supabase.from("messages").insert([{
-    username: usernameInput.value,
-    text: textInput.value
-  }]);
-
+  await supabase.from("messages").insert([{ username, text }]);
   textInput.value = "";
 };
 
@@ -56,7 +54,7 @@ textInput.addEventListener("input", () => {
   clearTimeout(window.typingTimer);
   window.typingTimer = setTimeout(() => {
     typingDiv.style.display = "none";
-  }, 1000);
+  }, 800);
 });
 
 loadMessages();
