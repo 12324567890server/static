@@ -1,56 +1,68 @@
-// ===== SUPABASE =====
-var SUPABASE_URL = "https://bncysgnqsgpdpuupzgqj.supabase.co";
-var SUPABASE_KEY = "sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR";
+// === SUPABASE ===
+const SUPABASE_URL = "https://bncysgnqsgpdpuupzgqj.supabase.co";
+const SUPABASE_KEY = "sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR";
 
-var supabase = window.supabase.createClient(
+const supabase = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_KEY
 );
 
-// ===== ELEMENTS =====
-var messagesDiv = document.getElementById("messages");
-var usernameInput = document.getElementById("username");
-var textInput = document.getElementById("text");
-var sendBtn = document.getElementById("send");
+// === ЭЛЕМЕНТЫ ===
+const messagesDiv = document.getElementById("messages");
+const usernameInput = document.getElementById("username");
+const textInput = document.getElementById("text");
+const sendBtn = document.getElementById("send");
+const typingDiv = document.getElementById("typing");
 
-// ===== LOAD MESSAGES =====
-function loadMessages() {
-  supabase
+// === ЗАГРУЗКА ===
+async function loadMessages() {
+  const { data } = await supabase
     .from("messages")
-    .select("username,text,created_at")
-    .order("created_at")
-    .then(function (result) {
-      if (result.error) return;
+    .select("*")
+    .order("created_at", { ascending: true });
 
-      messagesDiv.innerHTML = "";
+  messagesDiv.innerHTML = "";
 
-      for (var i = 0; i < result.data.length; i++) {
-        var msg = result.data[i];
-        var div = document.createElement("div");
-        div.textContent = msg.username + ": " + msg.text;
-        messagesDiv.appendChild(div);
-      }
+  data.forEach(msg => {
+    const div = document.createElement("div");
+    div.className = "message " + (msg.username === usernameInput.value ? "me" : "other");
 
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    const time = new Date(msg.created_at).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
     });
+
+    div.innerHTML = 
+      <div class="username">${msg.username}</div>
+      <div>${msg.text}</div>
+      <div class="time">${time}</div>
+    ;
+
+    messagesDiv.appendChild(div);
+  });
+
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// ===== SEND =====
-sendBtn.onclick = function () {
-  var username = usernameInput.value.trim();
-  var text = textInput.value.trim();
+// === ОТПРАВКА ===
+sendBtn.onclick = async () => {
+  const username = usernameInput.value.trim();
+  const text = textInput.value.trim();
+  if (!username || !text) return;
 
-  if (username === "" || text === "") return;
-
-  supabase
-    .from("messages")
-    .insert([{ username: username, text: text }])
-    .then(function () {
-      textInput.value = "";
-      loadMessages();
-    });
+  await supabase.from("messages").insert([{ username, text }]);
+  textInput.value = "";
 };
 
-// ===== START =====
+// === ИМИТАЦИЯ "ПЕЧАТАЕТ" ===
+textInput.addEventListener("input", () => {
+  typingDiv.style.display = "block";
+  clearTimeout(window.typingTimer);
+  window.typingTimer = setTimeout(() => {
+    typingDiv.style.display = "none";
+  }, 1000);
+});
+
+// === СТАРТ ===
 loadMessages();
 setInterval(loadMessages, 2000);
