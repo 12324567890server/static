@@ -25,7 +25,8 @@ async function loadMessages() {
 
   data.forEach(msg => {
     const div = document.createElement("div");
-    div.className = "message " +
+    div.className =
+      "message " +
       (msg.username === usernameInput.value ? "me" : "other");
 
     const time = new Date(msg.created_at).toLocaleTimeString([], {
@@ -33,6 +34,7 @@ async function loadMessages() {
       minute: "2-digit"
     });
 
+    // 🔥 ВАЖНО: шаблонная строка
     div.innerHTML = 
       <div class="username">${msg.username}</div>
       <div>${msg.text}</div>
