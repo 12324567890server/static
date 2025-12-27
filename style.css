@@ -2,131 +2,106 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: system-ui, sans-serif;
 }
 
 body {
-  background: linear-gradient(160deg, #0d0718, #140b2d);
+  background: #0b0615;
   height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 .app {
-  width: 100%;
-  max-width: 420px;
+  max-width: 500px;
+  margin: auto;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #0f0a1f;
+  background: linear-gradient(180deg, #120820, #08030f);
 }
 
-/* ===== HEADER ===== */
-.header {
+.top {
   padding: 16px;
   text-align: center;
-  font-weight: 600;
-  color: #b78cff;
-  border-bottom: 1px solid #24134a;
-  background: #120c26;
+  font-weight: 700;
+  color: #b77cff;
+  background: #160b2a;
 }
 
-/* ===== MESSAGES ===== */
 .messages {
   flex: 1;
-  padding: 14px;
+  padding: 12px;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
-/* MESSAGE */
-.message {
+.msg {
   max-width: 75%;
+  margin-bottom: 10px;
   padding: 10px 12px;
-  border-radius: 14px;
-  animation: fadeIn 0.25s ease;
-  word-wrap: break-word;
+  border-radius: 12px;
+  animation: fadeIn 0.2s ease;
 }
 
-.message.left {
+.left {
+  background: #1e103a;
+  color: #eee;
   align-self: flex-start;
-  background: #1a1238;
-  border-top-left-radius: 4px;
 }
 
-.message.right {
+.right {
+  background: #6b3cff;
+  color: white;
   align-self: flex-end;
-  background: linear-gradient(135deg, #6f4bff, #9b6cff);
-  color: #fff;
-  border-top-right-radius: 4px;
 }
 
-.username {
+.nick {
   font-size: 12px;
-  opacity: 0.8;
+  opacity: 0.7;
   margin-bottom: 4px;
 }
 
 .time {
-  font-size: 11px;
-  opacity: 0.6;
+  font-size: 10px;
+  opacity: 0.5;
   margin-top: 4px;
   text-align: right;
 }
 
-/* ===== INPUT ===== */
-.input-bar {
+.input {
   display: flex;
-  gap: 8px;
   padding: 10px;
-  background: #120c26;
-  border-top: 1px solid #24134a;
+  gap: 6px;
+  background: #120820;
 }
 
-.input-bar input {
-  background: #1b1240;
-  border: none;
-  padding: 10px;
-  color: #fff;
-  border-radius: 10px;
-  outline: none;
-}
-
-#username {
-  width: 28%;
-}
-
-#text {
+input {
   flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: #1a0f33;
+  color: white;
 }
 
-.input-bar button {
-  background: linear-gradient(135deg, #6f4bff, #9b6cff);
-  border: none;
-  color: #fff;
+button {
   padding: 0 16px;
-  border-radius: 12px;
+  border-radius: 10px;
+  border: none;
+  background: #7a4dff;
+  color: white;
   font-size: 18px;
 }
 
-/* ===== ANIMATION ===== */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.typing {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #aaa;
 }
 
-/* ===== MOBILE FIX ===== */
-@media (max-width: 480px) {
-  .app {
-    max-width: 100%;
-  }
+.hidden {
+  display: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
 }
