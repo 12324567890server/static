@@ -1,118 +1,119 @@
-/* СБРОС */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
 body {
   background: #0f172a;
-  color: #e5e7eb;
+  color: #fff;
   height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
-/* КОНТЕЙНЕР ЧАТА */
+/* контейнер */
 .chat {
-  background: #020617;
   width: 100%;
   max-width: 420px;
   height: 100vh;
+  background: #020617;
   display: flex;
   flex-direction: column;
-  padding: 12px;
 }
 
-/* ЗАГОЛОВОК */
+/* заголовок */
 .chat h1 {
+  padding: 14px;
   text-align: center;
-  padding: 10px 0;
-  font-size: 20px;
-  color: #38bdf8;
+  background: #020617;
   border-bottom: 1px solid #1e293b;
+  font-size: 18px;
 }
 
-/* СООБЩЕНИЯ */
+/* сообщения */
 .messages {
   flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-  margin: 10px 0;
-  background: #020617;
-  border-radius: 8px;
-}
-
-/* ОДНО СООБЩЕНИЕ */
-.messages div {
-  background: #1e293b;
-  padding: 8px 10px;
-  margin-bottom: 8px;
-  border-radius: 8px;
-  font-size: 14px;
-  word-wrap: break-word;
-}
-
-/* ПОЛЯ ВВОДА */
-input {
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 8px;
-  border-radius: 8px;
-  border: none;
-  background: #020617;
-  color: #e5e7eb;
-  border: 1px solid #1e293b;
-  font-size: 14px;
-}
-
-input::placeholder {
-  color: #64748b;
-}
-
-/* КНОПКА */
-button {
-  width: 100%;
   padding: 12px;
-  border-radius: 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* одно сообщение */
+.messages div {
+  max-width: 80%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #1e293b;
+  animation: fadeIn 0.2s ease;
+  word-wrap: break-word;
+  font-size: 14px;
+}
+
+/* ник */
+.messages div::before {
+  content: attr(data-user);
+  display: block;
+  font-size: 11px;
+  opacity: 0.6;
+  margin-bottom: 3px;
+}
+
+/* ввод */
+input {
   border: none;
-  background: #38bdf8;
-  color: #020617;
+  outline: none;
+  padding: 12px;
+  font-size: 14px;
+  background: #020617;
+  color: #fff;
+}
+
+#username {
+  border-top: 1px solid #1e293b;
+}
+
+#text {
+  border-top: 1px solid #1e293b;
+}
+
+/* кнопка */
+button {
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  padding: 12px;
   font-size: 15px;
-  font-weight: bold;
   cursor: pointer;
 }
 
 button:active {
-  transform: scale(0.98);
+  background: #1d4ed8;
 }
 
-/* СКРОЛЛ */
-.messages::-webkit-scrollbar {
-  width: 6px;
+/* анимация */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.messages::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
-}
-
-/* МОБИЛЬНАЯ АДАПТАЦИЯ */
+/* мобилка */
 @media (max-width: 480px) {
   .chat {
     max-width: 100%;
-    height: 100vh;
-    border-radius: 0;
   }
 
-  .chat h1 {
-    font-size: 18px;
-  }
-
-  input,
-  button {
-    font-size: 16px;
+  .messages div {
+    max-width: 90%;
   }
 }
