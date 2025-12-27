@@ -25,10 +25,8 @@ async function loadMessages() {
     div.className = "message " +
       (msg.username === usernameInput.value ? "me" : "other");
 
-    const time = new Date(msg.created_at).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
+    const time = new Date(msg.created_at)
+      .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
     div.innerHTML = 
       <div class="username">${msg.username}</div>
@@ -43,11 +41,13 @@ async function loadMessages() {
 }
 
 sendBtn.onclick = async () => {
-  const username = usernameInput.value.trim();
-  const text = textInput.value.trim();
-  if (!username || !text) return;
+  if (!usernameInput.value || !textInput.value) return;
 
-  await supabase.from("messages").insert([{ username, text }]);
+  await supabase.from("messages").insert([{
+    username: usernameInput.value,
+    text: textInput.value
+  }]);
+
   textInput.value = "";
 };
 
