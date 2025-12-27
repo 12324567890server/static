@@ -7,21 +7,16 @@ const supabase = window.supabase.createClient(
 );
 
 const messagesDiv = document.getElementById("messages");
+const typingDiv = document.getElementById("typing");
 const usernameInput = document.getElementById("username");
 const textInput = document.getElementById("text");
 const sendBtn = document.getElementById("send");
-
-function formatTime(date) {
-  const d = new Date(date);
-  return d.getHours().toString().padStart(2, "0") + ":" +
-         d.getMinutes().toString().padStart(2, "0");
-}
 
 async function loadMessages() {
   const { data } = await supabase
     .from("messages")
     .select("*")
-    .order("created_at", { ascending: true });
+    .order("created_at");
 
   messagesDiv.innerHTML = "";
 
@@ -29,12 +24,14 @@ async function loadMessages() {
 
   data.forEach(msg => {
     const div = document.createElement("div");
-    div.className = "message " + (msg.username === myName ? "right" : "left");
+    div.className = "msg " + (msg.username === myName ? "right" : "left");
+
+    const time = new Date(msg.created_at).toLocaleTimeString().slice(0,5);
 
     div.innerHTML = 
-      <div class="username">${msg.username}</div>
+      <div class="nick">${msg.username}</div>
       <div>${msg.text}</div>
-      <div class="time">${formatTime(msg.created_at)}</div>
+      <div class="time">${time}</div>
     ;
 
     messagesDiv.appendChild(div);
@@ -48,8 +45,16 @@ sendBtn.onclick = async () => {
   const text = textInput.value.trim();
   if (!username || !text) return;
 
-  await supabase.from("messages").insert([{ username, text }]);
+  typingDiv.classList.remove("hidden");
+
+  await supabase.from("messages").insert({
+    username,
+    text
+  });
+
   textInput.value = "";
+  typingDiv.classList.add("hidden");
+  loadMessages();
 };
 
 loadMessages();
