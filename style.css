@@ -1,87 +1,91 @@
+/* ===== СБРОС ===== */
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* ===== ФОН СТРАНИЦЫ ===== */
 body {
-  margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top, #1e1e1e, #000);
+  background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   color: #fff;
 }
 
-/* Контейнер чата */
+/* ===== КАРТОЧКА ЧАТА ===== */
 .chat {
   width: 100%;
   max-width: 420px;
-  background: #0f0f0f;
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+  background: #111;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
   display: flex;
   flex-direction: column;
 }
 
-/* Заголовок */
+/* ===== ЗАГОЛОВОК ===== */
 .chat h1 {
   text-align: center;
-  margin: 0 0 12px 0;
-  font-size: 22px;
+  margin-bottom: 15px;
+  font-size: 24px;
+  font-weight: bold;
 }
 
-/* Окно сообщений */
+/* ===== ОКНО СООБЩЕНИЙ ===== */
 .messages {
   flex: 1;
   background: #000;
   border-radius: 10px;
   padding: 10px;
-  margin-bottom: 10px;
   overflow-y: auto;
+  margin-bottom: 12px;
   font-size: 14px;
 }
 
-/* Сообщение */
+/* одно сообщение */
 .messages div {
   margin-bottom: 6px;
-  line-height: 1.4;
   word-wrap: break-word;
 }
 
-/* Поля ввода */
-input {
+/* ===== ПОЛЯ ВВОДА ===== */
+.chat input {
   width: 100%;
   padding: 10px;
   margin-bottom: 8px;
   border-radius: 8px;
   border: none;
   outline: none;
-  background: #1b1b1b;
+  background: #222;
   color: #fff;
   font-size: 14px;
 }
 
-/* Кнопка */
-button {
-  width: 100%;
+/* placeholder */
+.chat input::placeholder {
+  color: #aaa;
+}
+
+/* ===== КНОПКА ===== */
+.chat button {
   padding: 10px;
   border-radius: 8px;
   border: none;
-  background: linear-gradient(135deg, #3a7afe, #00c6ff);
+  cursor: pointer;
+  background: #3b82f6;
   color: #fff;
   font-size: 15px;
-  cursor: pointer;
-  transition: 0.2s;
+  font-weight: bold;
+  transition: background 0.2s;
 }
 
-button:hover {
-  opacity: 0.9;
-}
-
-button:active {
-  transform: scale(0.98);
+.chat button:hover {
+  background: #2563eb;
 }
 
 /* ===== АДАПТАЦИЯ ПОД ТЕЛЕФОН ===== */
@@ -92,8 +96,8 @@ button:active {
 
   .chat {
     max-width: 100%;
-    height: 100vh;
-    border-radius: 0;
+    padding: 15px;
+    border-radius: 12px;
   }
 
   .chat h1 {
@@ -101,11 +105,11 @@ button:active {
   }
 
   .messages {
-    font-size: 15px;
+    font-size: 13px;
   }
 
-  input,
-  button {
-    font-size: 16px;
+  .chat input,
+  .chat button {
+    font-size: 14px;
   }
 }
