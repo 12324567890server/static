@@ -31,11 +31,21 @@ async function loadMessages() {
       minute: "2-digit"
     });
 
-    div.innerHTML = 
-      <div class="username">${msg.username}</div>
-      <div>${msg.text}</div>
-      <div class="time">${time}</div>
-    ;
+    // СПОСОБ 1: Используем textContent и создаем элементы
+    const usernameEl = document.createElement("div");
+    usernameEl.className = "username";
+    usernameEl.textContent = msg.username;
+    
+    const textEl = document.createElement("div");
+    textEl.textContent = msg.text;
+    
+    const timeEl = document.createElement("div");
+    timeEl.className = "time";
+    timeEl.textContent = time;
+    
+    div.appendChild(usernameEl);
+    div.appendChild(textEl);
+    div.appendChild(timeEl);
 
     messagesDiv.appendChild(div);
   });
