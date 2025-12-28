@@ -49,7 +49,7 @@ async function loadMessages() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// отправка сообщений от пользователей
+// отправка сообщений
 sendBtn.onclick = async () => {
   const username = usernameInput.value.trim();
   const text = textInput.value.trim();
@@ -60,7 +60,7 @@ sendBtn.onclick = async () => {
   textInput.value = "";
 };
 
-// печатание визуализация
+// печатает
 textInput.addEventListener("input", () => {
   typingDiv.style.display = "block";
   clearTimeout(window.typingTimer);
@@ -69,7 +69,6 @@ textInput.addEventListener("input", () => {
   }, 1000);
 });
 
-// сколько сек должно пройти чтобы сообщение появилось
+// запуск
 loadMessages();
 setInterval(loadMessages, 2000);
-
