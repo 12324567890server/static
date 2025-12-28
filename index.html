@@ -3,18 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <title>StanDeep Chat</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#120925">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* Фолбэк для очень старых браузеров */
+    body { -webkit-text-size-adjust: none; }
+  </style>
 </head>
 <body>
   <div class="chat-container">
     <div class="chat-header">StanDeep Chat</div>
     <div id="messages" class="chat-messages"></div>
     <div class="chat-input">
-      <input id="username" placeholder="Ник" maxlength="20">
-      <input id="text" placeholder="Сообщение">
+      <input id="username" placeholder="Ник" maxlength="20" autocapitalize="off">
+      <input id="text" placeholder="Сообщение" autocapitalize="sentences">
       <button id="send">➤</button>
     </div>
   </div>
