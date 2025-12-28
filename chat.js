@@ -27,7 +27,10 @@
       const div = document.createElement("div");
       div.className = "message " + (msg.username === usernameInput.value ? "me" : "other");
 
-      const time = new Date(msg.created_at).toLocaleTimeString([], {
+      // Исправленное время (добавляем 3 часа для Москвы)
+      const msgDate = new Date(msg.created_at);
+      msgDate.setHours(msgDate.getHours() + 3); // UTC+3
+      const time = msgDate.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit"
       });
