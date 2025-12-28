@@ -1,4 +1,3 @@
-// === SUPABASE ===
 const SUPABASE_URL = "https://bncysgnqsgpdpuupzgqj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR";
 
@@ -7,14 +6,14 @@ const supabase = window.supabase.createClient(
   SUPABASE_KEY
 );
 
-// === ЭЛЕМЕНТЫ ===
+// элементы
 const messagesDiv = document.getElementById("messages");
 const usernameInput = document.getElementById("username");
 const textInput = document.getElementById("text");
 const sendBtn = document.getElementById("send");
 const typingDiv = document.getElementById("typing");
 
-// === ЗАГРУЗКА СООБЩЕНИЙ ===
+// загрузка сообщений
 async function loadMessages() {
   const { data, error } = await supabase
     .from("messages")
@@ -50,7 +49,7 @@ async function loadMessages() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// === ОТПРАВКА ===
+// отправка сообщений от пользователей
 sendBtn.onclick = async () => {
   const username = usernameInput.value.trim();
   const text = textInput.value.trim();
@@ -61,7 +60,7 @@ sendBtn.onclick = async () => {
   textInput.value = "";
 };
 
-// === ПЕЧАТАЕТ ===
+// печатание визуализация
 textInput.addEventListener("input", () => {
   typingDiv.style.display = "block";
   clearTimeout(window.typingTimer);
@@ -70,6 +69,7 @@ textInput.addEventListener("input", () => {
   }, 1000);
 });
 
-// === СТАРТ ===
+// сколько сек должно пройти чтобы сообщение появилось
 loadMessages();
 setInterval(loadMessages, 2000);
+
