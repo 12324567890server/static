@@ -37,12 +37,12 @@ async function loadMessages() {
       minute: "2-digit"
     });
 
-
+  
     div.innerHTML = 
       <div class="username">${msg.username}</div>
       <div>${msg.text}</div>
       <div class="time">${time}</div>
-    ;
+    `;
 
     messagesDiv.appendChild(div);
   });
@@ -58,6 +58,8 @@ sendBtn.onclick = async () => {
 
   await supabase.from("messages").insert([{ username, text }]);
   textInput.value = "";
+  // Сразу подгружаем сообщения после отправки
+  loadMessages(); 
 };
 
 // печать
