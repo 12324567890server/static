@@ -10,8 +10,8 @@
   const sendBtn = document.getElementById("send");
   const typingDiv = document.getElementById("typing");
 
-  let lastMessageTime = null;
-  let currentUsername = "";
+  let lastMessageId = null;
+  let myUsername = "";
 
   async function loadMessages() {
     try {
@@ -21,21 +21,22 @@
         .order("created_at", { ascending: true });
 
       if (error) throw error;
+      
+      if (data.length === 0) return;
+      
+      const latestId = data[data.length - 1].id;
+      if (lastMessageId === latestId) return;
+      
+      lastMessageId = latestId;
 
-      const latestMessage = data[data.length - 1];
-      const latestTime = latestMessage ? new Date(latestMessage.created_at).getTime() : null;
-
-      if (lastMessageTime && latestTime <= lastMessageTime) {
-        return;
-      }
-
-      lastMessageTime = latestTime;
+      const wasScrolledToBottom = 
+        messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 10;
 
       messagesDiv.innerHTML = "";
 
       data.forEach(msg => {
         const div = document.createElement("div");
-        div.className = "message " + (msg.username === usernameInput.value ? "me" : "other");
+        div.className = "message " + (msg.username === myUsername ? "me" : "other");
 
         const msgDate = new Date(msg.created_at);
         msgDate.setHours(msgDate.getHours() + 3);
@@ -53,9 +54,11 @@
         messagesDiv.appendChild(div);
       });
 
-      requestAnimationFrame(() => {
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      });
+      if (wasScrolledToBottom) {
+        setTimeout(() => {
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }, 10);
+      }
     } catch (err) {
       console.error("Ошибка загрузки:", err);
     }
@@ -65,8 +68,8 @@
     const username = usernameInput.value.trim();
     const text = textInput.value.trim();
     if (!username || !text) return;
-
-    currentUsername = username;
+    
+    myUsername = username;
 
     try {
       const { error } = await supabase
@@ -78,31 +81,19 @@
       textInput.value = "";
       textInput.focus();
       
-      await loadMessages();
+      setTimeout(loadMessages, 300);
     } catch (err) {
       console.error("Ошибка отправки:", err);
     }
   };
-
+  
   let typingTimer;
-  let isTypingActive = false;
   
   textInput.addEventListener("input", () => {
     const username = usernameInput.value.trim();
     if (!username) return;
     
-    if (username === currentUsername) {
-      typingDiv.style.display = "none";
-      return;
-    }
-    
-    typingDiv.textContent = `${username} печатает...`;
-    typingDiv.style.display = "block";
-    
     clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => {
-      typingDiv.style.display = "none";
-    }, 1500);
   });
 
   textInput.addEventListener("keypress", (e) => {
@@ -112,9 +103,9 @@
     }
   });
 
+  typingDiv.style.display = "none";
+
   loadMessages();
   
-  setInterval(() => {
-    loadMessages();
-  }, 3000);
+  setInterval(loadMessages, 3000);
 })();
