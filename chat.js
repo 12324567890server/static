@@ -60,7 +60,7 @@ sendBtn.onclick = async () => {
   textInput.value = "";
 };
 
-// печатает
+// печать
 textInput.addEventListener("input", () => {
   typingDiv.style.display = "block";
   clearTimeout(window.typingTimer);
