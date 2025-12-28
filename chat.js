@@ -37,6 +37,7 @@ async function loadMessages() {
       minute: "2-digit"
     });
 
+
     div.innerHTML = 
       <div class="username">${msg.username}</div>
       <div>${msg.text}</div>
@@ -53,7 +54,6 @@ async function loadMessages() {
 sendBtn.onclick = async () => {
   const username = usernameInput.value.trim();
   const text = textInput.value.trim();
-
   if (!username || !text) return;
 
   await supabase.from("messages").insert([{ username, text }]);
