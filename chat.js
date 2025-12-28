@@ -10,6 +10,9 @@
   const sendBtn = document.getElementById("send");
   const typingDiv = document.getElementById("typing");
 
+  let lastMessageTime = null;
+  let currentUsername = "";
+
   async function loadMessages() {
     try {
       const { data, error } = await supabase
@@ -18,6 +21,15 @@
         .order("created_at", { ascending: true });
 
       if (error) throw error;
+
+      const latestMessage = data[data.length - 1];
+      const latestTime = latestMessage ? new Date(latestMessage.created_at).getTime() : null;
+
+      if (lastMessageTime && latestTime <= lastMessageTime) {
+        return;
+      }
+
+      lastMessageTime = latestTime;
 
       messagesDiv.innerHTML = "";
 
@@ -41,7 +53,9 @@
         messagesDiv.appendChild(div);
       });
 
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      requestAnimationFrame(() => {
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      });
     } catch (err) {
       console.error("Ошибка загрузки:", err);
     }
@@ -52,6 +66,8 @@
     const text = textInput.value.trim();
     if (!username || !text) return;
 
+    currentUsername = username;
+
     try {
       const { error } = await supabase
         .from("messages")
@@ -61,24 +77,32 @@
 
       textInput.value = "";
       textInput.focus();
-      loadMessages();
+      
+      await loadMessages();
     } catch (err) {
       console.error("Ошибка отправки:", err);
     }
   };
 
   let typingTimer;
+  let isTypingActive = false;
+  
   textInput.addEventListener("input", () => {
     const username = usernameInput.value.trim();
-    if (username) {
-      typingDiv.textContent = `${username} печатает...`;
-      typingDiv.style.display = "block";
+    if (!username) return;
+    
+    if (username === currentUsername) {
+      typingDiv.style.display = "none";
+      return;
     }
+    
+    typingDiv.textContent = `${username} печатает...`;
+    typingDiv.style.display = "block";
     
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
       typingDiv.style.display = "none";
-    }, 1000);
+    }, 1500);
   });
 
   textInput.addEventListener("keypress", (e) => {
@@ -87,7 +111,10 @@
       sendBtn.click();
     }
   });
-  
+
   loadMessages();
-  setInterval(loadMessages, 2000);
+  
+  setInterval(() => {
+    loadMessages();
+  }, 3000);
 })();
