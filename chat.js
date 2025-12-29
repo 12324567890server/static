@@ -22,11 +22,12 @@
     lastId = latestId;
 
     const wasBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 50;
-    
     if (messagesDiv.children.length > 0 && data.length > messagesDiv.children.length) {
+      
       const newMessages = data.slice(messagesDiv.children.length);
       newMessages.forEach(msg => addMessage(msg));
     } else {
+      
       messagesDiv.innerHTML = "";
       data.forEach(msg => addMessage(msg));
     }
