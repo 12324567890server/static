@@ -144,23 +144,19 @@
         if (!currentUser) return;
         
         try {
-            const { data: existingUser } = await supabase
+            // Пытаемся обновить пользователя
+            const { error: updateError } = await supabase
                 .from('users')
-                .select('username')
-                .eq('username', currentUser.username)
-                .maybeSingle();
-            
-            if (existingUser) {
-                await supabase
-                    .from('users')
-                    .update({
-                        last_seen: new Date().toISOString(),
-                        device_id: userDeviceId,
-                        is_online: true,
-                        deleted: false
-                    })
-                    .eq('username', currentUser.username);
-            } else {
+                .update({
+                    last_seen: new Date().toISOString(),
+                    device_id: userDeviceId,
+                    is_online: true,
+                    deleted: false
+                })
+                .eq('username', currentUser.username);
+
+            // Если пользователь не найден, создаем нового
+            if (updateError && updateError.code === 'PGRST116') {
                 await supabase
                     .from('users')
                     .insert({
@@ -388,6 +384,7 @@
                         });
                     }
                     
+                    // Теперь read существует, проверяем
                     if (msg.receiver === currentUser.username && !msg.read && msg.sender !== currentUser.username) {
                         const currentCount = unreadCounts.get(otherUser) || 0;
                         unreadCounts.set(otherUser, currentCount + 1);
@@ -580,17 +577,15 @@
     }
 
     async function markChatAsRead(username) {
-        if (!username || !currentUser) return;
+        if (!username) return;
         
         try {
             await supabase
                 .from('private_messages')
                 .update({ read: true })
-                .match({
-                    receiver: currentUser.username,
-                    sender: username,
-                    read: false
-                });
+                .eq('receiver', currentUser.username)
+                .eq('sender', username)
+                .eq('read', false);
             
             unreadMessages.delete(username);
             updateChatsList();
@@ -759,17 +754,29 @@
                     showError(elements.loginError, 'Этот никнейм уже используется');
                     return;
                 }
-                
-                await supabase
-                    .from('users')
-                    .update({
-                        device_id: userDeviceId,
-                        last_seen: new Date().toISOString(),
-                        is_online: true,
-                        deleted: false
-                    })
-                    .eq('username', username);
-            } else {
+            }
+
+            currentUser = {
+                username: username,
+                createdAt: new Date().toISOString(),
+                device_id: userDeviceId
+            };
+            
+            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+            
+            // Пытаемся обновить
+            const { error: updateError } = await supabase
+                .from('users')
+                .update({
+                    device_id: userDeviceId,
+                    last_seen: new Date().toISOString(),
+                    is_online: true,
+                    deleted: false
+                })
+                .eq('username', username);
+
+            // Если не нашли пользователя, создаем
+            if (updateError && updateError.code === 'PGRST116') {
                 await supabase
                     .from('users')
                     .insert({
@@ -781,14 +788,6 @@
                     });
             }
 
-            currentUser = {
-                username: username,
-                createdAt: new Date().toISOString(),
-                device_id: userDeviceId
-            };
-            
-            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            
             showChats();
             updateUserDisplay();
             startIntervals();
