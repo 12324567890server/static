@@ -23,19 +23,36 @@
     </div>
   </div>
 
-  <div class="chat-container">
-    <div class="chat-header">
+  <div id="chatsScreen" class="chats-screen" style="display: none;">
+    <div class="chats-header">
       <div class="header-content">
-        <span id="chatTitle">SpeedNexus</span>
-        <button id="menuBtn" class="menu-btn">☰</button>
+        <span id="chatsTitle">Чаты</span>
+        <button id="chatsMenuBtn" class="menu-btn">☰</button>
+      </div>
+      <div class="search-container">
+        <input type="text" id="searchChats" placeholder="Поиск чатов..." class="search-input">
       </div>
     </div>
     
-    <div id="messages" class="chat-messages"></div>
+    <div id="chatsList" class="chats-list">
+      <!-- Список чатов будет здесь -->
+    </div>
+    
+    <button id="newChatBtn" class="new-chat-btn">+</button>
+  </div>
+
+  <div id="chatScreen" class="chat-screen" style="display: none;">
+    <div class="chat-header">
+      <button id="backToChats" class="back-btn">←</button>
+      <h3 id="chatWithUser">-</h3>
+      <div style="width: 40px;"></div>
+    </div>
+    
+    <div id="privateMessages" class="private-messages"></div>
     
     <div class="chat-input">
-      <input name="message" id="text" placeholder="Сообщение..." autocomplete="off">
-      <button id="send">➤</button>
+      <input type="text" id="messageInput" placeholder="Сообщение..." autocomplete="off">
+      <button id="sendMessageBtn">➤</button>
     </div>
   </div>
 
@@ -101,19 +118,16 @@
     </div>
   </div>
 
-  <div id="privateChatModal" class="modal private-chat-modal" style="display: none;">
+  <div id="newChatModal" class="modal" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <button class="back-btn" id="backFromPrivate">←</button>
-        <h3 id="privateChatTitle">Чат</h3>
-        <div style="width: 40px;"></div>
+        <h3>Новый чат</h3>
+        <button class="close-modal" data-modal="newChatModal">×</button>
       </div>
-      <div class="private-chat-body">
-        <div id="privateMessages" class="private-messages"></div>
-        <div class="private-input">
-          <input type="text" id="privateText" placeholder="Сообщение..." autocomplete="off">
-          <button id="sendPrivate">➤</button>
-        </div>
+      <div class="modal-body">
+        <input type="text" id="newChatUsername" class="modal-input" placeholder="Имя пользователя">
+        <div id="newChatError" class="error-message"></div>
+        <button id="startChatBtn" class="modal-btn">Начать чат</button>
       </div>
     </div>
   </div>
