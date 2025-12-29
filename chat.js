@@ -44,8 +44,7 @@
         newChatError: document.getElementById('newChatError'),
         chatsTitle: document.getElementById('chatsTitle'),
         restoreSection: document.getElementById('restoreSection'),
-        restoreAccountBtn: document.getElementById('restoreAccountBtn'),
-        notification: document.getElementById('notification')
+        restoreAccountBtn: document.getElementById('restoreAccountBtn')
     };
 
     let currentUser = null;
@@ -55,12 +54,9 @@
     let unreadMessages = new Map();
     let onlineUsers = new Set();
     let messageReadStatus = new Map();
-    let lastOnlineCheck = 0;
-    let lastMessagesCheck = 0;
-    let activeIntervals = [];
-    let chatMessagesCache = new Map();
-    let onlineStatusCache = new Map();
-    let isTyping = false;
+    let updateInterval = null;
+    let onlineInterval = null;
+    let heartbeatInterval = null;
 
     function init() {
         checkUser();
@@ -73,9 +69,38 @@
         }
     }
 
-    function cleanup() {
-        activeIntervals.forEach(interval => clearInterval(interval));
-        activeIntervals = [];
+    function startIntervals() {
+        stopIntervals();
+        
+        updateInterval = setInterval(() => {
+            if (currentUser) {
+                if (currentChatWith) {
+                    loadMessages(currentChatWith);
+                }
+                loadChats();
+            }
+        }, 1000);
+        
+        onlineInterval = setInterval(() => {
+            if (currentUser) {
+                checkOnlineStatuses();
+            }
+        }, 2000);
+        
+        heartbeatInterval = setInterval(() => {
+            if (currentUser) {
+                syncUserOnlineStatus();
+            }
+        }, 5000);
+    }
+
+    function stopIntervals() {
+        if (updateInterval) clearInterval(updateInterval);
+        if (onlineInterval) clearInterval(onlineInterval);
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        updateInterval = null;
+        onlineInterval = null;
+        heartbeatInterval = null;
     }
 
     function checkUser() {
@@ -85,7 +110,7 @@
                 currentUser = JSON.parse(savedUser);
                 showChats();
                 updateUserDisplay();
-                startSync();
+                startIntervals();
             } catch (e) {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -93,26 +118,6 @@
         } else {
             showLogin();
         }
-    }
-
-    function startSync() {
-        cleanup();
-        
-        syncUserOnlineStatus();
-        
-        activeIntervals.push(
-            setInterval(syncUserOnlineStatus, 5000)
-        );
-        
-        activeIntervals.push(
-            setInterval(checkOnlineStatuses, 500)
-        );
-        
-        activeIntervals.push(
-            setInterval(checkNewMessages, 1000)
-        );
-        
-        loadChats();
     }
 
     async function syncUserOnlineStatus() {
@@ -134,16 +139,9 @@
     }
 
     async function checkOnlineStatuses() {
-        if (!currentUser || Date.now() - lastOnlineCheck < 500) return;
-        lastOnlineCheck = Date.now();
+        if (!currentUser) return;
         
         try {
-            const cacheKey = 'online_status_' + Date.now();
-            if (onlineStatusCache.has(cacheKey)) {
-                updateOnlineUsers(onlineStatusCache.get(cacheKey));
-                return;
-            }
-
             const { data: users } = await supabase
                 .from('users')
                 .select('username, is_online')
@@ -151,138 +149,24 @@
                 .limit(50);
 
             if (users) {
-                onlineStatusCache.set(cacheKey, users);
-                setTimeout(() => onlineStatusCache.delete(cacheKey), 1000);
-                updateOnlineUsers(users);
+                const newOnlineUsers = new Set();
+                users.forEach(user => {
+                    if (user.is_online && user.username !== currentUser.username) {
+                        newOnlineUsers.add(user.username);
+                    }
+                });
+                
+                onlineUsers = newOnlineUsers;
+                updateChatStatus();
+                updateChatsList();
             }
         } catch (error) {
             console.error('Ошибка проверки онлайн:', error);
         }
     }
 
-    function updateOnlineUsers(users) {
-        const newOnlineUsers = new Set();
-        users.forEach(user => {
-            if (user.is_online && user.username !== currentUser.username) {
-                newOnlineUsers.add(user.username);
-            }
-        });
-        
-        if (onlineUsers.size !== newOnlineUsers.size || 
-            [...onlineUsers].some(user => !newOnlineUsers.has(user))) {
-            onlineUsers = newOnlineUsers;
-            updateChatStatus();
-            updateChatsList();
-        }
-    }
-
-    async function checkNewMessages() {
-        if (!currentUser || Date.now() - lastMessagesCheck < 1000) return;
-        lastMessagesCheck = Date.now();
-        
-        try {
-            if (currentChatWith) {
-                const messages = await loadMessagesFast(currentChatWith);
-                if (messages && messages.length > 0) {
-                    const lastMessage = messages[messages.length - 1];
-                    if (lastMessage.sender !== currentUser.username) {
-                        markMessageAsRead(lastMessage.id);
-                    }
-                }
-            }
-            
-            await updateChatsListFast();
-        } catch (error) {
-            console.error('Ошибка проверки сообщений:', error);
-        }
-    }
-
-    async function loadMessagesFast(username) {
-        if (!username) return [];
-        
-        const cacheKey = `messages_${username}_${currentUser.username}`;
-        if (chatMessagesCache.has(cacheKey)) {
-            return chatMessagesCache.get(cacheKey);
-        }
-
-        try {
-            const chatId = [currentUser.username, username].sort().join('_');
-            
-            const { data: messages } = await supabase
-                .from('private_messages')
-                .select('*')
-                .or(`chat_id.eq.${chatId},chat_id.eq.${username}_${currentUser.username}`)
-                .order('created_at', { ascending: true });
-            
-            if (messages) {
-                chatMessagesCache.set(cacheKey, messages);
-                setTimeout(() => chatMessagesCache.delete(cacheKey), 2000);
-                return messages;
-            }
-        } catch (error) {
-            console.error('Ошибка загрузки сообщений:', error);
-        }
-        
-        return [];
-    }
-
-    async function updateChatsListFast() {
-        if (!currentUser) return;
-        
-        try {
-            const { data: messages } = await supabase
-                .from('private_messages')
-                .select('*')
-                .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
-                .order('created_at', { ascending: false })
-                .limit(100);
-
-            if (messages) {
-                const chatMap = new Map();
-                const unreadCounts = new Map();
-                
-                messages.forEach(msg => {
-                    const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
-                    
-                    if (!chatMap.has(otherUser)) {
-                        chatMap.set(otherUser, {
-                            username: otherUser,
-                            lastMessage: msg.message,
-                            lastTime: msg.created_at,
-                            isMyMessage: msg.sender === currentUser.username
-                        });
-                    }
-                    
-                    if (msg.receiver === currentUser.username && !messageReadStatus.has(msg.id)) {
-                        unreadCounts.set(otherUser, (unreadCounts.get(otherUser) || 0) + 1);
-                    }
-                });
-
-                unreadMessages = unreadCounts;
-                chats = Array.from(chatMap.values());
-                
-                if (elements.chatsScreen.style.display !== 'none') {
-                    displayChats(chats);
-                }
-            }
-        } catch (error) {
-            console.error('Ошибка обновления чатов:', error);
-        }
-    }
-
-    async function markMessageAsRead(messageId) {
-        if (messageReadStatus.has(messageId)) return;
-        
-        messageReadStatus.set(messageId, true);
-        
-        if (currentChatWith) {
-            unreadMessages.delete(currentChatWith);
-            updateChatsList();
-        }
-    }
-
     function showLogin() {
-        cleanup();
+        stopIntervals();
         elements.loginScreen.style.display = 'flex';
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'none';
@@ -375,7 +259,7 @@
 
         elements.backToChats.onclick = function() {
             showChats();
-            updateChatsListFast();
+            loadChats();
         };
 
         elements.editProfileBtn.onclick = () => showModal('editProfileModal');
@@ -437,12 +321,46 @@
 
     async function loadChats() {
         if (!currentUser) return;
-        await updateChatsListFast();
+        
+        try {
+            const { data: messages } = await supabase
+                .from('private_messages')
+                .select('*')
+                .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
+                .order('created_at', { ascending: false });
+
+            const chatMap = new Map();
+            const unreadCounts = new Map();
+            
+            if (messages) {
+                messages.forEach(msg => {
+                    const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
+                    const chatId = [currentUser.username, otherUser].sort().join('_');
+                    
+                    if (!chatMap.has(otherUser)) {
+                        chatMap.set(otherUser, {
+                            username: otherUser,
+                            lastMessage: msg.message,
+                            lastTime: msg.created_at,
+                            isMyMessage: msg.sender === currentUser.username
+                        });
+                    }
+                    
+                    if (msg.receiver === currentUser.username && !messageReadStatus.has(msg.id)) {
+                        unreadCounts.set(otherUser, (unreadCounts.get(otherUser) || 0) + 1);
+                    }
+                });
+            }
+
+            unreadMessages = unreadCounts;
+            chats = Array.from(chatMap.values());
+            displayChats(chats);
+        } catch (error) {
+            console.error('Ошибка загрузки чатов:', error);
+        }
     }
 
     function displayChats(chatList) {
-        if (!elements.chatsList) return;
-        
         elements.chatsList.innerHTML = '';
         
         if (chatList.length === 0) {
@@ -462,10 +380,6 @@
             const unreadCount = unreadMessages.get(chat.username) || 0;
             
             let lastMessagePrefix = chat.isMyMessage ? 'Вы: ' : '';
-            let lastMessage = chat.lastMessage || '';
-            if (lastMessage.length > 30) {
-                lastMessage = lastMessage.substring(0, 30) + '...';
-            }
             
             div.innerHTML = `
                 <div class="chat-avatar">👤</div>
@@ -475,7 +389,7 @@
                         ${onlineUsers.has(chat.username) ? '<span class="status-indicator online" style="margin-left: 5px;"></span>' : ''}
                     </div>
                     <div class="chat-last-message">
-                        ${lastMessagePrefix}${lastMessage}
+                        ${lastMessagePrefix}${chat.lastMessage}
                     </div>
                     <div class="chat-time">${time}</div>
                 </div>
@@ -502,8 +416,15 @@
         if (!username) return;
         
         try {
-            const messages = await loadMessagesFast(username);
-            displayMessages(messages);
+            const chatId = [currentUser.username, username].sort().join('_');
+            
+            const { data: messages } = await supabase
+                .from('private_messages')
+                .select('*')
+                .or(`chat_id.eq.${chatId},chat_id.eq.${username}_${currentUser.username}`)
+                .order('created_at', { ascending: true });
+            
+            displayMessages(messages || []);
             
             if (messages) {
                 messages.forEach(msg => {
@@ -518,8 +439,6 @@
     }
 
     function displayMessages(messages) {
-        if (!elements.privateMessages) return;
-        
         elements.privateMessages.innerHTML = '';
         
         messages.forEach(msg => {
@@ -542,11 +461,7 @@
             elements.privateMessages.appendChild(div);
         });
         
-        setTimeout(() => {
-            if (elements.privateMessages) {
-                elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-            }
-        }, 50);
+        elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
     }
 
     function getMessageStatus(msg) {
@@ -585,10 +500,8 @@
             if (error) throw error;
             
             elements.messageInput.value = '';
-            chatMessagesCache.clear();
-            
             await loadMessages(currentChatWith);
-            await updateChatsListFast();
+            await loadChats();
             
         } catch (error) {
             console.error('Ошибка отправки:', error);
@@ -640,8 +553,8 @@
         updateChatsList();
     }
 
-    async function updateChatsList() {
-        await updateChatsListFast();
+    function updateChatsList() {
+        loadChats();
     }
 
     async function handleRestoreAccount() {
@@ -674,7 +587,8 @@
                 currentUser = user;
                 showChats();
                 updateUserDisplay();
-                startSync();
+                startIntervals();
+                alert('Аккаунт восстановлен!');
             } else if (existingUser && !existingUser.deleted) {
                 alert('Этот аккаунт уже активен. Используйте другой ник.');
             }
@@ -706,8 +620,9 @@
             localStorage.removeItem('speednexus_contacts');
             
             currentUser = null;
-            cleanup();
+            stopIntervals();
             showLogin();
+            alert('Аккаунт скрыт. Для восстановления нажмите кнопку "Восстановить скрытый аккаунт"');
         } catch (error) {
             console.error('Ошибка архивации:', error);
             alert('Ошибка при скрытии аккаунта');
@@ -776,7 +691,7 @@
 
             showChats();
             updateUserDisplay();
-            startSync();
+            startIntervals();
         } catch (error) {
             console.error('Ошибка регистрации:', error);
             showError(elements.loginError, 'Ошибка регистрации');
@@ -837,7 +752,6 @@
             hideModal('editProfileModal');
             elements.chatsTitle.textContent = 'Чаты (' + newUsername + ')';
             
-            chatMessagesCache.clear();
             loadChats();
             if (currentChatWith) {
                 showChat(currentChatWith);
@@ -973,7 +887,7 @@
         if (confirm('Вы уверены, что хотите выйти?')) {
             localStorage.removeItem('speednexus_user');
             currentUser = null;
-            cleanup();
+            stopIntervals();
             showLogin();
             elements.loginUsername.value = '';
         }
