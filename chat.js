@@ -49,6 +49,9 @@
   let archivedUser = null;
 
   function init() {
+    console.log('Инициализация...');
+    console.log('Кнопка archiveAccountBtn:', elements.archiveAccountBtn);
+    
     checkUser();
     setupEventListeners();
     
@@ -130,12 +133,16 @@
   }
 
   function setupEventListeners() {
+    console.log('Настройка обработчиков...');
+    
     elements.loginButton.onclick = handleLogin;
     elements.loginUsername.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') handleLogin();
     });
 
-    elements.restoreAccountBtn.onclick = handleRestoreAccount;
+    if (elements.restoreAccountBtn) {
+      elements.restoreAccountBtn.onclick = handleRestoreAccount;
+    }
 
     elements.menuBtn.onclick = toggleMenu;
     elements.closeMenu.onclick = toggleMenu;
@@ -154,7 +161,13 @@
       loadContacts();
     };
 
-    elements.archiveAccountBtn.onclick = handleArchiveAccount;
+    if (elements.archiveAccountBtn) {
+      console.log('Кнопка удаления найдена, добавляем обработчик');
+      elements.archiveAccountBtn.onclick = handleArchiveAccount;
+    } else {
+      console.error('Кнопка удаления НЕ найдена!');
+    }
+
     elements.logoutBtn.onclick = handleLogout;
 
     document.querySelectorAll('.close-modal').forEach(btn => {
@@ -229,6 +242,45 @@
     }
   }
 
+  async function handleArchiveAccount() {
+    console.log('Функция handleArchiveAccount вызвана');
+    if (!currentUser) {
+      console.log('Нет currentUser');
+      return;
+    }
+    
+    if (!confirm('Скрыть аккаунт? Вы сможете восстановить его позже.')) {
+      console.log('Пользователь отменил');
+      return;
+    }
+    
+    console.log('Начинаем архивацию для пользователя:', currentUser.username);
+    
+    try {
+      const result = await supabase
+        .from('users')
+        .update({
+          deleted: true,
+          deleted_at: new Date().toISOString(),
+          is_online: false
+        })
+        .eq('username', currentUser.username);
+      
+      console.log('Результат обновления в базе:', result);
+      
+      localStorage.setItem('speednexus_archived_user', JSON.stringify(currentUser));
+      localStorage.removeItem('speednexus_user');
+      localStorage.removeItem('speednexus_contacts');
+      
+      currentUser = null;
+      showLogin();
+      alert('Аккаунт скрыт. Для восстановления нажмите кнопку "Восстановить скрытый аккаунт"');
+    } catch (error) {
+      console.error('Ошибка архивации:', error);
+      alert('Ошибка при скрытии аккаунта');
+    }
+  }
+
   async function handleLogin() {
     const username = elements.loginUsername.value.trim();
     
@@ -294,36 +346,6 @@
     } catch (error) {
       console.error('Ошибка регистрации:', error);
       showError(elements.loginError, 'Ошибка регистрации');
-    }
-  }
-
-  async function handleArchiveAccount() {
-    if (!currentUser) return;
-    
-    if (!confirm('Скрыть аккаунт? Вы сможете восстановить его позже.')) {
-      return;
-    }
-    
-    try {
-      await supabase
-        .from('users')
-        .update({
-          deleted: true,
-          deleted_at: new Date().toISOString(),
-          is_online: false
-        })
-        .eq('username', currentUser.username);
-      
-      localStorage.setItem('speednexus_archived_user', JSON.stringify(currentUser));
-      localStorage.removeItem('speednexus_user');
-      localStorage.removeItem('speednexus_contacts');
-      
-      currentUser = null;
-      showLogin();
-      alert('Аккаунт скрыт. Для восстановления нажмите кнопку "Восстановить скрытый аккаунт"');
-    } catch (error) {
-      console.error('Ошибка архивации:', error);
-      alert('Ошибка при скрытии аккаунта');
     }
   }
 
