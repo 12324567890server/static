@@ -2,15 +2,9 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>SpeedNexus</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#120c1f">
-  <style>
-    
-    html, body {
-      background: #120c1f !important;
-    }
-  </style>
+  <title>SpeedNexus - Быстрый мессенджер</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="SpeedNexus - российский мессенджер для быстрой связи">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -19,8 +13,8 @@
     <div class="chat-header">SpeedNexus</div>
     <div id="messages" class="chat-messages"></div>
     <div class="chat-input">
-      <input id="username" placeholder="Имя">
-      <input id="text" placeholder="Сообщение...">
+      <input name="username" id="username" placeholder="Имя" maxlength="20">
+      <input name="message" id="text" placeholder="Сообщение..." autocomplete="off">
       <button id="send">➤</button>
     </div>
   </div>
