@@ -9,34 +9,131 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  
+
   <div id="loginScreen" class="login-screen" style="display: none;">
     <div class="login-container">
       <div class="login-header">SpeedNexus</div>
       <div class="login-content">
         <h2>Добро пожаловать!</h2>
-        <p>Введите имя пользователя чтобы начать общение</p>
+        <p>Придумайте уникальное имя пользователя</p>
         <input 
           type="text" 
           id="loginUsername" 
-          placeholder="Ваше имя" 
+          placeholder="Ваш никнейм" 
           maxlength="20"
           autocomplete="off"
           class="login-input"
         >
+        <div id="loginError" class="error-message"></div>
         <button id="loginButton" class="login-button">Начать общение</button>
-        <p class="login-note">ПРИМЕЧАНИЕ: Имя сохранится</p>
       </div>
     </div>
   </div>
 
   <div class="chat-container">
-    <div class="chat-header">SpeedNexus</div>
+    <div class="chat-header">
+      <div class="header-content">
+        <span id="chatTitle">SpeedNexus</span>
+        <button id="settingsBtn" class="settings-btn">⚙️</button>
+      </div>
+    </div>
+    
     <div id="messages" class="chat-messages"></div>
+    
     <div class="chat-input">
-      <input name="username" id="username" placeholder="Имя" maxlength="20" style="display: none;">
       <input name="message" id="text" placeholder="Сообщение..." autocomplete="off">
       <button id="send">➤</button>
+    </div>
+  </div>
+
+  <div id="settingsMenu" class="settings-menu" style="display: none;">
+    <div class="settings-header">
+      <button id="backToChat" class="back-btn">←</button>
+      <h3>Меню</h3>
+    </div>
+    
+    <div class="settings-content">
+      <div class="user-card">
+        <div class="user-avatar"></div>
+        <div class="user-info">
+          <h4 id="currentUsernameDisplay">-</h4>
+          <p id="userStatus">online</p>
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <button id="editProfileBtn" class="menu-btn">Изменить профиль</button>
+        <button id="findFriendsBtn" class="menu-btn">Найти друзей</button>
+        <button id="contactsBtn" class="menu-btn">Мои контакты</button>
+        <button id="logoutBtn" class="menu-btn logout">Выйти</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="editProfileModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Изменить профиль</h3>
+        <button class="close-modal" data-modal="editProfileModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Имя пользователя</label>
+          <input type="text" id="editUsername" class="modal-input" maxlength="20">
+          <div id="editUsernameError" class="error-message"></div>
+        </div>
+        <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="findFriendsModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Найти друзей</h3>
+        <button class="close-modal" data-modal="findFriendsModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <input type="text" id="searchUsername" class="modal-input" placeholder="Введите имя пользователя">
+          <div id="searchError" class="error-message"></div>
+        </div>
+        <button id="searchBtn" class="modal-btn">Найти</button>
+        
+        <div id="searchResults" class="search-results">
+          
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="contactsModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Мои контакты</h3>
+        <button class="close-modal" data-modal="contactsModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="contactsList" class="contacts-list">
+          
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="privateChatModal" class="modal private-chat-modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="privateChatTitle">Личный чат</h3>
+        <button class="close-modal" data-modal="privateChatModal">×</button>
+      </div>
+      <div class="private-chat-body">
+        <div id="privateMessages" class="private-messages"></div>
+        <div class="private-input">
+          <input type="text" id="privateText" placeholder="Сообщение..." autocomplete="off">
+          <button id="sendPrivate">➤</button>
+        </div>
+      </div>
     </div>
   </div>
 
