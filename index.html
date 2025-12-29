@@ -9,15 +9,98 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div class="chat-container">
-    <div class="chat-header">SpeedNexus</div>
+  
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-container">
+      <div class="auth-header">SpeedNexus</div>
+      <div class="auth-content">
+        <div class="auth-icon">👤</div>
+        <h2 class="auth-title">Выберите имя пользователя</h2>
+        <p class="auth-subtitle">Это имя будет отображаться в чате</p>
+        
+        <div class="auth-input-group">
+          <input 
+            type="text" 
+            id="authUsername" 
+            placeholder="Введите имя пользователя" 
+            maxlength="20"
+            autocomplete="off"
+            class="auth-input"
+          >
+          <div id="usernameError" class="error-message"></div>
+        </div>
+        
+        <button id="authSubmit" class="auth-button">Продолжить</button>
+        
+        <div class="auth-footer">
+          <p>Вы сможете изменить имя позже в настройках</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chat-container" style="display: none;">
+    <div class="chat-header">
+      <div class="header-content">
+        <span>SpeedNexus</span>
+        <button id="settingsBtn" class="settings-btn">⚙️</button>
+      </div>
+    </div>
+    
     <div id="messages" class="chat-messages"></div>
+    
     <div class="chat-input">
-      <input name="username" id="username" placeholder="Имя" maxlength="20">
-      <input name="message" id="text" placeholder="Сообщение..." autocomplete="off">
+      <input 
+        name="message" 
+        id="text" 
+        placeholder="Сообщение..." 
+        autocomplete="off"
+        maxlength="500"
+      >
       <button id="send">➤</button>
     </div>
   </div>
+
+  <div id="settingsModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Настройки профиля</h2>
+        <button id="closeSettings" class="close-btn">×</button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="user-info">
+          <div class="user-avatar">👤</div>
+          <div class="user-details">
+            <h3 id="currentUsername"></h3>
+            <p class="user-status">В сети</p>
+          </div>
+        </div>
+        
+        <div class="settings-section">
+          <h3>Изменить имя пользователя</h3>
+          <div class="input-group">
+            <input 
+              type="text" 
+              id="newUsername" 
+              placeholder="Новое имя пользователя" 
+              maxlength="20"
+              autocomplete="off"
+              class="settings-input"
+            >
+            <div id="changeUsernameError" class="error-message"></div>
+          </div>
+          <button id="changeUsernameBtn" class="settings-button">Сохранить изменения</button>
+        </div>
+        
+        <div class="settings-section">
+          <h3>Выйти из аккаунта</h3>
+          <button id="logoutBtn" class="logout-button">Выйти</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="chat.js"></script>
 </body>
 </html>
