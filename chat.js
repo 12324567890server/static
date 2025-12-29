@@ -3,94 +3,58 @@
   const SUPABASE_KEY = "sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR";
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  const authScreen = document.getElementById('authScreen');
-  const chatContainer = document.querySelector('.chat-container');
-  const messagesDiv = document.getElementById('messages');
-  const textInput = document.getElementById('text');
-  const sendBtn = document.getElementById('send');
-  const settingsBtn = document.getElementById('settingsBtn');
-  const settingsModal = document.getElementById('settingsModal');
-  const closeSettings = document.getElementById('closeSettings');
-  const currentUsername = document.getElementById('currentUsername');
-  const newUsernameInput = document.getElementById('newUsername');
-  const changeUsernameBtn = document.getElementById('changeUsernameBtn');
-  const logoutBtn = document.getElementById('logoutBtn');
-  const authUsernameInput = document.getElementById('authUsername');
-  const authSubmit = document.getElementById('authSubmit');
-  const usernameError = document.getElementById('usernameError');
-  const changeUsernameError = document.getElementById('changeUsernameError');
-
+  const messagesDiv = document.getElementById("messages");
+  const textInput = document.getElementById("text");
+  const sendBtn = document.getElementById("send");
+  const loginScreen = document.getElementById("loginScreen");
+  const loginUsername = document.getElementById("loginUsername");
+  const loginButton = document.getElementById("loginButton");
+  const usernameInput = document.getElementById("username");
+  
   let lastId = null;
   let currentUser = null;
 
-  function checkSavedUser() {
+  function checkUser() {
     const savedUser = localStorage.getItem('speednexus_user');
     if (savedUser) {
-      try {
-        currentUser = JSON.parse(savedUser);
-        showChat();
-      } catch (e) {
-        localStorage.removeItem('speednexus_user');
-        showAuth();
-      }
+      currentUser = JSON.parse(savedUser);
+      usernameInput.value = currentUser.username;
+      showChat();
     } else {
-      showAuth();
+      showLogin();
     }
   }
 
-  function showAuth() {
-    authScreen.style.display = 'flex';
-    chatContainer.style.display = 'none';
-    settingsModal.style.display = 'none';
-    authUsernameInput.focus();
+  function showLogin() {
+    loginScreen.style.display = 'flex';
+    loginUsername.focus();
   }
 
   function showChat() {
-    authScreen.style.display = 'none';
-    chatContainer.style.display = 'flex';
-    currentUsername.textContent = currentUser.username;
-    textInput.focus();
+    loginScreen.style.display = 'none';
     loadMessages();
   }
 
-  authSubmit.onclick = async () => {
-    const username = authUsernameInput.value.trim();
-    
+  loginButton.onclick = () => {
+    const username = loginUsername.value.trim();
     if (!username) {
-      showError(usernameError, 'Введите имя пользователя');
-      return;
-    }
-    
-    if (username.length < 3) {
-      showError(usernameError, 'Имя должно быть не менее 3 символов');
-      return;
-    }
-    
-    if (username.length > 20) {
-      showError(usernameError, 'Имя должно быть не более 20 символов');
-      return;
-    }
-    
-    const invalidChars = /[<>:"/\\|?*]/;
-    if (invalidChars.test(username)) {
-      showError(usernameError, 'Недопустимые символы в имени');
+      loginUsername.focus();
       return;
     }
     
     currentUser = {
       username: username,
-      createdAt: new Date().toISOString(),
-      lastLogin: new Date().toISOString()
+      createdAt: new Date().toISOString()
     };
     
     localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+    usernameInput.value = username;
     showChat();
   };
 
-  authUsernameInput.addEventListener('keypress', (e) => {
+  loginUsername.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      e.preventDefault();
-      authSubmit.click();
+      loginButton.click();
     }
   });
 
@@ -107,7 +71,6 @@
     lastId = latestId;
 
     const wasBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 50;
-    
     if (messagesDiv.children.length > 0 && data.length > messagesDiv.children.length) {
       const newMessages = data.slice(messagesDiv.children.length);
       newMessages.forEach(msg => addMessage(msg));
@@ -123,8 +86,7 @@
 
   function addMessage(msg) {
     const div = document.createElement("div");
-    const isMyMessage = currentUser && msg.username === currentUser.username;
-    div.className = `message ${isMyMessage ? 'me' : 'other'}`;
+    div.className = `message ${msg.username === currentUser?.username ? 'me' : 'other'}`;
     
     const date = new Date(msg.created_at);
     date.setHours(date.getHours() + 3);
@@ -137,10 +99,10 @@
     `;
     messagesDiv.appendChild(div);
   }
-  
+
   sendBtn.onclick = async () => {
     if (!currentUser) {
-      showAuth();
+      showLogin();
       return;
     }
 
@@ -168,103 +130,23 @@
       console.error("Ошибка отправки:", err);
     }
   };
-  
+
   textInput.addEventListener("keypress", e => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendBtn.click();
     }
   });
-  
-  settingsBtn.onclick = () => {
-    currentUsername.textContent = currentUser.username;
-    settingsModal.style.display = 'flex';
-    newUsernameInput.value = currentUser.username;
-    newUsernameInput.focus();
-  };
 
-  closeSettings.onclick = () => {
-    settingsModal.style.display = 'none';
-  };
-
-  window.onclick = (event) => {
-    if (event.target === settingsModal) {
-      settingsModal.style.display = 'none';
-    }
-  };
-  
-  changeUsernameBtn.onclick = () => {
-    const newUsername = newUsernameInput.value.trim();
-    
-    if (!newUsername) {
-      showError(changeUsernameError, 'Введите новое имя');
-      return;
-    }
-    
-    if (newUsername.length < 10) {
-      showError(changeUsernameError, 'Имя должно быть не менее 10 символов');
-      return;
-    }
-    
-    if (newUsername === currentUser.username) {
-      showError(changeUsernameError, 'Это текущее имя пользователя');
-      return;
-    }
-    
-    currentUser.username = newUsername;
-    currentUser.updatedAt = new Date().toISOString();
-    localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-    currentUsername.textContent = newUsername;
-    changeUsernameError.classList.remove('show');
-    const originalText = changeUsernameBtn.textContent;
-    changeUsernameBtn.textContent = '✓ Изменено!';
-    changeUsernameBtn.style.background = 'linear-gradient(135deg, #4ade80 0%, #22c55e 100%)';
-    
-    setTimeout(() => {
-      changeUsernameBtn.textContent = originalText;
-      changeUsernameBtn.style.background = 'linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%)';
-      settingsModal.style.display = 'none';
-    }, 1500);
-  };
-
-  logoutBtn.onclick = () => {
-    if (confirm('Вы уверены, что хотите выйти из аккаунта?')) {
-      localStorage.removeItem('speednexus_user');
-      currentUser = null;
-      showAuth();
-      authUsernameInput.value = '';
-    }
-  };
-
-  newUsernameInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      changeUsernameBtn.click();
-    }
-  });
-
-  function showError(element, message) {
-    element.textContent = message;
-    element.classList.add('show');
-    
-    setTimeout(() => {
-      element.classList.remove('show');
-    }, 3000);
-  }
-
-  function init() {
-    checkSavedUser();
-    
-    setInterval(() => {
-      if (currentUser) {
-        loadMessages();
-      }
-    }, 2500);
-    
-    messagesDiv.addEventListener('click', () => {
+  setTimeout(() => {
+    if (currentUser) {
       textInput.focus();
-    });
-  }
+    } else {
+      loginUsername.focus();
+    }
+  }, 300);
 
-  init();
+  checkUser();
+  
+  setInterval(loadMessages, 2500);
 })();
