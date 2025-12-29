@@ -149,7 +149,7 @@
                 .select('username')
                 .eq('username', currentUser.username)
                 .maybeSingle();
-
+            
             if (existingUser) {
                 await supabase
                     .from('users')
@@ -580,15 +580,17 @@
     }
 
     async function markChatAsRead(username) {
-        if (!username) return;
+        if (!username || !currentUser) return;
         
         try {
             await supabase
                 .from('private_messages')
                 .update({ read: true })
-                .eq('receiver', currentUser.username)
-                .eq('sender', username)
-                .eq('read', false);
+                .match({
+                    receiver: currentUser.username,
+                    sender: username,
+                    read: false
+                });
             
             unreadMessages.delete(username);
             updateChatsList();
@@ -757,27 +759,17 @@
                     showError(elements.loginError, 'Этот никнейм уже используется');
                     return;
                 }
-            }
-
-            currentUser = {
-                username: username,
-                createdAt: new Date().toISOString(),
-                device_id: userDeviceId
-            };
-            
-            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            
-            const { error: updateError } = await supabase
-                .from('users')
-                .update({
-                    device_id: userDeviceId,
-                    last_seen: new Date().toISOString(),
-                    is_online: true,
-                    deleted: false
-                })
-                .eq('username', username);
-
-            if (updateError) {
+                
+                await supabase
+                    .from('users')
+                    .update({
+                        device_id: userDeviceId,
+                        last_seen: new Date().toISOString(),
+                        is_online: true,
+                        deleted: false
+                    })
+                    .eq('username', username);
+            } else {
                 await supabase
                     .from('users')
                     .insert({
@@ -789,6 +781,14 @@
                     });
             }
 
+            currentUser = {
+                username: username,
+                createdAt: new Date().toISOString(),
+                device_id: userDeviceId
+            };
+            
+            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+            
             showChats();
             updateUserDisplay();
             startIntervals();
