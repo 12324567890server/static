@@ -144,19 +144,33 @@
         if (!currentUser) return;
         
         try {
-            const { error } = await supabase
+            const { data: existingUser } = await supabase
                 .from('users')
-                .upsert({
-                    username: currentUser.username,
-                    last_seen: new Date().toISOString(),
-                    device_id: userDeviceId,
-                    is_online: true,
-                    deleted: false
-                }, {
-                    onConflict: 'username'
-                });
+                .select('username')
+                .eq('username', currentUser.username)
+                .maybeSingle();
 
-            if (error) throw error;
+            if (existingUser) {
+                await supabase
+                    .from('users')
+                    .update({
+                        last_seen: new Date().toISOString(),
+                        device_id: userDeviceId,
+                        is_online: true,
+                        deleted: false
+                    })
+                    .eq('username', currentUser.username);
+            } else {
+                await supabase
+                    .from('users')
+                    .insert({
+                        username: currentUser.username,
+                        last_seen: new Date().toISOString(),
+                        device_id: userDeviceId,
+                        is_online: true,
+                        deleted: false
+                    });
+            }
         } catch (error) {
             console.error('Ошибка синхронизации:', error);
         }
@@ -166,20 +180,16 @@
         if (!currentUser) return;
         
         try {
-            const now = new Date();
-            const fiveMinutesAgo = new Date(now.getTime() - 5 * 60000).toISOString();
-            
-            const { data: users, error } = await supabase
+            const { data: users } = await supabase
                 .from('users')
                 .select('username, last_seen, is_online')
-                .neq('username', currentUser.username)
                 .eq('deleted', false)
-                .gte('last_seen', fiveMinutesAgo);
-
-            if (error) throw error;
+                .neq('username', currentUser.username)
+                .limit(100);
 
             if (users) {
                 const newOnlineUsers = new Set();
+                const now = new Date();
                 
                 users.forEach(user => {
                     if (user.last_seen) {
@@ -357,7 +367,7 @@
             const { data: messages, error } = await supabase
                 .from('private_messages')
                 .select('*')
-                .or(`sender.eq.${encodeURIComponent(currentUser.username)},receiver.eq.${encodeURIComponent(currentUser.username)}`)
+                .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -731,15 +741,11 @@
         }
 
         try {
-            const { data: existingUser, error: fetchError } = await supabase
+            const { data: existingUser } = await supabase
                 .from('users')
                 .select('*')
                 .eq('username', username)
                 .maybeSingle();
-
-            if (fetchError) {
-                console.error('Ошибка проверки пользователя:', fetchError);
-            }
 
             if (existingUser) {
                 if (existingUser.deleted) {
@@ -761,21 +767,26 @@
             
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
             
-            const { error: upsertError } = await supabase
+            const { error: updateError } = await supabase
                 .from('users')
-                .upsert({
-                    username: username,
+                .update({
                     device_id: userDeviceId,
                     last_seen: new Date().toISOString(),
                     is_online: true,
                     deleted: false
-                }, {
-                    onConflict: 'username'
-                });
+                })
+                .eq('username', username);
 
-            if (upsertError) {
-                console.error('Ошибка upsert:', upsertError);
-                throw upsertError;
+            if (updateError) {
+                await supabase
+                    .from('users')
+                    .insert({
+                        username: username,
+                        device_id: userDeviceId,
+                        last_seen: new Date().toISOString(),
+                        is_online: true,
+                        deleted: false
+                    });
             }
 
             showChats();
@@ -817,9 +828,6 @@
                 return;
             }
 
-            const usernamesToUpdate = [currentUser.username, newUsername].sort();
-            const oldChatId = usernamesToUpdate.join('_');
-            
             await supabase
                 .from('private_messages')
                 .update({ sender: newUsername })
@@ -830,21 +838,24 @@
                 .update({ receiver: newUsername })
                 .eq('receiver', currentUser.username);
 
-            currentUser.username = newUsername;
-            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            
             await supabase
                 .from('users')
-                .upsert({
+                .insert({
                     username: newUsername,
                     device_id: userDeviceId,
                     last_seen: new Date().toISOString(),
                     is_online: true,
                     deleted: false
-                }, {
-                    onConflict: 'username'
                 });
 
+            await supabase
+                .from('users')
+                .update({ deleted: true })
+                .eq('username', currentUser.username);
+
+            currentUser.username = newUsername;
+            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+            
             updateUserDisplay();
             hideModal('editProfileModal');
             elements.chatsTitle.textContent = 'Чаты (' + newUsername + ')';
