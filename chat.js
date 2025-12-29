@@ -5,14 +5,20 @@
 
     const elements = {
         loginScreen: document.getElementById('loginScreen'),
-        chatContainer: document.querySelector('.chat-container'),
-        messagesDiv: document.getElementById('messages'),
-        textInput: document.getElementById('text'),
-        sendBtn: document.getElementById('send'),
+        chatsScreen: document.getElementById('chatsScreen'),
+        chatScreen: document.getElementById('chatScreen'),
+        chatsList: document.getElementById('chatsList'),
+        searchChats: document.getElementById('searchChats'),
+        chatsMenuBtn: document.getElementById('chatsMenuBtn'),
+        newChatBtn: document.getElementById('newChatBtn'),
+        backToChats: document.getElementById('backToChats'),
+        chatWithUser: document.getElementById('chatWithUser'),
+        privateMessages: document.getElementById('privateMessages'),
+        messageInput: document.getElementById('messageInput'),
+        sendMessageBtn: document.getElementById('sendMessageBtn'),
         loginUsername: document.getElementById('loginUsername'),
         loginButton: document.getElementById('loginButton'),
         loginError: document.getElementById('loginError'),
-        menuBtn: document.getElementById('menuBtn'),
         sideMenu: document.getElementById('sideMenu'),
         closeMenu: document.getElementById('closeMenu'),
         currentUsernameDisplay: document.getElementById('currentUsernameDisplay'),
@@ -31,21 +37,19 @@
         searchResults: document.getElementById('searchResults'),
         contactsModal: document.getElementById('contactsModal'),
         contactsList: document.getElementById('contactsList'),
-        privateChatModal: document.getElementById('privateChatModal'),
-        privateChatTitle: document.getElementById('privateChatTitle'),
-        privateMessages: document.getElementById('privateMessages'),
-        privateText: document.getElementById('privateText'),
-        sendPrivate: document.getElementById('sendPrivate'),
-        chatTitle: document.getElementById('chatTitle'),
-        backFromPrivate: document.getElementById('backFromPrivate'),
+        newChatModal: document.getElementById('newChatModal'),
+        newChatUsername: document.getElementById('newChatUsername'),
+        startChatBtn: document.getElementById('startChatBtn'),
+        newChatError: document.getElementById('newChatError'),
+        chatsTitle: document.getElementById('chatsTitle'),
         restoreSection: document.getElementById('restoreSection'),
         restoreAccountBtn: document.getElementById('restoreAccountBtn')
     };
 
     let currentUser = null;
-    let lastId = null;
-    let currentPrivateChat = null;
     let userDeviceId = null;
+    let currentChatWith = null;
+    let chats = [];
 
     function init() {
         checkUser();
@@ -63,9 +67,10 @@
         if (savedUser) {
             try {
                 currentUser = JSON.parse(savedUser);
-                showChat();
+                showChats();
                 updateUserDisplay();
                 syncUserOnlineStatus();
+                loadChats();
             } catch (e) {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -95,8 +100,10 @@
 
     function showLogin() {
         elements.loginScreen.style.display = 'flex';
-        elements.chatContainer.style.display = 'none';
+        elements.chatsScreen.style.display = 'none';
+        elements.chatScreen.style.display = 'none';
         closeAllModals();
+        hideSideMenu();
         
         const hasArchived = localStorage.getItem('speednexus_archived_user');
         if (hasArchived) {
@@ -108,47 +115,33 @@
         elements.loginUsername.focus();
     }
 
-    function showChat() {
+    function showChats() {
         elements.loginScreen.style.display = 'none';
-        elements.chatContainer.style.display = 'flex';
+        elements.chatsScreen.style.display = 'flex';
+        elements.chatScreen.style.display = 'none';
         closeAllModals();
-        loadMessages();
-        elements.textInput.focus();
+        hideSideMenu();
+        elements.chatsTitle.textContent = 'Чаты (' + currentUser.username + ')';
+    }
+
+    function showChat(username) {
+        currentChatWith = username;
+        elements.chatWithUser.textContent = username;
+        elements.chatsScreen.style.display = 'none';
+        elements.chatScreen.style.display = 'flex';
+        closeAllModals();
+        hideSideMenu();
+        loadMessages(username);
+        elements.messageInput.focus();
     }
 
     function updateUserDisplay() {
         if (currentUser) {
             elements.currentUsernameDisplay.textContent = currentUser.username;
-            elements.chatTitle.textContent = currentUser.username;
         }
     }
 
     function setupEventListeners() {
-        elements.menuBtn.onclick = function() {
-            elements.sideMenu.style.display = 'block';
-            setTimeout(() => {
-                elements.sideMenu.classList.add('show');
-            }, 10);
-        };
-
-        elements.closeMenu.onclick = function() {
-            elements.sideMenu.classList.remove('show');
-            setTimeout(() => {
-                elements.sideMenu.style.display = 'none';
-            }, 300);
-        };
-
-        document.addEventListener('click', function(event) {
-            if (!elements.sideMenu.contains(event.target) && 
-                !elements.menuBtn.contains(event.target) &&
-                elements.sideMenu.classList.contains('show')) {
-                elements.sideMenu.classList.remove('show');
-                setTimeout(() => {
-                    elements.sideMenu.style.display = 'none';
-                }, 300);
-            }
-        });
-
         elements.loginButton.onclick = handleLogin;
         elements.loginUsername.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleLogin();
@@ -157,6 +150,33 @@
         if (elements.restoreAccountBtn) {
             elements.restoreAccountBtn.onclick = handleRestoreAccount;
         }
+
+        elements.chatsMenuBtn.onclick = function() {
+            elements.sideMenu.style.display = 'block';
+            setTimeout(() => {
+                elements.sideMenu.classList.add('show');
+            }, 10);
+        };
+
+        elements.closeMenu.onclick = hideSideMenu;
+
+        document.addEventListener('click', function(event) {
+            if (!elements.sideMenu.contains(event.target) && 
+                !elements.chatsMenuBtn.contains(event.target) &&
+                elements.sideMenu.classList.contains('show')) {
+                hideSideMenu();
+            }
+        });
+
+        elements.newChatBtn.onclick = function() {
+            elements.newChatUsername.value = '';
+            showModal('newChatModal');
+        };
+
+        elements.backToChats.onclick = function() {
+            showChats();
+            loadChats();
+        };
 
         elements.editProfileBtn.onclick = () => showModal('editProfileModal');
         elements.saveProfileBtn.onclick = handleEditProfile;
@@ -178,6 +198,16 @@
 
         elements.logoutBtn.onclick = handleLogout;
 
+        elements.sendMessageBtn.onclick = handleSendMessage;
+        elements.messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        elements.startChatBtn.onclick = handleStartNewChat;
+
         document.querySelectorAll('.close-modal').forEach(btn => {
             btn.onclick = (e) => {
                 const modalId = e.target.closest('.close-modal').dataset.modal;
@@ -191,23 +221,197 @@
             };
         });
 
-        elements.sendBtn.onclick = handleSendMessage;
-        elements.textInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-            }
-        });
+        if (elements.searchChats) {
+            elements.searchChats.addEventListener('input', function() {
+                filterChats(this.value);
+            });
+        }
+    }
 
-        elements.sendPrivate.onclick = handleSendPrivateMessage;
-        elements.privateText.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendPrivateMessage();
-            }
-        });
+    function hideSideMenu() {
+        elements.sideMenu.classList.remove('show');
+        setTimeout(() => {
+            elements.sideMenu.style.display = 'none';
+        }, 300);
+    }
 
-        elements.backFromPrivate.onclick = () => hideModal('privateChatModal');
+    async function loadChats() {
+        if (!currentUser) return;
+        
+        try {
+            const chatId = currentUser.username;
+            
+            const { data: messages } = await supabase
+                .from('private_messages')
+                .select('*')
+                .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
+                .order('created_at', { ascending: false });
+
+            const chatMap = new Map();
+            
+            if (messages) {
+                messages.forEach(msg => {
+                    const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
+                    const chatId = [currentUser.username, otherUser].sort().join('_');
+                    
+                    if (!chatMap.has(otherUser)) {
+                        chatMap.set(otherUser, {
+                            username: otherUser,
+                            lastMessage: msg.message,
+                            lastTime: msg.created_at,
+                            unread: 0
+                        });
+                    }
+                });
+            }
+
+            chats = Array.from(chatMap.values());
+            displayChats(chats);
+        } catch (error) {
+            console.error('Ошибка загрузки чатов:', error);
+        }
+    }
+
+    function displayChats(chatList) {
+        elements.chatsList.innerHTML = '';
+        
+        if (chatList.length === 0) {
+            elements.chatsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px 20px;">Нет чатов. Нажмите "+" чтобы начать новый чат.</div>';
+            return;
+        }
+
+        chatList.forEach(chat => {
+            const div = document.createElement('div');
+            div.className = 'chat-item';
+            div.onclick = () => showChat(chat.username);
+            
+            const date = new Date(chat.lastTime);
+            const time = date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            
+            div.innerHTML = `
+                <div class="chat-avatar">👤</div>
+                <div class="chat-info">
+                    <div class="chat-name">${chat.username}</div>
+                    <div class="chat-last-message">${chat.lastMessage}</div>
+                    <div class="chat-time">${time}</div>
+                </div>
+            `;
+            
+            elements.chatsList.appendChild(div);
+        });
+    }
+
+    function filterChats(searchTerm) {
+        if (!searchTerm) {
+            displayChats(chats);
+            return;
+        }
+        
+        const filtered = chats.filter(chat => 
+            chat.username.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        displayChats(filtered);
+    }
+
+    async function loadMessages(username) {
+        if (!username) return;
+        
+        try {
+            const chatId = [currentUser.username, username].sort().join('_');
+            
+            const { data: messages } = await supabase
+                .from('private_messages')
+                .select('*')
+                .or(`chat_id.eq.${chatId},chat_id.eq.${username}_${currentUser.username}`)
+                .order('created_at', { ascending: true });
+            
+            displayMessages(messages || []);
+        } catch (error) {
+            console.error('Ошибка загрузки сообщений:', error);
+        }
+    }
+
+    function displayMessages(messages) {
+        elements.privateMessages.innerHTML = '';
+        
+        messages.forEach(msg => {
+            const div = document.createElement('div');
+            div.className = `message ${msg.sender === currentUser.username ? 'me' : 'other'}`;
+            
+            const date = new Date(msg.created_at);
+            const time = date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            
+            div.innerHTML = `
+                <div class="text">${msg.message}</div>
+                <div class="time">${time}</div>
+            `;
+            
+            elements.privateMessages.appendChild(div);
+        });
+        
+        elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+    }
+
+    async function handleSendMessage() {
+        if (!currentChatWith || !currentUser) return;
+        
+        const message = elements.messageInput.value.trim();
+        if (!message) return;
+        
+        try {
+            const chatId = [currentUser.username, currentChatWith].sort().join('_');
+            
+            await supabase
+                .from('private_messages')
+                .insert({
+                    chat_id: chatId,
+                    sender: currentUser.username,
+                    receiver: currentChatWith,
+                    message: message
+                });
+            
+            elements.messageInput.value = '';
+            loadMessages(currentChatWith);
+            
+            loadChats();
+        } catch (error) {
+            console.error('Ошибка отправки:', error);
+        }
+    }
+
+    async function handleStartNewChat() {
+        const username = elements.newChatUsername.value.trim();
+        
+        if (!username) {
+            showError(elements.newChatError, 'Введите имя пользователя');
+            return;
+        }
+        
+        if (username === currentUser.username) {
+            showError(elements.newChatError, 'Нельзя начать чат с самим собой');
+            return;
+        }
+
+        try {
+            const { data: existingUser } = await supabase
+                .from('users')
+                .select('*')
+                .eq('username', username)
+                .eq('deleted', false)
+                .single();
+
+            if (!existingUser) {
+                showError(elements.newChatError, 'Пользователь не найден');
+                return;
+            }
+
+            hideModal('newChatModal');
+            showChat(username);
+            
+        } catch (error) {
+            console.error('Ошибка:', error);
+            showError(elements.newChatError, 'Ошибка поиска пользователя');
+        }
     }
 
     async function handleRestoreAccount() {
@@ -238,7 +442,7 @@
                 localStorage.removeItem('speednexus_archived_user');
                 
                 currentUser = user;
-                showChat();
+                showChats();
                 updateUserDisplay();
                 alert('Аккаунт восстановлен!');
             } else if (existingUser && !existingUser.deleted) {
@@ -276,7 +480,7 @@
             alert('Аккаунт скрыт. Для восстановления нажмите кнопку "Восстановить скрытый аккаунт"');
         } catch (error) {
             console.error('Ошибка архивации:', error);
-            alert('Ошибка при скрытии аккаунт');
+            alert('Ошибка при скрытии аккаунта');
         }
     }
 
@@ -340,8 +544,9 @@
                     deleted: false
                 });
 
-            showChat();
+            showChats();
             updateUserDisplay();
+            loadChats();
         } catch (error) {
             console.error('Ошибка регистрации:', error);
             showError(elements.loginError, 'Ошибка регистрации');
@@ -374,9 +579,18 @@
             }
 
             await supabase
-                .from('messages')
-                .update({ username: newUsername })
-                .eq('username', currentUser.username);
+                .from('private_messages')
+                .update({ 
+                    sender: newUsername 
+                })
+                .eq('sender', currentUser.username);
+
+            await supabase
+                .from('private_messages')
+                .update({ 
+                    receiver: newUsername 
+                })
+                .eq('receiver', currentUser.username);
 
             currentUser.username = newUsername;
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
@@ -391,6 +605,12 @@
 
             updateUserDisplay();
             hideModal('editProfileModal');
+            elements.chatsTitle.textContent = 'Чаты (' + newUsername + ')';
+            
+            loadChats();
+            if (currentChatWith) {
+                showChat(currentChatWith);
+            }
         } catch (error) {
             console.error('Ошибка изменения имени:', error);
             showError(elements.editUsernameError, 'Ошибка изменения имени');
@@ -507,147 +727,10 @@
         elements.contactsList.querySelectorAll('.chat-btn').forEach(btn => {
             btn.onclick = (e) => {
                 const username = e.target.dataset.username;
-                openPrivateChat(username);
+                hideModal('contactsModal');
+                showChat(username);
             };
         });
-    }
-
-    function openPrivateChat(username) {
-        currentPrivateChat = username;
-        elements.privateChatTitle.textContent = username;
-        showModal('privateChatModal');
-        loadPrivateMessages();
-    }
-
-    async function loadPrivateMessages() {
-        if (!currentPrivateChat) return;
-        
-        const chatId = [currentUser.username, currentPrivateChat].sort().join('_');
-        
-        const { data: messages } = await supabase
-            .from('private_messages')
-            .select('*')
-            .or(`chat_id.eq.${chatId},chat_id.eq.${currentPrivateChat}_${currentUser.username}`)
-            .order('created_at', { ascending: true });
-        
-        displayPrivateMessages(messages || []);
-    }
-
-    function displayPrivateMessages(messages) {
-        elements.privateMessages.innerHTML = '';
-        
-        messages.forEach(msg => {
-            const div = document.createElement('div');
-            div.className = `message ${msg.sender === currentUser.username ? 'me' : 'other'}`;
-            
-            const date = new Date(msg.created_at);
-            const time = date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-            
-            div.innerHTML = `
-                <div class="text">${msg.message}</div>
-                <div class="time">${time}</div>
-            `;
-            
-            elements.privateMessages.appendChild(div);
-        });
-        
-        elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-    }
-
-    async function handleSendPrivateMessage() {
-        if (!currentPrivateChat) return;
-        
-        const message = elements.privateText.value.trim();
-        if (!message) return;
-        
-        try {
-            const chatId = [currentUser.username, currentPrivateChat].sort().join('_');
-            
-            await supabase
-                .from('private_messages')
-                .insert({
-                    chat_id: chatId,
-                    sender: currentUser.username,
-                    receiver: currentPrivateChat,
-                    message: message
-                });
-            
-            elements.privateText.value = '';
-            loadPrivateMessages();
-        } catch (error) {
-            console.error('Ошибка отправки:', error);
-        }
-    }
-
-    async function loadMessages() {
-        const { data, error } = await supabase
-            .from("messages")
-            .select("*")
-            .order("created_at", { ascending: true });
-        
-        if (error || !data || data.length === 0) return;
-        
-        const latestId = data[data.length-1].id;
-        if (lastId === latestId) return;
-        lastId = latestId;
-
-        const wasBottom = elements.messagesDiv.scrollHeight - elements.messagesDiv.scrollTop - elements.messagesDiv.clientHeight < 50;
-        
-        if (elements.messagesDiv.children.length > 0 && data.length > elements.messagesDiv.children.length) {
-            const newMessages = data.slice(elements.messagesDiv.children.length);
-            newMessages.forEach(msg => addMessage(msg));
-        } else {
-            elements.messagesDiv.innerHTML = "";
-            data.forEach(msg => addMessage(msg));
-        }
-
-        if (wasBottom) {
-            setTimeout(() => elements.messagesDiv.scrollTop = elements.messagesDiv.scrollHeight, 50);
-        }
-    }
-
-    function addMessage(msg) {
-        const div = document.createElement("div");
-        div.className = `message ${msg.username === currentUser?.username ? 'me' : 'other'}`;
-        
-        const date = new Date(msg.created_at);
-        date.setHours(date.getHours() + 3);
-        const time = date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-        
-        div.innerHTML = `
-            <div class="username">${msg.username || 'Аноним'}</div>
-            <div class="text">${msg.text}</div>
-            <div class="time">${time}</div>
-        `;
-        elements.messagesDiv.appendChild(div);
-    }
-
-    async function handleSendMessage() {
-        if (!currentUser) {
-            showLogin();
-            return;
-        }
-
-        const text = elements.textInput.value.trim();
-        if (!text) {
-            elements.textInput.focus();
-            return;
-        }
-
-        try {
-            await supabase
-                .from("messages")
-                .insert([{ 
-                    username: currentUser.username, 
-                    text 
-                }]);
-
-            elements.textInput.value = "";
-            elements.textInput.focus();
-            setTimeout(() => loadMessages(), 200);
-        } catch (err) {
-            console.error("Ошибка отправки:", err);
-        }
     }
 
     function handleLogout() {
@@ -661,7 +744,7 @@
 
     function showModal(modalId) {
         document.getElementById(modalId).style.display = 'flex';
-        elements.sideMenu.classList.remove('show');
+        hideSideMenu();
     }
 
     function hideModal(modalId) {
@@ -684,12 +767,12 @@
     
     setInterval(() => {
         if (currentUser) {
-            loadMessages();
-            if (currentPrivateChat) {
-                loadPrivateMessages();
+            loadChats();
+            if (currentChatWith) {
+                loadMessages(currentChatWith);
             }
         }
-    }, 2000);
+    }, 3000);
 
     setInterval(() => {
         if (currentUser) {
