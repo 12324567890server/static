@@ -34,9 +34,7 @@
       </div>
     </div>
     
-    <div id="chatsList" class="chats-list">
-      <!-- Список чатов будет здесь -->
-    </div>
+    <div id="chatsList" class="chats-list"></div>
     
     <button id="newChatBtn" class="new-chat-btn">+</button>
   </div>
@@ -44,7 +42,10 @@
   <div id="chatScreen" class="chat-screen" style="display: none;">
     <div class="chat-header">
       <button id="backToChats" class="back-btn">←</button>
-      <h3 id="chatWithUser">-</h3>
+      <div class="chat-header-info">
+        <h3 id="chatWithUser">-</h3>
+        <div id="chatStatus" class="chat-status"></div>
+      </div>
       <div style="width: 40px;"></div>
     </div>
     
@@ -62,7 +63,10 @@
         <div class="user-avatar">👤</div>
         <div>
           <h4 id="currentUsernameDisplay">-</h4>
-          <p>online</p>
+          <div class="user-status">
+            <span class="status-indicator online"></span>
+            <span>online</span>
+          </div>
         </div>
       </div>
       <button id="closeMenu" class="close-menu-btn">×</button>
