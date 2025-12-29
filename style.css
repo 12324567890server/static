@@ -806,3 +806,24 @@ body {
     border-radius: 28px 28px 0 0;
   }
 }
+
+.side-menu-btn.delete {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.3);
+}
+
+.restore-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #7b2cff;
+  background: transparent;
+  color: #7b2cff;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.restore-btn:hover {
+  background: rgba(123, 44, 255, 0.1);
+}
