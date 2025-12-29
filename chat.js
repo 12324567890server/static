@@ -1,6 +1,6 @@
 (function() {
     const SUPABASE_URL = "https://bncysgnqsgpdpuupzgqj.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuY3lzZ25xc2dwZHB1dXB6Z3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDkxMDMxMjQsImV4cCI6MjAyNDY3OTEyNH0.c0TQb6CnGj65FwLAM0G3R6LLY4uXABF6s1b-tOeIla4";
+    const SUPABASE_KEY = "sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR";
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const elements = {
@@ -984,3 +984,4 @@
 
     init();
 })();
+
