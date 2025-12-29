@@ -2,30 +2,20 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>SpeedNexus - Быстрый мессенджер</title>
+  <title>SpeedNexus</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <meta name="description" content="SpeedNexus - российский мессенджер для быстрой связи">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-
   <div id="loginScreen" class="login-screen" style="display: none;">
     <div class="login-container">
       <div class="login-header">SpeedNexus</div>
       <div class="login-content">
-        <h2>Добро пожаловать!</h2>
-        <p>Придумайте уникальное имя пользователя</p>
-        <input 
-          type="text" 
-          id="loginUsername" 
-          placeholder="Ваш никнейм" 
-          maxlength="20"
-          autocomplete="off"
-          class="login-input"
-        >
+        <h2>Введите ваше имя</h2>
+        <input type="text" id="loginUsername" placeholder="Ваш никнейм" maxlength="20" autocomplete="off" class="login-input">
         <div id="loginError" class="error-message"></div>
-        <button id="loginButton" class="login-button">Начать общение</button>
+        <button id="loginButton" class="login-button">Продолжить</button>
       </div>
     </div>
   </div>
@@ -34,7 +24,7 @@
     <div class="chat-header">
       <div class="header-content">
         <span id="chatTitle">SpeedNexus</span>
-        <button id="settingsBtn" class="settings-btn">⚙️</button>
+        <button id="menuBtn" class="menu-btn">☰</button>
       </div>
     </div>
     
@@ -46,27 +36,23 @@
     </div>
   </div>
 
-  <div id="settingsMenu" class="settings-menu" style="display: none;">
-    <div class="settings-header">
-      <button id="backToChat" class="back-btn">←</button>
-      <h3>Меню</h3>
-    </div>
-    
-    <div class="settings-content">
-      <div class="user-card">
-        <div class="user-avatar"></div>
-        <div class="user-info">
+  <div id="sideMenu" class="side-menu" style="display: none;">
+    <div class="side-menu-header">
+      <div class="user-info">
+        <div class="user-avatar">👤</div>
+        <div>
           <h4 id="currentUsernameDisplay">-</h4>
-          <p id="userStatus">online</p>
+          <p>online</p>
         </div>
       </div>
-      
-      <div class="settings-section">
-        <button id="editProfileBtn" class="menu-btn">Изменить профиль</button>
-        <button id="findFriendsBtn" class="menu-btn">Найти друзей</button>
-        <button id="contactsBtn" class="menu-btn">Мои контакты</button>
-        <button id="logoutBtn" class="menu-btn logout">Выйти</button>
-      </div>
+      <button id="closeMenu" class="close-menu-btn">×</button>
+    </div>
+    
+    <div class="side-menu-content">
+      <button id="editProfileBtn" class="side-menu-btn">✏️ Изменить профиль</button>
+      <button id="findFriendsBtn" class="side-menu-btn">🔍 Найти друзей</button>
+      <button id="contactsBtn" class="side-menu-btn">👥 Контакты</button>
+      <button id="logoutBtn" class="side-menu-btn logout">🚪 Выйти</button>
     </div>
   </div>
 
@@ -77,11 +63,8 @@
         <button class="close-modal" data-modal="editProfileModal">×</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label>Имя пользователя</label>
-          <input type="text" id="editUsername" class="modal-input" maxlength="20">
-          <div id="editUsernameError" class="error-message"></div>
-        </div>
+        <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
+        <div id="editUsernameError" class="error-message"></div>
         <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
       </div>
     </div>
@@ -90,19 +73,14 @@
   <div id="findFriendsModal" class="modal" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Найти друзей</h3>
+        <h3>Поиск</h3>
         <button class="close-modal" data-modal="findFriendsModal">×</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <input type="text" id="searchUsername" class="modal-input" placeholder="Введите имя пользователя">
-          <div id="searchError" class="error-message"></div>
-        </div>
+        <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя">
+        <div id="searchError" class="error-message"></div>
         <button id="searchBtn" class="modal-btn">Найти</button>
-        
-        <div id="searchResults" class="search-results">
-          
-        </div>
+        <div id="searchResults" class="search-results"></div>
       </div>
     </div>
   </div>
@@ -110,13 +88,11 @@
   <div id="contactsModal" class="modal" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Мои контакты</h3>
+        <h3>Контакты</h3>
         <button class="close-modal" data-modal="contactsModal">×</button>
       </div>
       <div class="modal-body">
-        <div id="contactsList" class="contacts-list">
-          
-        </div>
+        <div id="contactsList" class="contacts-list"></div>
       </div>
     </div>
   </div>
@@ -124,8 +100,9 @@
   <div id="privateChatModal" class="modal private-chat-modal" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 id="privateChatTitle">Личный чат</h3>
-        <button class="close-modal" data-modal="privateChatModal">×</button>
+        <button class="back-btn" id="backFromPrivate">←</button>
+        <h3 id="privateChatTitle">Чат</h3>
+        <div style="width: 40px;"></div>
       </div>
       <div class="private-chat-body">
         <div id="privateMessages" class="private-messages"></div>
