@@ -13,6 +13,7 @@
         newChatBtn: document.getElementById('newChatBtn'),
         backToChats: document.getElementById('backToChats'),
         chatWithUser: document.getElementById('chatWithUser'),
+        chatStatus: document.getElementById('chatStatus'),
         privateMessages: document.getElementById('privateMessages'),
         messageInput: document.getElementById('messageInput'),
         sendMessageBtn: document.getElementById('sendMessageBtn'),
@@ -50,6 +51,9 @@
     let userDeviceId = null;
     let currentChatWith = null;
     let chats = [];
+    let unreadMessages = new Map();
+    let onlineUsers = new Set();
+    let messageReadStatus = new Map();
 
     function init() {
         checkUser();
@@ -71,6 +75,7 @@
                 updateUserDisplay();
                 syncUserOnlineStatus();
                 loadChats();
+                startOnlineStatusPolling();
             } catch (e) {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -98,6 +103,34 @@
         }
     }
 
+    async function updateOnlineStatuses() {
+        try {
+            const { data: users } = await supabase
+                .from('users')
+                .select('username, last_seen, is_online')
+                .eq('deleted', false);
+
+            if (users) {
+                onlineUsers.clear();
+                users.forEach(user => {
+                    if (user.is_online) {
+                        onlineUsers.add(user.username);
+                    }
+                });
+                
+                updateChatStatus();
+                updateChatsList();
+            }
+        } catch (error) {
+            console.error('Ошибка обновления статусов:', error);
+        }
+    }
+
+    function startOnlineStatusPolling() {
+        updateOnlineStatuses();
+        setInterval(updateOnlineStatuses, 10000);
+    }
+
     function showLogin() {
         elements.loginScreen.style.display = 'flex';
         elements.chatsScreen.style.display = 'none';
@@ -122,6 +155,7 @@
         closeAllModals();
         hideSideMenu();
         elements.chatsTitle.textContent = 'Чаты (' + currentUser.username + ')';
+        markAllChatsAsRead();
     }
 
     function showChat(username) {
@@ -132,12 +166,27 @@
         closeAllModals();
         hideSideMenu();
         loadMessages(username);
+        updateChatStatus();
         elements.messageInput.focus();
+        
+        markChatAsRead(username);
     }
 
     function updateUserDisplay() {
         if (currentUser) {
             elements.currentUsernameDisplay.textContent = currentUser.username;
+        }
+    }
+
+    function updateChatStatus() {
+        if (!currentChatWith) return;
+        
+        if (onlineUsers.has(currentChatWith)) {
+            elements.chatStatus.textContent = 'online';
+            elements.chatStatus.style.color = '#4ade80';
+        } else {
+            elements.chatStatus.textContent = 'был(а) недавно';
+            elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
         }
     }
 
@@ -239,8 +288,6 @@
         if (!currentUser) return;
         
         try {
-            const chatId = currentUser.username;
-            
             const { data: messages } = await supabase
                 .from('private_messages')
                 .select('*')
@@ -248,6 +295,7 @@
                 .order('created_at', { ascending: false });
 
             const chatMap = new Map();
+            const unreadCounts = new Map();
             
             if (messages) {
                 messages.forEach(msg => {
@@ -259,12 +307,17 @@
                             username: otherUser,
                             lastMessage: msg.message,
                             lastTime: msg.created_at,
-                            unread: 0
+                            isMyMessage: msg.sender === currentUser.username
                         });
+                    }
+                    
+                    if (msg.receiver === currentUser.username && !messageReadStatus.has(msg.id)) {
+                        unreadCounts.set(otherUser, (unreadCounts.get(otherUser) || 0) + 1);
                     }
                 });
             }
 
+            unreadMessages = unreadCounts;
             chats = Array.from(chatMap.values());
             displayChats(chats);
         } catch (error) {
@@ -280,6 +333,8 @@
             return;
         }
 
+        chatList.sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+
         chatList.forEach(chat => {
             const div = document.createElement('div');
             div.className = 'chat-item';
@@ -287,14 +342,23 @@
             
             const date = new Date(chat.lastTime);
             const time = date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            const unreadCount = unreadMessages.get(chat.username) || 0;
+            
+            let lastMessagePrefix = chat.isMyMessage ? 'Вы: ' : '';
             
             div.innerHTML = `
                 <div class="chat-avatar">👤</div>
                 <div class="chat-info">
-                    <div class="chat-name">${chat.username}</div>
-                    <div class="chat-last-message">${chat.lastMessage}</div>
+                    <div class="chat-name">
+                        ${chat.username}
+                        ${onlineUsers.has(chat.username) ? '<span class="status-indicator online" style="margin-left: 5px;"></span>' : ''}
+                    </div>
+                    <div class="chat-last-message">
+                        ${lastMessagePrefix}${chat.lastMessage}
+                    </div>
                     <div class="chat-time">${time}</div>
                 </div>
+                ${unreadCount > 0 ? `<div class="unread-badge">${unreadCount}</div>` : ''}
             `;
             
             elements.chatsList.appendChild(div);
@@ -326,6 +390,14 @@
                 .order('created_at', { ascending: true });
             
             displayMessages(messages || []);
+            
+            if (messages) {
+                messages.forEach(msg => {
+                    if (msg.receiver === currentUser.username) {
+                        messageReadStatus.set(msg.id, true);
+                    }
+                });
+            }
         } catch (error) {
             console.error('Ошибка загрузки сообщений:', error);
         }
@@ -336,20 +408,39 @@
         
         messages.forEach(msg => {
             const div = document.createElement('div');
-            div.className = `message ${msg.sender === currentUser.username ? 'me' : 'other'}`;
+            const isMyMessage = msg.sender === currentUser.username;
+            div.className = `message ${isMyMessage ? 'me' : 'other'}`;
             
             const date = new Date(msg.created_at);
             const time = date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            const status = isMyMessage ? getMessageStatus(msg) : '';
             
             div.innerHTML = `
                 <div class="text">${msg.message}</div>
-                <div class="time">${time}</div>
+                <div class="time">
+                    ${time}
+                    ${status}
+                </div>
             `;
             
             elements.privateMessages.appendChild(div);
         });
         
         elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+    }
+
+    function getMessageStatus(msg) {
+        const now = new Date();
+        const msgTime = new Date(msg.created_at);
+        const diff = now - msgTime;
+        
+        if (diff < 1000) {
+            return '<span class="message-status sent">✓</span>';
+        } else if (diff < 5000) {
+            return '<span class="message-status delivered">✓✓</span>';
+        } else {
+            return '<span class="message-status read">✓✓</span>';
+        }
     }
 
     async function handleSendMessage() {
@@ -361,19 +452,22 @@
         try {
             const chatId = [currentUser.username, currentChatWith].sort().join('_');
             
-            await supabase
+            const { data, error } = await supabase
                 .from('private_messages')
                 .insert({
                     chat_id: chatId,
                     sender: currentUser.username,
                     receiver: currentChatWith,
                     message: message
-                });
+                })
+                .select();
+            
+            if (error) throw error;
             
             elements.messageInput.value = '';
-            loadMessages(currentChatWith);
+            await loadMessages(currentChatWith);
+            await loadChats();
             
-            loadChats();
         } catch (error) {
             console.error('Ошибка отправки:', error);
         }
@@ -412,6 +506,20 @@
             console.error('Ошибка:', error);
             showError(elements.newChatError, 'Ошибка поиска пользователя');
         }
+    }
+
+    function markChatAsRead(username) {
+        unreadMessages.delete(username);
+        updateChatsList();
+    }
+
+    function markAllChatsAsRead() {
+        unreadMessages.clear();
+        updateChatsList();
+    }
+
+    async function updateChatsList() {
+        await loadChats();
     }
 
     async function handleRestoreAccount() {
@@ -547,6 +655,7 @@
             showChats();
             updateUserDisplay();
             loadChats();
+            startOnlineStatusPolling();
         } catch (error) {
             console.error('Ошибка регистрации:', error);
             showError(elements.loginError, 'Ошибка регистрации');
@@ -628,7 +737,7 @@
         try {
             const { data: users } = await supabase
                 .from('users')
-                .select('username, last_seen')
+                .select('username, last_seen, is_online')
                 .ilike('username', `%${searchTerm}%`)
                 .neq('username', currentUser.username)
                 .eq('deleted', false)
@@ -658,7 +767,12 @@
             div.innerHTML = `
                 <div class="user-result-info">
                     <div class="user-result-avatar">👤</div>
-                    <div class="user-result-name">${user.username}</div>
+                    <div>
+                        <div class="user-result-name">${user.username}</div>
+                        <div style="color: rgba(255,255,255,0.5); font-size: 12px;">
+                            ${user.is_online ? 'online' : 'был(а) недавно'}
+                        </div>
+                    </div>
                 </div>
                 <button class="add-contact-btn ${isContact ? 'added' : ''}" data-username="${user.username}">
                     ${isContact ? '✓' : '+'}
@@ -778,5 +892,5 @@
         if (currentUser) {
             syncUserOnlineStatus();
         }
-    }, 60000);
+    }, 30000);
 })();
