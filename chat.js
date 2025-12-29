@@ -12,13 +12,14 @@
     loginUsername: document.getElementById('loginUsername'),
     loginButton: document.getElementById('loginButton'),
     loginError: document.getElementById('loginError'),
-    settingsBtn: document.getElementById('settingsBtn'),
-    settingsMenu: document.getElementById('settingsMenu'),
-    backToChat: document.getElementById('backToChat'),
+    menuBtn: document.getElementById('menuBtn'),
+    sideMenu: document.getElementById('sideMenu'),
+    closeMenu: document.getElementById('closeMenu'),
     currentUsernameDisplay: document.getElementById('currentUsernameDisplay'),
     editProfileBtn: document.getElementById('editProfileBtn'),
     findFriendsBtn: document.getElementById('findFriendsBtn'),
     contactsBtn: document.getElementById('contactsBtn'),
+    archiveAccountBtn: document.getElementById('archiveAccountBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
     editProfileModal: document.getElementById('editProfileModal'),
     editUsername: document.getElementById('editUsername'),
@@ -35,13 +36,17 @@
     privateMessages: document.getElementById('privateMessages'),
     privateText: document.getElementById('privateText'),
     sendPrivate: document.getElementById('sendPrivate'),
-    chatTitle: document.getElementById('chatTitle')
+    chatTitle: document.getElementById('chatTitle'),
+    backFromPrivate: document.getElementById('backFromPrivate'),
+    restoreSection: document.getElementById('restoreSection'),
+    restoreAccountBtn: document.getElementById('restoreAccountBtn')
   };
 
   let currentUser = null;
   let lastId = null;
   let currentPrivateChat = null;
   let userDeviceId = null;
+  let archivedUser = null;
 
   function init() {
     checkUser();
@@ -70,7 +75,7 @@
       showLogin();
     }
   }
-  
+
   async function syncUserOnlineStatus() {
     if (!currentUser) return;
     
@@ -81,7 +86,8 @@
           username: currentUser.username,
           last_seen: new Date().toISOString(),
           device_id: userDeviceId,
-          is_online: true
+          is_online: true,
+          deleted: false
         });
     } catch (error) {
       console.error('Ошибка синхронизации:', error);
@@ -91,41 +97,48 @@
   function showLogin() {
     elements.loginScreen.style.display = 'flex';
     elements.chatContainer.style.display = 'none';
-    elements.settingsMenu.style.display = 'none';
+    elements.sideMenu.style.display = 'none';
+    closeAllModals();
+    
+    const hasArchived = localStorage.getItem('speednexus_archived_user');
+    if (hasArchived) {
+      elements.restoreSection.style.display = 'block';
+    } else {
+      elements.restoreSection.style.display = 'none';
+    }
+    
     elements.loginUsername.focus();
   }
 
   function showChat() {
     elements.loginScreen.style.display = 'none';
     elements.chatContainer.style.display = 'flex';
-    elements.settingsMenu.style.display = 'none';
     closeAllModals();
     loadMessages();
     elements.textInput.focus();
   }
 
-  function showSettingsMenu() {
-    elements.settingsMenu.style.display = 'flex';
-    updateUserDisplay();
-    loadContacts();
+  function toggleMenu() {
+    elements.sideMenu.classList.toggle('show');
   }
 
   function updateUserDisplay() {
     if (currentUser) {
       elements.currentUsernameDisplay.textContent = currentUser.username;
-      elements.chatTitle.textContent = `SpeedNexus (${currentUser.username})`;
+      elements.chatTitle.textContent = currentUser.username;
     }
   }
-  
+
   function setupEventListeners() {
-    
     elements.loginButton.onclick = handleLogin;
     elements.loginUsername.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') handleLogin();
     });
-    
-    elements.settingsBtn.onclick = showSettingsMenu;
-    elements.backToChat.onclick = showChat;
+
+    elements.restoreAccountBtn.onclick = handleRestoreAccount;
+
+    elements.menuBtn.onclick = toggleMenu;
+    elements.closeMenu.onclick = toggleMenu;
 
     elements.editProfileBtn.onclick = () => showModal('editProfileModal');
     elements.saveProfileBtn.onclick = handleEditProfile;
@@ -135,13 +148,15 @@
     elements.searchUsername.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') handleSearch();
     });
-    
+
     elements.contactsBtn.onclick = () => {
       showModal('contactsModal');
       loadContacts();
     };
 
+    elements.archiveAccountBtn.onclick = handleArchiveAccount;
     elements.logoutBtn.onclick = handleLogout;
+
     document.querySelectorAll('.close-modal').forEach(btn => {
       btn.onclick = (e) => {
         const modalId = e.target.closest('.close-modal').dataset.modal;
@@ -170,6 +185,48 @@
         handleSendPrivateMessage();
       }
     });
+
+    elements.backFromPrivate.onclick = () => hideModal('privateChatModal');
+  }
+
+  async function handleRestoreAccount() {
+    const archived = localStorage.getItem('speednexus_archived_user');
+    if (!archived) return;
+    
+    const user = JSON.parse(archived);
+    
+    try {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', user.username)
+        .single();
+
+      if (existingUser && existingUser.deleted) {
+        await supabase
+          .from('users')
+          .update({
+            deleted: false,
+            deleted_at: null,
+            is_online: true,
+            last_seen: new Date().toISOString()
+          })
+          .eq('username', user.username);
+
+        localStorage.setItem('speednexus_user', archived);
+        localStorage.removeItem('speednexus_archived_user');
+        
+        currentUser = user;
+        showChat();
+        updateUserDisplay();
+        alert('Аккаунт восстановлен!');
+      } else if (existingUser && !existingUser.deleted) {
+        alert('Этот аккаунт уже активен. Используйте другой ник.');
+      }
+    } catch (error) {
+      console.error('Ошибка восстановления:', error);
+      alert('Ошибка восстановления аккаунта');
+    }
   }
 
   async function handleLogin() {
@@ -186,16 +243,32 @@
     }
 
     try {
-      
       const { data: existingUser } = await supabase
         .from('users')
         .select('*')
         .eq('username', username)
         .single();
 
-      if (existingUser && existingUser.device_id !== userDeviceId) {
-        showError(elements.loginError, 'Этот никнейм уже используется другим устройством');
-        return;
+      if (existingUser) {
+        if (existingUser.deleted) {
+          if (confirm('Этот аккаунт был скрыт. Восстановить его?')) {
+            await supabase
+              .from('users')
+              .update({
+                deleted: false,
+                deleted_at: null,
+                is_online: true,
+                last_seen: new Date().toISOString()
+              })
+              .eq('username', username);
+          } else {
+            showError(elements.loginError, 'Этот никнейм занят (скрыт)');
+            return;
+          }
+        } else if (existingUser.device_id !== userDeviceId) {
+          showError(elements.loginError, 'Этот никнейм уже используется');
+          return;
+        }
       }
 
       currentUser = {
@@ -212,17 +285,48 @@
           username: username,
           device_id: userDeviceId,
           last_seen: new Date().toISOString(),
-          is_online: true
+          is_online: true,
+          deleted: false
         });
 
       showChat();
       updateUserDisplay();
     } catch (error) {
       console.error('Ошибка регистрации:', error);
-      showError(elements.loginError, 'Ошибка регистрации. Попробуйте еще раз.');
+      showError(elements.loginError, 'Ошибка регистрации');
     }
   }
-  
+
+  async function handleArchiveAccount() {
+    if (!currentUser) return;
+    
+    if (!confirm('Скрыть аккаунт? Вы сможете восстановить его позже.')) {
+      return;
+    }
+    
+    try {
+      await supabase
+        .from('users')
+        .update({
+          deleted: true,
+          deleted_at: new Date().toISOString(),
+          is_online: false
+        })
+        .eq('username', currentUser.username);
+      
+      localStorage.setItem('speednexus_archived_user', JSON.stringify(currentUser));
+      localStorage.removeItem('speednexus_user');
+      localStorage.removeItem('speednexus_contacts');
+      
+      currentUser = null;
+      showLogin();
+      alert('Аккаунт скрыт. Для восстановления нажмите кнопку "Восстановить скрытый аккаунт"');
+    } catch (error) {
+      console.error('Ошибка архивации:', error);
+      alert('Ошибка при скрытии аккаунта');
+    }
+  }
+
   async function handleEditProfile() {
     const newUsername = elements.editUsername.value.trim();
     
@@ -237,7 +341,6 @@
     }
 
     try {
-      
       const { data: existingUser } = await supabase
         .from('users')
         .select('*')
@@ -249,7 +352,6 @@
         return;
       }
 
-      // Обновляем историю сообщений
       await supabase
         .from('messages')
         .update({ username: newUsername })
@@ -268,13 +370,12 @@
 
       updateUserDisplay();
       hideModal('editProfileModal');
-      showSuccess('Имя успешно изменено!');
     } catch (error) {
       console.error('Ошибка изменения имени:', error);
       showError(elements.editUsernameError, 'Ошибка изменения имени');
     }
   }
-  
+
   async function handleSearch() {
     const searchTerm = elements.searchUsername.value.trim();
     
@@ -289,6 +390,7 @@
         .select('username, last_seen')
         .ilike('username', `%${searchTerm}%`)
         .neq('username', currentUser.username)
+        .eq('deleted', false)
         .limit(10);
 
       showSearchResults(users || []);
@@ -309,23 +411,16 @@
       const div = document.createElement('div');
       div.className = 'user-result';
       
-  
       const contacts = getContacts();
       const isContact = contacts.some(c => c.username === user.username);
       
       div.innerHTML = `
         <div class="user-result-info">
           <div class="user-result-avatar">👤</div>
-          <div>
-            <div class="user-result-name">${user.username}</div>
-            <div style="color: rgba(255,255,255,0.5); font-size: 12px;">
-              ${formatLastSeen(user.last_seen)}
-            </div>
-          </div>
+          <div class="user-result-name">${user.username}</div>
         </div>
-        <button class="add-contact-btn ${isContact ? 'added' : ''}" 
-                data-username="${user.username}">
-          ${isContact ? '✓ В контактах' : '+ Добавить'}
+        <button class="add-contact-btn ${isContact ? 'added' : ''}" data-username="${user.username}">
+          ${isContact ? '✓' : '+'}
         </button>
       `;
       
@@ -337,25 +432,11 @@
         const username = e.target.dataset.username;
         if (!e.target.classList.contains('added')) {
           addToContacts(username);
-          e.target.textContent = '✓ В контактах';
+          e.target.textContent = '✓';
           e.target.classList.add('added');
         }
       };
     });
-  }
-  
-  function formatLastSeen(dateString) {
-    if (!dateString) return 'никогда не был';
-    
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now - date;
-    
-    if (diff < 60000) return 'только что';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} мин. назад`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} ч. назад`;
-    
-    return date.toLocaleDateString();
   }
 
   function getContacts() {
@@ -375,13 +456,7 @@
         addedAt: new Date().toISOString()
       });
       saveContacts(contacts);
-      showSuccess(`${username} добавлен в контакты!`);
     }
-  }
-
-  function removeFromContacts(username) {
-    const contacts = getContacts().filter(c => c.username !== username);
-    saveContacts(contacts);
   }
 
   function loadContacts() {
@@ -402,9 +477,7 @@
           <div class="contact-avatar">👤</div>
           <div class="contact-name">${contact.username}</div>
         </div>
-        <div class="contact-actions">
-          <button class="chat-btn" data-username="${contact.username}">💬 Чат</button>
-        </div>
+        <button class="chat-btn" data-username="${contact.username}">Чат</button>
       `;
       
       elements.contactsList.appendChild(div);
@@ -420,7 +493,7 @@
 
   function openPrivateChat(username) {
     currentPrivateChat = username;
-    elements.privateChatTitle.textContent = `Чат с ${username}`;
+    elements.privateChatTitle.textContent = username;
     showModal('privateChatModal');
     loadPrivateMessages();
   }
@@ -567,6 +640,7 @@
 
   function showModal(modalId) {
     document.getElementById(modalId).style.display = 'flex';
+    elements.sideMenu.classList.remove('show');
   }
 
   function hideModal(modalId) {
@@ -581,12 +655,8 @@
 
   function showError(element, message) {
     element.textContent = message;
-    element.classList.add('show');
-    setTimeout(() => element.classList.remove('show'), 3000);
-  }
-
-  function showSuccess(message) {
-    alert(message);
+    element.style.display = 'block';
+    setTimeout(() => element.style.display = 'none', 3000);
   }
 
   init();
