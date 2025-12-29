@@ -144,7 +144,7 @@
         if (!currentUser) return;
         
         try {
-            await supabase
+            const { error } = await supabase
                 .from('users')
                 .upsert({
                     username: currentUser.username,
@@ -152,7 +152,11 @@
                     device_id: userDeviceId,
                     is_online: true,
                     deleted: false
+                }, {
+                    onConflict: 'username'
                 });
+
+            if (error) throw error;
         } catch (error) {
             console.error('Ошибка синхронизации:', error);
         }
@@ -162,19 +166,23 @@
         if (!currentUser) return;
         
         try {
-            const { data: users } = await supabase
+            const now = new Date();
+            const fiveMinutesAgo = new Date(now.getTime() - 5 * 60000).toISOString();
+            
+            const { data: users, error } = await supabase
                 .from('users')
                 .select('username, last_seen, is_online')
-                .eq('deleted', false)
                 .neq('username', currentUser.username)
-                .limit(100);
+                .eq('deleted', false)
+                .gte('last_seen', fiveMinutesAgo);
+
+            if (error) throw error;
 
             if (users) {
                 const newOnlineUsers = new Set();
-                const now = new Date();
                 
                 users.forEach(user => {
-                    if (user.is_online && user.last_seen) {
+                    if (user.last_seen) {
                         const lastSeen = new Date(user.last_seen);
                         const diff = now - lastSeen;
                         
@@ -349,7 +357,7 @@
             const { data: messages, error } = await supabase
                 .from('private_messages')
                 .select('*')
-                .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
+                .or(`sender.eq.${encodeURIComponent(currentUser.username)},receiver.eq.${encodeURIComponent(currentUser.username)}`)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -447,12 +455,13 @@
         if (!username) return;
         
         try {
-            const chatId = [currentUser.username, username].sort().join('_');
+            const usernames = [currentUser.username, username].sort();
+            const chatId = usernames.join('_');
             
             const { data: messages, error } = await supabase
                 .from('private_messages')
                 .select('*')
-                .or(`chat_id.eq.${chatId},chat_id.eq.${username}_${currentUser.username}`)
+                .eq('chat_id', chatId)
                 .order('created_at', { ascending: true });
             
             if (error) throw error;
@@ -465,7 +474,7 @@
             
             displayMessages(messages || []);
             
-            if (messages) {
+            if (messages && messages.length > 0) {
                 const unreadIds = messages
                     .filter(msg => msg.receiver === currentUser.username && !msg.read)
                     .map(msg => msg.id);
@@ -529,7 +538,8 @@
         if (!message) return;
         
         try {
-            const chatId = [currentUser.username, currentChatWith].sort().join('_');
+            const usernames = [currentUser.username, currentChatWith].sort();
+            const chatId = usernames.join('_');
             
             const { data, error } = await supabase
                 .from('private_messages')
@@ -619,7 +629,7 @@
                 .select('*')
                 .eq('username', username)
                 .eq('deleted', false)
-                .single();
+                .maybeSingle();
 
             if (error || !existingUser) {
                 showError(elements.newChatError, 'Пользователь не найден');
@@ -646,7 +656,7 @@
                 .from('users')
                 .select('*')
                 .eq('username', user.username)
-                .single();
+                .maybeSingle();
 
             if (existingUser && existingUser.deleted) {
                 await supabase
@@ -721,11 +731,15 @@
         }
 
         try {
-            const { data: existingUser } = await supabase
+            const { data: existingUser, error: fetchError } = await supabase
                 .from('users')
                 .select('*')
                 .eq('username', username)
-                .single();
+                .maybeSingle();
+
+            if (fetchError) {
+                console.error('Ошибка проверки пользователя:', fetchError);
+            }
 
             if (existingUser) {
                 if (existingUser.deleted) {
@@ -747,7 +761,7 @@
             
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
             
-            await supabase
+            const { error: upsertError } = await supabase
                 .from('users')
                 .upsert({
                     username: username,
@@ -755,7 +769,14 @@
                     last_seen: new Date().toISOString(),
                     is_online: true,
                     deleted: false
+                }, {
+                    onConflict: 'username'
                 });
+
+            if (upsertError) {
+                console.error('Ошибка upsert:', upsertError);
+                throw upsertError;
+            }
 
             showChats();
             updateUserDisplay();
@@ -767,7 +788,7 @@
             }
         } catch (error) {
             console.error('Ошибка регистрации:', error);
-            showError(elements.loginError, 'Ошибка регистрации');
+            showError(elements.loginError, 'Ошибка входа: ' + (error.message || 'Неизвестная ошибка'));
         }
     }
 
@@ -789,13 +810,16 @@
                 .from('users')
                 .select('*')
                 .eq('username', newUsername)
-                .single();
+                .maybeSingle();
 
             if (existingUser && existingUser.device_id !== userDeviceId) {
                 showError(elements.editUsernameError, 'Этот никнейм уже используется');
                 return;
             }
 
+            const usernamesToUpdate = [currentUser.username, newUsername].sort();
+            const oldChatId = usernamesToUpdate.join('_');
+            
             await supabase
                 .from('private_messages')
                 .update({ sender: newUsername })
@@ -814,7 +838,11 @@
                 .upsert({
                     username: newUsername,
                     device_id: userDeviceId,
-                    last_seen: new Date().toISOString()
+                    last_seen: new Date().toISOString(),
+                    is_online: true,
+                    deleted: false
+                }, {
+                    onConflict: 'username'
                 });
 
             updateUserDisplay();
