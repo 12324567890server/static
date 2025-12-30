@@ -277,6 +277,14 @@ html, body {
   font-weight: 400;
 }
 
+.typing-indicator {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 2px;
+  display: none;
+}
+
 .back-btn {
   background: none;
   border: none;
@@ -380,6 +388,12 @@ html, body {
   font-size: 15px;
   outline: none;
   min-height: 44px;
+  transition: all 0.2s;
+}
+
+.chat-input input:focus {
+  border-color: #7b2cff;
+  background: rgba(42, 27, 74, 1);
 }
 
 .chat-input button {
@@ -393,6 +407,12 @@ html, body {
   cursor: pointer;
   min-width: 50px;
   min-height: 44px;
+  transition: all 0.2s;
+}
+
+.chat-input button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(123, 44, 255, 0.4);
 }
 
 .side-menu {
@@ -499,6 +519,12 @@ html, body {
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
+  transition: all 0.2s;
+}
+
+.side-menu-btn:hover {
+  background: rgba(42, 27, 74, 1);
+  transform: translateY(-1px);
 }
 
 .side-menu-btn.logout {
@@ -587,6 +613,12 @@ html, body {
   font-size: 15px;
   outline: none;
   margin-bottom: 15px;
+  transition: all 0.2s;
+}
+
+.modal-input:focus {
+  border-color: #7b2cff;
+  background: rgba(42, 27, 74, 1);
 }
 
 .modal-btn {
@@ -599,6 +631,12 @@ html, body {
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modal-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(123, 44, 255, 0.4);
 }
 
 .search-results {
@@ -613,6 +651,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+  animation: messageAppear 0.2s ease;
 }
 
 .user-result-info {
@@ -646,6 +685,11 @@ html, body {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-contact-btn:hover {
+  transform: translateY(-1px);
 }
 
 .add-contact-btn.added {
@@ -665,6 +709,14 @@ html, body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+  cursor: pointer;
+  animation: messageAppear 0.2s ease;
+  transition: all 0.2s;
+}
+
+.contact-item:hover {
+  background: rgba(42, 27, 74, 1);
+  transform: translateY(-1px);
 }
 
 .contact-info {
@@ -698,6 +750,11 @@ html, body {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chat-btn:hover {
+  transform: translateY(-1px);
 }
 
 .online-dot {
@@ -711,18 +768,9 @@ html, body {
 }
 
 @keyframes pulse {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.1);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
 }
 
 @media (max-width: 480px) {
@@ -763,6 +811,7 @@ html, body {
   .message {
     max-width: 85%;
     padding: 9px 12px;
+    margin-bottom: 8px;
   }
   
   .message .text {
