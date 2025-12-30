@@ -54,18 +54,23 @@
     let chats = [];
     let unreadMessages = new Map();
     let onlineUsers = new Map();
-    let typingUsers = new Set();
-    let realtimeChannel = null;
-    let onlineInterval = null;
-    let chatUpdateInterval = null;
-    let messageUpdateInterval = null;
-    let presenceInterval = null;
+    let isTyping = false;
+    let lastTypingTime = 0;
     let typingTimeout = null;
-    let isAppVisible = true;
-    let lastTypingSent = 0;
-    let lastPresenceUpdate = 0;
-    let isTypingActive = false;
     let typingCheckInterval = null;
+    let lastPresenceUpdate = 0;
+    let lastOnlineCheck = 0;
+    let realtimeChannel = null;
+    let isAppVisible = true;
+    let messageInterval = null;
+    let chatInterval = null;
+    let onlineInterval = null;
+    let presenceInterval = null;
+
+    // Универсальная функция для всех устройств
+    function isMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    }
 
     function init() {
         checkUser();
@@ -88,19 +93,15 @@
             }
         });
         
+        window.addEventListener('pagehide', async () => {
+            if (currentUser) {
+                await updateUserPresence(false);
+            }
+        });
+        
         window.addEventListener('beforeunload', async () => {
             if (currentUser) {
-                try {
-                    await supabase
-                        .from('users')
-                        .update({
-                            is_online: false,
-                            last_seen: new Date().toISOString()
-                        })
-                        .eq('username', currentUser.username);
-                } catch (error) {
-                    console.error('Ошибка при выходе:', error);
-                }
+                await updateUserPresence(false);
             }
         });
     }
@@ -108,29 +109,30 @@
     function startIntervals() {
         stopIntervals();
         
-        chatUpdateInterval = setInterval(() => {
-            if (currentUser) {
-                loadChats();
-            }
-        }, 1500);
-        
-        messageUpdateInterval = setInterval(() => {
+        // Универсальные интервалы для всех устройств
+        messageInterval = setInterval(() => {
             if (currentUser && currentChatWith) {
                 loadMessages(currentChatWith);
             }
         }, 1000);
         
+        chatInterval = setInterval(() => {
+            if (currentUser) {
+                loadChats();
+            }
+        }, 1500);
+        
         onlineInterval = setInterval(() => {
             if (currentUser) {
                 checkOnlineStatuses();
             }
-        }, 1500);
+        }, 2000);
         
         presenceInterval = setInterval(() => {
             if (currentUser && isAppVisible) {
                 updateUserPresence(true);
             }
-        }, 5000);
+        }, 8000);
         
         setupRealtime();
         
@@ -139,7 +141,7 @@
                 checkOnlineStatuses();
                 loadChats();
             }
-        }, 300);
+        }, 500);
     }
 
     function setupRealtime() {
@@ -150,7 +152,7 @@
         if (!currentUser) return;
         
         realtimeChannel = supabase
-            .channel('speednexus_live')
+            .channel('speednexus_global')
             .on('postgres_changes', 
                 { 
                     event: 'INSERT', 
@@ -186,62 +188,17 @@
                     }
                 }
             )
-            .on('postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'typing_indicators'
-                },
-                (payload) => {
-                    const typing = payload.new;
-                    if (typing.receiver === currentUser.username && typing.sender === currentChatWith) {
-                        showTypingIndicator(typing.sender);
-                    }
-                }
-            )
-            .on('postgres_changes',
-                {
-                    event: 'DELETE',
-                    schema: 'public',
-                    table: 'typing_indicators',
-                    filter: `receiver=eq.${currentUser.username}`
-                },
-                (payload) => {
-                    hideTypingIndicator();
-                }
-            )
-            .on('postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'users'
-                },
-                (payload) => {
-                    if (payload.new && payload.new.username !== currentUser.username) {
-                        const user = payload.new;
-                        const lastSeen = new Date(user.last_seen).getTime();
-                        const now = Date.now();
-                        
-                        onlineUsers.set(user.username, {
-                            isOnline: now - lastSeen < 10000,
-                            lastSeen: user.last_seen
-                        });
-                        
-                        updateChatStatus();
-                        updateChatsList();
-                    }
-                }
-            )
             .subscribe();
     }
 
+    // Универсальная функция индикатора набора
     async function sendTypingIndicator() {
         if (!currentChatWith || !currentUser) return;
         
         const now = Date.now();
-        if (now - lastTypingSent < 1000) return;
+        if (now - lastTypingTime < 1000) return;
         
-        lastTypingSent = now;
+        lastTypingTime = now;
         
         try {
             await supabase
@@ -259,7 +216,7 @@
             
             if (!typingCheckInterval) {
                 typingCheckInterval = setInterval(() => {
-                    if (isTypingActive) {
+                    if (isTyping) {
                         sendTypingIndicator();
                     }
                 }, 2000);
@@ -283,22 +240,45 @@
                 clearInterval(typingCheckInterval);
                 typingCheckInterval = null;
             }
-            isTypingActive = false;
+            isTyping = false;
         } catch (error) {
             console.error('Ошибка остановки индикатора:', error);
         }
     }
 
-    function showTypingIndicator(username) {
-        if (currentChatWith === username && elements.chatStatus) {
-            elements.chatStatus.innerHTML = '<span class="typing-indicator">печатает...</span>';
-            elements.chatStatus.style.color = '#4ade80';
+    // Проверка набора сообщения собеседником
+    async function checkTypingStatus() {
+        if (!currentChatWith || !currentUser) return;
+        
+        try {
+            const { data: typing } = await supabase
+                .from('typing_indicators')
+                .select('*')
+                .eq('sender', currentChatWith)
+                .eq('receiver', currentUser.username)
+                .single();
             
-            setTimeout(() => {
-                if (elements.chatStatus && elements.chatStatus.innerHTML.includes('печатает')) {
+            if (typing) {
+                const typingTime = new Date(typing.timestamp).getTime();
+                const now = Date.now();
+                
+                if (now - typingTime < 4000) {
+                    showTypingIndicator(currentChatWith);
+                } else {
                     hideTypingIndicator();
                 }
-            }, 4000);
+            } else {
+                hideTypingIndicator();
+            }
+        } catch (error) {
+            hideTypingIndicator();
+        }
+    }
+
+    function showTypingIndicator(username) {
+        if (elements.chatStatus && currentChatWith === username) {
+            elements.chatStatus.innerHTML = '<span class="typing-text">печатает...</span>';
+            elements.chatStatus.style.color = '#4ade80';
         }
     }
 
@@ -316,7 +296,7 @@
                 if (timeEl) {
                     const statusSpan = timeEl.querySelector('.message-status');
                     if (statusSpan) {
-                        statusSpan.innerHTML = '✓✓';
+                        statusSpan.textContent = '✓✓';
                         statusSpan.className = 'message-status read';
                     }
                 }
@@ -325,8 +305,8 @@
     }
 
     function stopIntervals() {
-        if (chatUpdateInterval) clearInterval(chatUpdateInterval);
-        if (messageUpdateInterval) clearInterval(messageUpdateInterval);
+        if (messageInterval) clearInterval(messageInterval);
+        if (chatInterval) clearInterval(chatInterval);
         if (onlineInterval) clearInterval(onlineInterval);
         if (presenceInterval) clearInterval(presenceInterval);
         if (typingTimeout) clearTimeout(typingTimeout);
@@ -335,8 +315,8 @@
             supabase.removeChannel(realtimeChannel);
             realtimeChannel = null;
         }
-        chatUpdateInterval = null;
-        messageUpdateInterval = null;
+        messageInterval = null;
+        chatInterval = null;
         onlineInterval = null;
         presenceInterval = null;
         typingCheckInterval = null;
@@ -384,6 +364,8 @@
                 isOnline: isOnline,
                 lastSeen: new Date().toISOString()
             });
+            
+            updateChatStatus();
         } catch (error) {
             console.error('Ошибка обновления присутствия:', error);
         }
@@ -392,11 +374,14 @@
     async function checkOnlineStatuses() {
         if (!currentUser) return;
         
+        const now = Date.now();
+        if (now - lastOnlineCheck < 1500) return;
+        lastOnlineCheck = now;
+        
         try {
-            const now = Date.now();
             const { data: users } = await supabase
                 .from('users')
-                .select('username, last_seen, is_online')
+                .select('username, last_seen')
                 .eq('deleted', false)
                 .neq('username', currentUser.username)
                 .limit(100);
@@ -408,7 +393,7 @@
                         const diff = now - lastSeen;
                         
                         onlineUsers.set(user.username, {
-                            isOnline: diff < 10000,
+                            isOnline: diff < 8000,
                             lastSeen: user.last_seen
                         });
                     }
@@ -416,6 +401,9 @@
                 
                 updateChatStatus();
                 updateChatsList();
+                if (currentChatWith) {
+                    checkTypingStatus();
+                }
             }
         } catch (error) {
             console.error('Ошибка проверки онлайн:', error);
@@ -479,10 +467,10 @@
         
         const userData = onlineUsers.get(currentChatWith);
         if (userData && userData.isOnline) {
-            elements.chatStatus.innerHTML = '<span class="online-indicator">●</span> онлайн';
+            elements.chatStatus.innerHTML = '<span class="online-dot">●</span> онлайн';
             elements.chatStatus.style.color = '#4ade80';
         } else {
-            elements.chatStatus.innerHTML = '<span class="offline-indicator">●</span> не в сети';
+            elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> не в сети';
             elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
         }
     }
@@ -549,10 +537,10 @@
 
         elements.messageInput.addEventListener('input', function() {
             if (currentChatWith && this.value.length > 0) {
-                isTypingActive = true;
+                isTyping = true;
                 sendTypingIndicator();
             } else if (currentChatWith) {
-                isTypingActive = false;
+                isTyping = false;
                 stopTypingIndicator();
             }
         });
@@ -662,7 +650,7 @@
                 <div class="chat-info">
                     <div class="chat-name">
                         ${chat.username}
-                        ${isOnline ? '<span class="status-indicator online"></span>' : '<span class="status-indicator offline"></span>'}
+                        ${isOnline ? '<span class="status-dot online"></span>' : '<span class="status-dot offline"></span>'}
                     </div>
                     <div class="chat-last-message">
                         ${lastMessagePrefix}${lastMessage}
@@ -813,7 +801,7 @@
             if (error) throw error;
             
             elements.messageInput.value = '';
-            isTypingActive = false;
+            isTyping = false;
             stopTypingIndicator();
             
             if (data && data[0]) {
@@ -1134,7 +1122,7 @@
             const lastSeen = new Date(user.last_seen);
             const now = new Date();
             const diff = now - lastSeen;
-            const isOnline = diff < 10000;
+            const isOnline = diff < 8000;
             
             div.innerHTML = `
                 <div class="user-result-info">
