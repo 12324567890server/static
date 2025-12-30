@@ -275,6 +275,18 @@ html, body {
   color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
   font-weight: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.chat-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
 }
 
 .back-btn {
@@ -309,9 +321,18 @@ html, body {
   word-break: break-word;
   white-space: pre-wrap;
   position: relative;
-  opacity: 0;
-  transform: translateY(10px);
-  animation: messageAppear 0.3s ease-out forwards;
+  animation: messageAppear 0.2s ease-out forwards;
+}
+
+@keyframes messageAppear {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .message.me {
@@ -350,7 +371,6 @@ html, body {
 }
 
 .message-status.sent { color: rgba(255, 255, 255, 0.7); }
-.message-status.delivered { color: rgba(255, 255, 255, 0.8); }
 .message-status.read { color: #4ade80; }
 
 .chat-input {
@@ -467,7 +487,6 @@ html, body {
 
 .status-indicator.online {
   background: #4ade80;
-  animation: pulse 2s infinite;
 }
 
 .status-indicator.offline {
@@ -544,6 +563,17 @@ html, body {
   overflow: hidden;
   border: 1px solid rgba(123, 44, 255, 0.3);
   animation: modalAppear 0.3s ease;
+}
+
+@keyframes modalAppear {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal-header {
@@ -665,6 +695,10 @@ html, body {
   transform: translateY(-1px);
 }
 
+.add-contact-btn.added {
+  background: #4ade80;
+}
+
 .contacts-list {
   max-height: 300px;
   overflow-y: auto;
@@ -732,36 +766,30 @@ html, body {
   height: 8px;
   background-color: #4ade80;
   border-radius: 50%;
-  margin-left: 5px;
   animation: pulse 2s infinite;
 }
 
-@keyframes messageAppear {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes modalAppear {
-  from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+.offline-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
 }
 
 @keyframes pulse {
-  0% { opacity: 0.6; }
-  50% { opacity: 1; }
-  100% { opacity: 0.6; }
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (max-width: 480px) {
