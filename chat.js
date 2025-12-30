@@ -45,7 +45,8 @@
         newChatError: document.getElementById('newChatError'),
         chatsTitle: document.getElementById('chatsTitle'),
         restoreSection: document.getElementById('restoreSection'),
-        restoreAccountBtn: document.getElementById('restoreAccountBtn')
+        restoreAccountBtn: document.getElementById('restoreAccountBtn'),
+        typingIndicator: document.getElementById('typingIndicator')
     };
 
     let currentUser = null;
@@ -58,12 +59,10 @@
     let updateInterval = null;
     let onlineInterval = null;
     let heartbeatInterval = null;
+    let typingTimeout = null;
+    let isTyping = false;
+    let typingUsers = new Map();
     let realtimeChannel = null;
-
-    function updateChatsList() {
-        displayChats(chats);
-        updateUnreadNotifications();
-    }
 
     function init() {
         checkUser();
@@ -98,13 +97,13 @@
             if (currentUser) {
                 checkOnlineStatuses();
             }
-        }, 5000);
+        }, 2000);
         
         heartbeatInterval = setInterval(() => {
             if (currentUser) {
                 syncUserOnlineStatus();
             }
-        }, 30000);
+        }, 15000);
         
         setupRealtime();
         
@@ -138,7 +137,6 @@
                         loadMessages(currentChatWith);
                     }
                     loadChats();
-                    updateUnreadNotifications();
                 }
             )
             .on('postgres_changes',
@@ -154,7 +152,89 @@
                     }
                 }
             )
+            .on('postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'typing_indicators'
+                },
+                (payload) => {
+                    const typing = payload.new;
+                    if (typing.receiver === currentUser.username && typing.sender === currentChatWith) {
+                        showTypingIndicator(typing.sender);
+                    }
+                }
+            )
+            .on('postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'typing_indicators'
+                },
+                (payload) => {
+                    hideTypingIndicator();
+                }
+            )
             .subscribe();
+    }
+
+    async function sendTypingIndicator() {
+        if (!currentChatWith || !currentUser) return;
+        
+        try {
+            await supabase
+                .from('typing_indicators')
+                .upsert({
+                    sender: currentUser.username,
+                    receiver: currentChatWith,
+                    timestamp: new Date().toISOString()
+                }, {
+                    onConflict: 'sender,receiver'
+                });
+            
+            if (typingTimeout) {
+                clearTimeout(typingTimeout);
+            }
+            
+            typingTimeout = setTimeout(() => {
+                stopTypingIndicator();
+            }, 3000);
+        } catch (error) {
+            console.error('Ошибка отправки индикатора набора:', error);
+        }
+    }
+
+    async function stopTypingIndicator() {
+        if (!currentChatWith || !currentUser) return;
+        
+        try {
+            await supabase
+                .from('typing_indicators')
+                .delete()
+                .eq('sender', currentUser.username)
+                .eq('receiver', currentChatWith);
+        } catch (error) {
+            console.error('Ошибка остановки индикатора:', error);
+        }
+    }
+
+    function showTypingIndicator(username) {
+        if (currentChatWith === username && elements.typingIndicator) {
+            elements.typingIndicator.textContent = `${username} печатает...`;
+            elements.typingIndicator.style.display = 'block';
+            
+            setTimeout(() => {
+                if (elements.typingIndicator) {
+                    elements.typingIndicator.style.display = 'none';
+                }
+            }, 3000);
+        }
+    }
+
+    function hideTypingIndicator() {
+        if (elements.typingIndicator) {
+            elements.typingIndicator.style.display = 'none';
+        }
     }
 
     function updateMessageStatus(messageId) {
@@ -256,7 +336,7 @@
                         const lastSeen = new Date(user.last_seen);
                         const diff = now - lastSeen;
                         
-                        if (diff < 60000) {
+                        if (diff < 10000) {
                             newOnlineUsers.add(user.username);
                         }
                     }
@@ -310,6 +390,7 @@
         elements.messageInput.focus();
         
         markChatAsRead(username);
+        hideTypingIndicator();
     }
 
     function updateUserDisplay() {
@@ -388,6 +469,14 @@
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSendMessage();
+            }
+        });
+
+        elements.messageInput.addEventListener('input', function() {
+            if (currentChatWith && this.value.length > 0) {
+                sendTypingIndicator();
+            } else if (currentChatWith) {
+                stopTypingIndicator();
             }
         });
 
@@ -629,6 +718,7 @@
             if (error) throw error;
             
             elements.messageInput.value = '';
+            stopTypingIndicator();
             
             if (data && data[0]) {
                 lastMessageId = data[0].id;
@@ -670,9 +760,6 @@
         
         if (totalUnread > 0) {
             document.title = `(${totalUnread}) SpeedNexus`;
-            if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
-                new Notification(`SpeedNexus: ${totalUnread} непрочитанных сообщений`);
-            }
         } else {
             document.title = 'SpeedNexus';
         }
@@ -857,7 +944,7 @@
             }
         } catch (error) {
             console.error('Ошибка регистрации:', error);
-            showError(elements.loginError, 'Ошибка входа: ' + (error.message || 'Неизвестная ошибка'));
+            showError(elements.loginError, 'Ошибка входа');
         }
     }
 
@@ -969,7 +1056,7 @@
             const lastSeen = new Date(user.last_seen);
             const now = new Date();
             const diff = now - lastSeen;
-            const isOnline = diff < 60000;
+            const isOnline = diff < 10000;
             
             div.innerHTML = `
                 <div class="user-result-info">
