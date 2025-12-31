@@ -61,12 +61,15 @@
     let messageIdsInView = new Set();
     let lastMessagesLoaded = [];
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    let readMessageIds = new Set();
+    let checkReadInterval = null;
 
     const INTERVALS = {
-        MESSAGES: isMobile ? 2000 : 1500,
-        CHATS: isMobile ? 3000 : 2000,
-        ONLINE: 4000,
-        PRESENCE: 10000
+        MESSAGES: isMobile ? 3000 : 1500,
+        CHATS: isMobile ? 5000 : 3000,
+        ONLINE: isMobile ? 6000 : 4000,
+        PRESENCE: 15000,
+        CHECK_READ: 1000
     };
 
     function init() {
@@ -110,7 +113,7 @@
         
         if (!currentUser) return;
         
-        realtimeChannel = supabase.channel('speednexus_realtime')
+        realtimeChannel = supabase.channel('speednexus_realtime_' + currentUser.username)
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
@@ -171,12 +174,56 @@
             })
             .subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
-                    console.log('Realtime подключен');
+                    startCheckReadInterval();
                 } else if (status === 'CLOSED') {
-                    console.log('Realtime отключен, переподключение...');
-                    setTimeout(setupRealtime, 2000);
+                    stopCheckReadInterval();
+                    setTimeout(setupRealtime, 3000);
                 }
             });
+    }
+
+    function startCheckReadInterval() {
+        stopCheckReadInterval();
+        checkReadInterval = setInterval(() => {
+            if (currentChatWith && currentUser) {
+                checkIfMessagesRead();
+            }
+        }, INTERVALS.CHECK_READ);
+    }
+
+    function stopCheckReadInterval() {
+        if (checkReadInterval) {
+            clearInterval(checkReadInterval);
+            checkReadInterval = null;
+        }
+    }
+
+    async function checkIfMessagesRead() {
+        if (!currentChatWith || !currentUser) return;
+        
+        try {
+            const usernames = [currentUser.username, currentChatWith].sort();
+            const chatId = usernames.join('_');
+            
+            const { data: messages } = await supabase
+                .from('private_messages')
+                .select('id, read')
+                .eq('chat_id', chatId)
+                .eq('sender', currentUser.username)
+                .eq('read', true)
+                .neq('receiver', currentUser.username);
+            
+            if (messages) {
+                messages.forEach(msg => {
+                    if (!readMessageIds.has(msg.id)) {
+                        updateMessageStatus(msg.id);
+                        readMessageIds.add(msg.id);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Ошибка проверки прочтения:', error);
+        }
     }
 
     async function sendTypingIndicator() {
@@ -239,31 +286,43 @@
                 if (statusSpan) {
                     statusSpan.textContent = '✓✓';
                     statusSpan.className = 'message-status read';
+                    readMessageIds.add(messageId);
                 }
             }
         }
     }
 
     function startPolling() {
-        setInterval(() => {
+        const pollInterval = isMobile ? 100 : 50;
+        
+        let lastMessagesPoll = 0;
+        let lastChatsPoll = 0;
+        let lastOnlinePoll = 0;
+        
+        const pollFunction = () => {
+            const now = Date.now();
+            
             if (currentUser && isAppVisible) {
-                if (currentChatWith) {
+                if (currentChatWith && now - lastMessagesPoll > INTERVALS.MESSAGES) {
                     loadMessages(currentChatWith);
+                    lastMessagesPoll = now;
+                }
+                
+                if (now - lastChatsPoll > INTERVALS.CHATS) {
+                    loadChats();
+                    lastChatsPoll = now;
+                }
+                
+                if (now - lastOnlinePoll > INTERVALS.ONLINE) {
+                    checkOnlineStatuses();
+                    lastOnlinePoll = now;
                 }
             }
-        }, INTERVALS.MESSAGES);
+            
+            setTimeout(pollFunction, pollInterval);
+        };
         
-        setInterval(() => {
-            if (currentUser && isAppVisible) {
-                loadChats();
-            }
-        }, INTERVALS.CHATS);
-        
-        setInterval(() => {
-            if (currentUser && isAppVisible) {
-                checkOnlineStatuses();
-            }
-        }, INTERVALS.ONLINE);
+        pollFunction();
         
         setInterval(() => {
             if (currentUser && isAppVisible) {
@@ -356,6 +415,7 @@
     }
 
     function showLogin() {
+        stopCheckReadInterval();
         if (realtimeChannel) {
             supabase.removeChannel(realtimeChannel);
             realtimeChannel = null;
@@ -400,6 +460,7 @@
         elements.privateMessages.innerHTML = '';
         messageIdsInView.clear();
         lastMessagesLoaded = [];
+        readMessageIds.clear();
         
         await loadMessages(username);
         updateChatStatus();
@@ -939,6 +1000,7 @@
             localStorage.removeItem('speednexus_contacts');
             
             currentUser = null;
+            stopCheckReadInterval();
             if (realtimeChannel) {
                 supabase.removeChannel(realtimeChannel);
                 realtimeChannel = null;
@@ -1207,6 +1269,7 @@
             localStorage.removeItem('speednexus_user');
             
             currentUser = null;
+            stopCheckReadInterval();
             if (realtimeChannel) {
                 supabase.removeChannel(realtimeChannel);
                 realtimeChannel = null;
