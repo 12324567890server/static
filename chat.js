@@ -54,22 +54,22 @@
     let chats = [];
     let unreadMessages = new Map();
     let onlineUsers = new Map();
-    let isTyping = false;
-    let lastTypingTime = 0;
-    let typingTimeout = null;
-    let typingCheckInterval = null;
-    let lastPresenceUpdate = 0;
-    let lastOnlineCheck = 0;
     let realtimeChannel = null;
     let isAppVisible = true;
-    let messageInterval = null;
-    let chatInterval = null;
-    let onlineInterval = null;
-    let presenceInterval = null;
-    let displayedMessageIds = new Set();
-    function isMobile() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    }
+    let messageIdsCache = new Set();
+    let typingTimeout = null;
+    let typingCheckInterval = null;
+    let lastMessagesLoad = 0;
+    let lastChatsLoad = 0;
+    let lastOnlineCheck = 0;
+    let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    const INTERVALS = {
+        MESSAGES: isMobile ? 2000 : 1500,
+        CHATS: isMobile ? 3000 : 2000,
+        ONLINE: isMobile ? 5000 : 3000,
+        PRESENCE: 10000
+    };
 
     function init() {
         checkUser();
@@ -81,69 +81,27 @@
             localStorage.setItem('device_id', userDeviceId);
         }
         
-        document.addEventListener('visibilitychange', () => {
-            isAppVisible = !document.hidden;
-            if (isAppVisible && currentUser) {
-                updateUserPresence(true);
-                if (currentChatWith) {
-                    loadMessages(currentChatWith);
-                }
-                loadChats();
-            }
-        });
+        document.addEventListener('visibilitychange', handleVisibilityChange);
         
-        window.addEventListener('pagehide', async () => {
-            if (currentUser) {
-                await updateUserPresence(false);
-            }
-        });
-        
-        window.addEventListener('beforeunload', async () => {
-            if (currentUser) {
-                await updateUserPresence(false);
+        let beforeUnloadFired = false;
+        window.addEventListener('beforeunload', () => {
+            if (!beforeUnloadFired && currentUser) {
+                beforeUnloadFired = true;
+                updateUserPresence(false);
             }
         });
     }
 
-    function startIntervals() {
-        stopIntervals();
-        const isMobileDevice = isMobile();
-        const messageIntervalTime = isMobileDevice ? 2000 : 1000;
-        const chatIntervalTime = isMobileDevice ? 3000 : 1500;
-        const onlineIntervalTime = isMobileDevice ? 3000 : 2000;
-        
-        messageInterval = setInterval(() => {
-            if (currentUser && currentChatWith) {
+    function handleVisibilityChange() {
+        isAppVisible = !document.hidden;
+        if (isAppVisible && currentUser) {
+            updateUserPresence(true);
+            if (currentChatWith) {
                 loadMessages(currentChatWith);
             }
-        }, messageIntervalTime);
-        
-        chatInterval = setInterval(() => {
-            if (currentUser) {
-                loadChats();
-            }
-        }, chatIntervalTime);
-        
-        onlineInterval = setInterval(() => {
-            if (currentUser) {
-                checkOnlineStatuses();
-            }
-        }, onlineIntervalTime);
-        
-        presenceInterval = setInterval(() => {
-            if (currentUser && isAppVisible) {
-                updateUserPresence(true);
-            }
-        }, 8000);
-        
-        setupRealtime();
-        
-        setTimeout(() => {
-            if (currentUser) {
-                checkOnlineStatuses();
-                loadChats();
-            }
-        }, 500);
+            loadChats();
+            checkOnlineStatuses();
+        }
     }
 
     function setupRealtime() {
@@ -153,90 +111,86 @@
         
         if (!currentUser) return;
         
-        realtimeChannel = supabase
-            .channel('speednexus_global_' + currentUser.username)
-            .on('postgres_changes', 
-                { 
-                    event: 'INSERT', 
-                    schema: 'public', 
-                    table: 'private_messages',
-                    filter: `receiver=eq.${currentUser.username}`
-                }, 
-                (payload) => {
-                    const message = payload.new;
-                    
-                    if (currentChatWith && message.sender === currentChatWith) {
-                        if (!displayedMessageIds.has(message.id)) { // НЕ добавлять дубликаты
-                            displayedMessageIds.add(message.id);
-                            loadMessages(currentChatWith);
-                            markMessageAsRead(message.id);
-                        }
-                    } else {
-                        const count = unreadMessages.get(message.sender) || 0;
-                        unreadMessages.set(message.sender, count + 1);
-                        updateUnreadNotifications();
-                    }
-                    
-                    loadChats();
+        realtimeChannel = supabase.channel('speednexus_realtime')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'private_messages',
+                filter: `receiver=eq.${currentUser.username}`
+            }, (payload) => {
+                handleNewMessage(payload.new);
+            })
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'private_messages',
+                filter: `sender=eq.${currentUser.username}`
+            }, (payload) => {
+                if (payload.new.read && currentChatWith === payload.new.receiver) {
+                    updateMessageStatus(payload.new.id);
                 }
-            )
-            .on('postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'private_messages'
-                },
-                (payload) => {
-                    const message = payload.new;
-                    if (message.read && message.sender === currentUser.username && currentChatWith === message.receiver) {
-                        updateMessageStatus(message.id);
-                    }
+            })
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'typing_indicators',
+                filter: `receiver=eq.${currentUser.username}`
+            }, (payload) => {
+                handleTypingIndicator(payload.new);
+            })
+            .on('postgres_changes', {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'typing_indicators',
+                filter: `receiver=eq.${currentUser.username}`
+            }, () => {
+                hideTypingIndicator();
+            })
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('Realtime подключен');
+                } else if (status === 'CLOSED') {
+                    console.log('Realtime отключен, переподключение...');
+                    setTimeout(setupRealtime, 2000);
                 }
-            )
-            .on('postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'typing_indicators',
-                    filter: `receiver=eq.${currentUser.username}`
-                },
-                (payload) => {
-                    const typing = payload.new;
-                    if (typing.sender === currentChatWith) {
-                        const typingTime = new Date(typing.timestamp).getTime();
-                        const now = Date.now();
-                        
-                        if (now - typingTime < 4000) {
-                            showTypingIndicator(typing.sender);
-                            if (typingCheckInterval) clearInterval(typingCheckInterval);
-                            typingCheckInterval = setInterval(() => {
-                                hideTypingIndicator();
-                            }, 4000);
-                        }
-                    }
-                }
-            )
-            .on('postgres_changes',
-                {
-                    event: 'DELETE',
-                    schema: 'public',
-                    table: 'typing_indicators',
-                    filter: `receiver=eq.${currentUser.username}`
-                },
-                () => {
+            });
+    }
+
+    function handleNewMessage(message) {
+        if (currentChatWith && message.sender === currentChatWith) {
+            if (!messageIdsCache.has(message.id)) {
+                messageIdsCache.add(message.id);
+                addMessageToDisplay(message, false);
+                markMessageAsRead(message.id);
+            }
+        } else {
+            const count = unreadMessages.get(message.sender) || 0;
+            unreadMessages.set(message.sender, count + 1);
+            updateUnreadNotifications();
+        }
+        
+        loadChats();
+    }
+
+    function handleTypingIndicator(typing) {
+        if (typing.sender === currentChatWith) {
+            const typingTime = new Date(typing.timestamp).getTime();
+            const now = Date.now();
+            
+            if (now - typingTime < 4000) {
+                showTypingIndicator();
+                if (typingCheckInterval) clearInterval(typingCheckInterval);
+                typingCheckInterval = setInterval(() => {
                     hideTypingIndicator();
-                }
-            )
-            .subscribe();
+                }, 4000);
+            } else {
+                hideTypingIndicator();
+            }
+        }
     }
 
     async function sendTypingIndicator() {
         if (!currentChatWith || !currentUser) return;
-        
-        const now = Date.now();
-        if (now - lastTypingTime < 500) return;
-        
-        lastTypingTime = now;
         
         try {
             await supabase
@@ -250,7 +204,9 @@
                 });
             
             if (typingTimeout) clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => stopTypingIndicator(), 3000);
+            typingTimeout = setTimeout(() => {
+                stopTypingIndicator();
+            }, 3000);
             
         } catch (error) {
             console.error('Ошибка отправки индикатора:', error);
@@ -266,51 +222,13 @@
                 .delete()
                 .eq('sender', currentUser.username)
                 .eq('receiver', currentChatWith);
-            
-            if (typingCheckInterval) {
-                clearInterval(typingCheckInterval);
-                typingCheckInterval = null;
-            }
-            isTyping = false;
         } catch (error) {
             console.error('Ошибка остановки индикатора:', error);
         }
     }
 
-    async function checkTypingStatus() {
-        if (!currentChatWith || !currentUser) return;
-        
-        try {
-            const { data: typing } = await supabase
-                .from('typing_indicators')
-                .select('*')
-                .eq('sender', currentChatWith)
-                .eq('receiver', currentUser.username)
-                .maybeSingle();
-            
-            if (typing) {
-                const typingTime = new Date(typing.timestamp).getTime();
-                const now = Date.now();
-                
-                if (now - typingTime < 4000) {
-                    showTypingIndicator(currentChatWith);
-                    if (typingCheckInterval) clearInterval(typingCheckInterval);
-                    typingCheckInterval = setInterval(() => {
-                        hideTypingIndicator();
-                    }, 4000);
-                } else {
-                    hideTypingIndicator();
-                }
-            } else {
-                hideTypingIndicator();
-            }
-        } catch (error) {
-            hideTypingIndicator();
-        }
-    }
-
-    function showTypingIndicator(username) {
-        if (elements.chatStatus && currentChatWith === username) {
+    function showTypingIndicator() {
+        if (elements.chatStatus) {
             elements.chatStatus.innerHTML = '<span class="typing-text">печатает...</span>';
             elements.chatStatus.style.color = '#4ade80';
         }
@@ -336,23 +254,30 @@
         }
     }
 
-    function stopIntervals() {
-        if (messageInterval) clearInterval(messageInterval);
-        if (chatInterval) clearInterval(chatInterval);
-        if (onlineInterval) clearInterval(onlineInterval);
-        if (presenceInterval) clearInterval(presenceInterval);
-        if (typingTimeout) clearTimeout(typingTimeout);
-        if (typingCheckInterval) clearInterval(typingCheckInterval);
-        if (realtimeChannel) {
-            supabase.removeChannel(realtimeChannel);
-            realtimeChannel = null;
-        }
-        messageInterval = null;
-        chatInterval = null;
-        onlineInterval = null;
-        presenceInterval = null;
-        typingCheckInterval = null;
-        displayedMessageIds.clear();
+    function startPolling() {
+        setInterval(() => {
+            if (currentUser && isAppVisible) {
+                const now = Date.now();
+                
+                if (currentChatWith && now - lastMessagesLoad > INTERVALS.MESSAGES) {
+                    loadMessages(currentChatWith);
+                }
+                
+                if (now - lastChatsLoad > INTERVALS.CHATS) {
+                    loadChats();
+                }
+                
+                if (now - lastOnlineCheck > INTERVALS.ONLINE) {
+                    checkOnlineStatuses();
+                }
+            }
+        }, 1000);
+        
+        setInterval(() => {
+            if (currentUser && isAppVisible) {
+                updateUserPresence(true);
+            }
+        }, INTERVALS.PRESENCE);
     }
 
     function checkUser() {
@@ -362,7 +287,8 @@
                 currentUser = JSON.parse(savedUser);
                 showChats();
                 updateUserDisplay();
-                startIntervals();
+                setupRealtime();
+                startPolling();
                 updateUserPresence(true);
             } catch (e) {
                 localStorage.removeItem('speednexus_user');
@@ -376,12 +302,8 @@
     async function updateUserPresence(isOnline) {
         if (!currentUser) return;
         
-        const now = Date.now();
-        if (now - lastPresenceUpdate < 1000) return;
-        lastPresenceUpdate = now;
-        
         try {
-            const { data, error } = await supabase
+            await supabase
                 .from('users')
                 .upsert({
                     username: currentUser.username,
@@ -393,56 +315,50 @@
                     onConflict: 'username'
                 });
             
-            if (error) throw error;
-            
             onlineUsers.set(currentUser.username, {
                 isOnline: isOnline,
                 lastSeen: new Date().toISOString()
             });
             
-            updateChatStatus();
+            if (currentChatWith) {
+                updateChatStatus();
+            }
         } catch (error) {
             console.error('Ошибка обновления присутствия:', error);
         }
     }
-    
+
     async function checkOnlineStatuses() {
         if (!currentUser) return;
         
         const now = Date.now();
-        if (now - lastOnlineCheck < 1500) return;
+        if (now - lastOnlineCheck < 1000) return;
         lastOnlineCheck = now;
         
         try {
-            const { data: users, error } = await supabase
+            const { data: users } = await supabase
                 .from('users')
                 .select('username, last_seen, is_online')
                 .eq('deleted', false)
                 .neq('username', currentUser.username)
-                .limit(100);
-
-            if (error) throw error;
+                .limit(50);
 
             if (users) {
                 users.forEach(user => {
                     if (user.last_seen) {
                         const lastSeen = new Date(user.last_seen).getTime();
                         const diff = now - lastSeen;
-                        const isOnline = user.is_online || diff < 15000; // 15 секунд на телефонах
                         
+                        const isOnline = user.is_online || diff < 15000;
                         onlineUsers.set(user.username, {
                             isOnline: isOnline,
-                            lastSeen: user.last_seen,
-                            is_online: user.is_online
+                            lastSeen: user.last_seen
                         });
                     }
                 });
                 
                 updateChatStatus();
                 updateChatsList();
-                if (currentChatWith) {
-                    checkTypingStatus();
-                }
             }
         } catch (error) {
             console.error('Ошибка проверки онлайн:', error);
@@ -450,7 +366,13 @@
     }
 
     function showLogin() {
-        stopIntervals();
+        if (realtimeChannel) {
+            supabase.removeChannel(realtimeChannel);
+            realtimeChannel = null;
+        }
+        if (typingCheckInterval) clearInterval(typingCheckInterval);
+        if (typingTimeout) clearTimeout(typingTimeout);
+        
         elements.loginScreen.style.display = 'flex';
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'none';
@@ -474,6 +396,7 @@
         closeAllModals();
         hideSideMenu();
         elements.chatsTitle.textContent = 'Чаты (' + currentUser.username + ')';
+        loadChats();
     }
 
     async function showChat(username) {
@@ -484,7 +407,8 @@
         closeAllModals();
         hideSideMenu();
         
-        displayedMessageIds.clear();
+        elements.privateMessages.innerHTML = '';
+        messageIdsCache.clear();
         
         await loadMessages(username);
         updateChatStatus();
@@ -494,7 +418,7 @@
         
         unreadMessages.delete(username);
         updateUnreadNotifications();
-        updateChatsList();
+        loadChats();
     }
 
     function updateUserDisplay() {
@@ -513,16 +437,15 @@
         } else if (userData && userData.lastSeen) {
             const lastSeen = new Date(userData.lastSeen);
             const now = new Date();
-            const diff = now - lastSeen;
-            const minutes = Math.floor(diff / 60000);
+            const diffMinutes = Math.floor((now - lastSeen) / 60000);
             
-            if (minutes < 1) {
-                elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> был(а) только что';
-            } else if (minutes < 60) {
-                elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> был(а) ${minutes} мин назад`;
-            } else if (minutes < 1440) {
-                const hours = Math.floor(minutes / 60);
-                elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> был(а) ${hours} ч назад`;
+            if (diffMinutes < 1) {
+                elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> только что';
+            } else if (diffMinutes < 60) {
+                elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> ${diffMinutes} мин назад`;
+            } else if (diffMinutes < 1440) {
+                const hours = Math.floor(diffMinutes / 60);
+                elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> ${hours} ч назад`;
             } else {
                 elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> не в сети';
             }
@@ -595,11 +518,7 @@
 
         elements.messageInput.addEventListener('input', function() {
             if (currentChatWith && this.value.length > 0) {
-                isTyping = true;
                 sendTypingIndicator();
-            } else if (currentChatWith) {
-                isTyping = false;
-                stopTypingIndicator();
             }
         });
 
@@ -635,6 +554,10 @@
     async function loadChats() {
         if (!currentUser) return;
         
+        const now = Date.now();
+        if (now - lastChatsLoad < 1000) return;
+        lastChatsLoad = now;
+        
         try {
             const { data: messages, error } = await supabase
                 .from('private_messages')
@@ -663,6 +586,7 @@
                     if (msg.receiver === currentUser.username && !msg.read && msg.sender !== currentUser.username) {
                         const chat = chatMap.get(otherUser);
                         chat.unreadCount = (chat.unreadCount || 0) + 1;
+                        unreadMessages.set(otherUser, chat.unreadCount);
                     }
                 }
             }
@@ -693,13 +617,12 @@
             
             const date = new Date(chat.lastTime);
             const time = formatTime(date);
-            const unreadCount = chat.unreadCount || 0;
+            const unreadCount = unreadMessages.get(chat.username) || 0;
             const userData = onlineUsers.get(chat.username);
-            // ИСПРАВЛЕНИЕ: Более надежная проверка онлайн статуса
-            const isOnline = userData ? (userData.is_online || (new Date().getTime() - new Date(userData.lastSeen).getTime() < 15000)) : false;
+            const isOnline = userData ? userData.isOnline : false;
             
             let lastMessagePrefix = chat.isMyMessage ? 'Вы: ' : '';
-            let lastMessage = chat.lastMessage;
+            let lastMessage = chat.lastMessage || '';
             if (lastMessage.length > 25) {
                 lastMessage = lastMessage.substring(0, 25) + '...';
             }
@@ -712,7 +635,7 @@
                         ${isOnline ? '<span class="status-dot online"></span>' : '<span class="status-dot offline"></span>'}
                     </div>
                     <div class="chat-last-message">
-                        ${lastMessagePrefix}${lastMessage}
+                        ${lastMessagePrefix}${escapeHtml(lastMessage)}
                     </div>
                     <div class="chat-time">${time}</div>
                 </div>
@@ -723,38 +646,12 @@
         });
     }
 
-    function getAvatarLetter(username) {
-        return username.charAt(0).toUpperCase();
-    }
-
-    function formatTime(date) {
-        const now = new Date();
-        const diff = now - date;
-        
-        if (diff < 60000) return 'только что';
-        if (diff < 3600000) return Math.floor(diff / 60000) + ' мин назад';
-        if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч назад';
-        
-        return date.toLocaleDateString('ru-RU', {
-            day: 'numeric',
-            month: 'short'
-        });
-    }
-
-    function filterChats(searchTerm) {
-        if (!searchTerm) {
-            displayChats(chats);
-            return;
-        }
-        
-        const filtered = chats.filter(chat => 
-            chat.username.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        displayChats(filtered);
-    }
-
     async function loadMessages(username) {
         if (!username) return;
+        
+        const now = Date.now();
+        if (now - lastMessagesLoad < 500) return;
+        lastMessagesLoad = now;
         
         try {
             const usernames = [currentUser.username, username].sort();
@@ -768,26 +665,18 @@
             
             if (error) throw error;
             
-            const messagesArray = messages || [];
+            const newMessages = messages || [];
+            const currentMessageIds = new Set(Array.from(messageIdsCache));
+            const newMessageIds = newMessages.map(m => m.id);
             
-            // Проверяем, изменились ли сообщения
-            const currentIds = Array.from(displayedMessageIds);
-            const newIds = messagesArray.map(m => m.id);
-            
-            // Если сообщения те же - не перерисовываем
-            if (currentIds.length === newIds.length && 
-                currentIds.every(id => newIds.includes(id))) {
-                return;
+            if (currentMessageIds.size !== newMessageIds.length || 
+                !newMessageIds.every(id => currentMessageIds.has(id))) {
+                displayMessages(newMessages);
+                messageIdsCache = new Set(newMessageIds);
             }
             
-            // Очищаем и обновляем
-            displayedMessageIds.clear();
-            messagesArray.forEach(m => displayedMessageIds.add(m.id));
-            
-            displayMessages(messagesArray);
-            
-            if (messagesArray.length > 0) {
-                const unreadIds = messagesArray
+            if (newMessages.length > 0) {
+                const unreadIds = newMessages
                     .filter(msg => msg.receiver === currentUser.username && !msg.read)
                     .map(msg => msg.id);
                 
@@ -801,6 +690,40 @@
         } catch (error) {
             console.error('Ошибка загрузки сообщений:', error);
         }
+    }
+
+    function addMessageToDisplay(message, isMyMessage) {
+        const div = document.createElement('div');
+        div.className = `message ${isMyMessage ? 'me' : 'other'}`;
+        div.dataset.messageId = message.id;
+        
+        const date = new Date(message.created_at);
+        const time = date.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+        const status = isMyMessage ? getMessageStatus(message) : '';
+        
+        div.innerHTML = `
+            <div class="message-content">
+                <div class="text">${escapeHtml(message.message)}</div>
+                <div class="time">
+                    ${time}
+                    ${status}
+                </div>
+            </div>
+        `;
+        
+        div.style.opacity = '0';
+        div.style.transform = 'translateY(10px)';
+        elements.privateMessages.appendChild(div);
+        
+        setTimeout(() => {
+            div.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+            div.style.opacity = '1';
+            div.style.transform = 'translateY(0)';
+        }, 10);
+        
+        scrollToBottom();
+        
+        messageIdsCache.add(message.id);
     }
 
     function displayMessages(messages) {
@@ -841,7 +764,7 @@
     function scrollToBottom() {
         setTimeout(() => {
             elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-        }, 50);
+        }, 100);
     }
 
     function getMessageStatus(msg) {
@@ -876,12 +799,9 @@
             if (error) throw error;
             
             elements.messageInput.value = '';
-            isTyping = false;
-            stopTypingIndicator();
             
             if (data && data[0]) {
-                displayedMessageIds.add(data[0].id); // Добавляем в Set
-                await loadMessages(currentChatWith);
+                addMessageToDisplay(data[0], true);
                 await loadChats();
             }
             
@@ -999,7 +919,7 @@
                 currentUser = user;
                 showChats();
                 updateUserDisplay();
-                startIntervals();
+                setupRealtime();
                 updateUserPresence(true);
             } else if (existingUser && !existingUser.deleted) {
                 showError(elements.loginError, 'Этот никнейм уже используется');
@@ -1032,7 +952,10 @@
             localStorage.removeItem('speednexus_contacts');
             
             currentUser = null;
-            stopIntervals();
+            if (realtimeChannel) {
+                supabase.removeChannel(realtimeChannel);
+                realtimeChannel = null;
+            }
             showLogin();
         } catch (error) {
             console.error('Ошибка архивации:', error);
@@ -1094,8 +1017,8 @@
 
             showChats();
             updateUserDisplay();
-            startIntervals();
-            updateUserPresence(true);
+            setupRealtime();
+            startPolling();
             
         } catch (error) {
             console.error('Ошибка регистрации:', error);
@@ -1198,7 +1121,7 @@
             const lastSeen = new Date(user.last_seen);
             const now = new Date();
             const diff = now - lastSeen;
-            const isOnline = user.is_online || diff < 15000; // 15 секунд на телефонах
+            const isOnline = user.is_online || diff < 15000;
             
             div.innerHTML = `
                 <div class="user-result-info">
@@ -1264,12 +1187,17 @@
             div.className = 'contact-item';
             
             const userData = onlineUsers.get(contact.username);
-            const isOnline = userData ? (userData.is_online || (new Date().getTime() - new Date(userData.lastSeen).getTime() < 15000)) : false;
+            const isOnline = userData ? userData.isOnline : false;
             
             div.innerHTML = `
                 <div class="contact-info">
                     <div class="contact-avatar">${getAvatarLetter(contact.username)}</div>
-                    <div class="contact-name">${contact.username}</div>
+                    <div>
+                        <div class="contact-name">${contact.username}</div>
+                        <div style="color: rgba(255,255,255,0.5); font-size: 12px;">
+                            ${isOnline ? 'онлайн' : 'не в сети'}
+                        </div>
+                    </div>
                 </div>
                 <button class="chat-btn" data-username="${contact.username}">Чат</button>
             `;
@@ -1292,7 +1220,10 @@
             localStorage.removeItem('speednexus_user');
             
             currentUser = null;
-            stopIntervals();
+            if (realtimeChannel) {
+                supabase.removeChannel(realtimeChannel);
+                realtimeChannel = null;
+            }
             showLogin();
             elements.loginUsername.value = '';
         }
@@ -1319,14 +1250,44 @@
         setTimeout(() => element.style.display = 'none', 3000);
     }
 
+    function getAvatarLetter(username) {
+        return username.charAt(0).toUpperCase();
+    }
+
+    function formatTime(date) {
+        const now = new Date();
+        const diff = now - date;
+        
+        if (diff < 60000) return 'только что';
+        if (diff < 3600000) return Math.floor(diff / 60000) + ' мин назад';
+        if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч назад';
+        
+        return date.toLocaleDateString('ru-RU', {
+            day: 'numeric',
+            month: 'short'
+        });
+    }
+
+    function filterChats(searchTerm) {
+        if (!searchTerm) {
+            displayChats(chats);
+            return;
+        }
+        
+        const filtered = chats.filter(chat => 
+            chat.username.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        displayChats(filtered);
+    }
+
     function updateChatsList() {
-        const chatItems = document.querySelectorAll('.chat-item');
+        const chatItems = elements.chatsList.querySelectorAll('.chat-item');
         chatItems.forEach(item => {
             const usernameElement = item.querySelector('.chat-name');
             if (usernameElement) {
                 const username = usernameElement.textContent.replace(/●/g, '').trim();
                 const userData = onlineUsers.get(username);
-                const isOnline = userData ? (userData.is_online || (new Date().getTime() - new Date(userData.lastSeen).getTime() < 15000)) : false;
+                const isOnline = userData ? userData.isOnline : false;
                 
                 const statusDot = item.querySelector('.status-dot');
                 if (statusDot) {
