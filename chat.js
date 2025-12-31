@@ -54,20 +54,18 @@
     let chats = [];
     let unreadMessages = new Map();
     let onlineUsers = new Map();
+    let typingTimeout = null;
+    let typingCheckTimeout = null;
     let realtimeChannel = null;
     let isAppVisible = true;
-    let messageIdsCache = new Set();
-    let typingTimeout = null;
-    let typingCheckInterval = null;
-    let lastMessagesLoad = 0;
-    let lastChatsLoad = 0;
-    let lastOnlineCheck = 0;
+    let messageIdsInView = new Set();
+    let lastMessagesLoaded = [];
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     const INTERVALS = {
         MESSAGES: isMobile ? 2000 : 1500,
         CHATS: isMobile ? 3000 : 2000,
-        ONLINE: isMobile ? 5000 : 3000,
+        ONLINE: 4000,
         PRESENCE: 10000
     };
 
@@ -97,9 +95,9 @@
         if (isAppVisible && currentUser) {
             updateUserPresence(true);
             if (currentChatWith) {
-                loadMessages(currentChatWith);
+                loadMessages(currentChatWith, true);
             }
-            loadChats();
+            loadChats(true);
             checkOnlineStatuses();
         }
     }
@@ -107,6 +105,7 @@
     function setupRealtime() {
         if (realtimeChannel) {
             supabase.removeChannel(realtimeChannel);
+            realtimeChannel = null;
         }
         
         if (!currentUser) return;
@@ -118,16 +117,30 @@
                 table: 'private_messages',
                 filter: `receiver=eq.${currentUser.username}`
             }, (payload) => {
-                handleNewMessage(payload.new);
+                const message = payload.new;
+                
+                if (currentChatWith && message.sender === currentChatWith) {
+                    if (!messageIdsInView.has(message.id)) {
+                        messageIdsInView.add(message.id);
+                        addMessageToDisplay(message, false);
+                        markMessageAsRead(message.id);
+                    }
+                } else if (message.sender !== currentUser.username) {
+                    const count = unreadMessages.get(message.sender) || 0;
+                    unreadMessages.set(message.sender, count + 1);
+                    updateUnreadNotifications();
+                }
+                
+                loadChats();
             })
             .on('postgres_changes', {
                 event: 'UPDATE',
                 schema: 'public',
-                table: 'private_messages',
-                filter: `sender=eq.${currentUser.username}`
+                table: 'private_messages'
             }, (payload) => {
-                if (payload.new.read && currentChatWith === payload.new.receiver) {
-                    updateMessageStatus(payload.new.id);
+                const message = payload.new;
+                if (message.read && message.sender === currentUser.username && currentChatWith === message.receiver) {
+                    updateMessageStatus(message.id);
                 }
             })
             .on('postgres_changes', {
@@ -136,7 +149,17 @@
                 table: 'typing_indicators',
                 filter: `receiver=eq.${currentUser.username}`
             }, (payload) => {
-                handleTypingIndicator(payload.new);
+                const typing = payload.new;
+                if (typing.sender === currentChatWith) {
+                    const typingTime = new Date(typing.timestamp).getTime();
+                    const now = Date.now();
+                    
+                    if (now - typingTime < 3000) {
+                        showTypingIndicator();
+                        if (typingCheckTimeout) clearTimeout(typingCheckTimeout);
+                        typingCheckTimeout = setTimeout(hideTypingIndicator, 3000);
+                    }
+                }
             })
             .on('postgres_changes', {
                 event: 'DELETE',
@@ -154,39 +177,6 @@
                     setTimeout(setupRealtime, 2000);
                 }
             });
-    }
-
-    function handleNewMessage(message) {
-        if (currentChatWith && message.sender === currentChatWith) {
-            if (!messageIdsCache.has(message.id)) {
-                messageIdsCache.add(message.id);
-                addMessageToDisplay(message, false);
-                markMessageAsRead(message.id);
-            }
-        } else {
-            const count = unreadMessages.get(message.sender) || 0;
-            unreadMessages.set(message.sender, count + 1);
-            updateUnreadNotifications();
-        }
-        
-        loadChats();
-    }
-
-    function handleTypingIndicator(typing) {
-        if (typing.sender === currentChatWith) {
-            const typingTime = new Date(typing.timestamp).getTime();
-            const now = Date.now();
-            
-            if (now - typingTime < 4000) {
-                showTypingIndicator();
-                if (typingCheckInterval) clearInterval(typingCheckInterval);
-                typingCheckInterval = setInterval(() => {
-                    hideTypingIndicator();
-                }, 4000);
-            } else {
-                hideTypingIndicator();
-            }
-        }
     }
 
     async function sendTypingIndicator() {
@@ -257,21 +247,23 @@
     function startPolling() {
         setInterval(() => {
             if (currentUser && isAppVisible) {
-                const now = Date.now();
-                
-                if (currentChatWith && now - lastMessagesLoad > INTERVALS.MESSAGES) {
+                if (currentChatWith) {
                     loadMessages(currentChatWith);
                 }
-                
-                if (now - lastChatsLoad > INTERVALS.CHATS) {
-                    loadChats();
-                }
-                
-                if (now - lastOnlineCheck > INTERVALS.ONLINE) {
-                    checkOnlineStatuses();
-                }
             }
-        }, 1000);
+        }, INTERVALS.MESSAGES);
+        
+        setInterval(() => {
+            if (currentUser && isAppVisible) {
+                loadChats();
+            }
+        }, INTERVALS.CHATS);
+        
+        setInterval(() => {
+            if (currentUser && isAppVisible) {
+                checkOnlineStatuses();
+            }
+        }, INTERVALS.ONLINE);
         
         setInterval(() => {
             if (currentUser && isAppVisible) {
@@ -331,25 +323,23 @@
     async function checkOnlineStatuses() {
         if (!currentUser) return;
         
-        const now = Date.now();
-        if (now - lastOnlineCheck < 1000) return;
-        lastOnlineCheck = now;
-        
         try {
             const { data: users } = await supabase
                 .from('users')
-                .select('username, last_seen, is_online')
+                .select('username, last_seen')
                 .eq('deleted', false)
                 .neq('username', currentUser.username)
                 .limit(50);
 
             if (users) {
+                const now = Date.now();
                 users.forEach(user => {
                     if (user.last_seen) {
                         const lastSeen = new Date(user.last_seen).getTime();
                         const diff = now - lastSeen;
                         
-                        const isOnline = user.is_online || diff < 15000;
+                        const isOnline = diff < 10000;
+                        
                         onlineUsers.set(user.username, {
                             isOnline: isOnline,
                             lastSeen: user.last_seen
@@ -370,8 +360,8 @@
             supabase.removeChannel(realtimeChannel);
             realtimeChannel = null;
         }
-        if (typingCheckInterval) clearInterval(typingCheckInterval);
         if (typingTimeout) clearTimeout(typingTimeout);
+        if (typingCheckTimeout) clearTimeout(typingCheckTimeout);
         
         elements.loginScreen.style.display = 'flex';
         elements.chatsScreen.style.display = 'none';
@@ -408,7 +398,8 @@
         hideSideMenu();
         
         elements.privateMessages.innerHTML = '';
-        messageIdsCache.clear();
+        messageIdsInView.clear();
+        lastMessagesLoaded = [];
         
         await loadMessages(username);
         updateChatStatus();
@@ -431,25 +422,28 @@
         if (!currentChatWith) return;
         
         const userData = onlineUsers.get(currentChatWith);
-        if (userData && userData.isOnline) {
-            elements.chatStatus.innerHTML = '<span class="online-dot">●</span> онлайн';
-            elements.chatStatus.style.color = '#4ade80';
-        } else if (userData && userData.lastSeen) {
+        if (userData) {
             const lastSeen = new Date(userData.lastSeen);
             const now = new Date();
-            const diffMinutes = Math.floor((now - lastSeen) / 60000);
+            const diff = now - lastSeen;
             
-            if (diffMinutes < 1) {
-                elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> только что';
-            } else if (diffMinutes < 60) {
-                elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> ${diffMinutes} мин назад`;
-            } else if (diffMinutes < 1440) {
-                const hours = Math.floor(diffMinutes / 60);
-                elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> ${hours} ч назад`;
+            if (diff < 10000) {
+                elements.chatStatus.innerHTML = '<span class="online-dot">●</span> онлайн';
+                elements.chatStatus.style.color = '#4ade80';
             } else {
-                elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> не в сети';
+                const minutes = Math.floor(diff / 60000);
+                if (minutes < 1) {
+                    elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> только что';
+                } else if (minutes < 60) {
+                    elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> ${minutes} мин назад`;
+                } else if (minutes < 1440) {
+                    const hours = Math.floor(minutes / 60);
+                    elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> ${hours} ч назад`;
+                } else {
+                    elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> не в сети';
+                }
+                elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
             }
-            elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
         } else {
             elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> не в сети';
             elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
@@ -554,10 +548,6 @@
     async function loadChats() {
         if (!currentUser) return;
         
-        const now = Date.now();
-        if (now - lastChatsLoad < 1000) return;
-        lastChatsLoad = now;
-        
         try {
             const { data: messages, error } = await supabase
                 .from('private_messages')
@@ -646,12 +636,8 @@
         });
     }
 
-    async function loadMessages(username) {
+    async function loadMessages(username, force = false) {
         if (!username) return;
-        
-        const now = Date.now();
-        if (now - lastMessagesLoad < 500) return;
-        lastMessagesLoad = now;
         
         try {
             const usernames = [currentUser.username, username].sort();
@@ -666,13 +652,13 @@
             if (error) throw error;
             
             const newMessages = messages || [];
-            const currentMessageIds = new Set(Array.from(messageIdsCache));
-            const newMessageIds = newMessages.map(m => m.id);
+            const currentMessageIds = newMessages.map(m => m.id);
             
-            if (currentMessageIds.size !== newMessageIds.length || 
-                !newMessageIds.every(id => currentMessageIds.has(id))) {
+            if (force || JSON.stringify(lastMessagesLoaded) !== JSON.stringify(currentMessageIds)) {
                 displayMessages(newMessages);
-                messageIdsCache = new Set(newMessageIds);
+                lastMessagesLoaded = currentMessageIds;
+                messageIdsInView.clear();
+                newMessages.forEach(m => messageIdsInView.add(m.id));
             }
             
             if (newMessages.length > 0) {
@@ -723,7 +709,8 @@
         
         scrollToBottom();
         
-        messageIdsCache.add(message.id);
+        lastMessagesLoaded.push(message.id);
+        messageIdsInView.add(message.id);
     }
 
     function displayMessages(messages) {
@@ -1092,7 +1079,7 @@
         try {
             const { data: users } = await supabase
                 .from('users')
-                .select('username, last_seen, is_online')
+                .select('username, last_seen')
                 .ilike('username', `%${searchTerm}%`)
                 .neq('username', currentUser.username)
                 .eq('deleted', false)
@@ -1121,7 +1108,7 @@
             const lastSeen = new Date(user.last_seen);
             const now = new Date();
             const diff = now - lastSeen;
-            const isOnline = user.is_online || diff < 15000;
+            const isOnline = diff < 10000;
             
             div.innerHTML = `
                 <div class="user-result-info">
