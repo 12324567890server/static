@@ -45,7 +45,10 @@
         newChatError: document.getElementById('newChatError'),
         chatsTitle: document.getElementById('chatsTitle'),
         restoreSection: document.getElementById('restoreSection'),
-        restoreAccountBtn: document.getElementById('restoreAccountBtn')
+        restoreAccountBtn: document.getElementById('restoreAccountBtn'),
+        userAvatar: document.getElementById('userAvatar'),
+        userStatusDot: document.getElementById('userStatusDot'),
+        userStatusText: document.getElementById('userStatusText')
     };
 
     let currentUser = null;
@@ -63,15 +66,16 @@
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let readMessageIds = new Set();
     let checkReadInterval = null;
-    let presenceUpdateTimeout = null;
-    let lastPresenceUpdate = 0;
     let isTyping = false;
+    let lastOnlineCheck = 0;
+    let lastPresenceUpdate = 0;
+    let presenceUpdateInterval = null;
 
     const INTERVALS = {
         MESSAGES: 1000,
         CHATS: 2000,
         ONLINE: 3000,
-        PRESENCE: 5000,
+        PRESENCE: 4000,
         CHECK_READ: 1000,
         STATUS_UPDATE: 2000
     };
@@ -99,7 +103,7 @@
         isAppVisible = !document.hidden;
         if (isAppVisible && currentUser) {
             updateUserPresence(true);
-            checkOnlineStatuses();
+            checkOnlineStatuses(true);
             if (currentChatWith) {
                 loadMessages(currentChatWith, true);
             }
@@ -181,10 +185,10 @@
             .subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
                     startCheckReadInterval();
-                    startStatusUpdates();
+                    startPresenceUpdates();
                 } else if (status === 'CLOSED') {
                     stopCheckReadInterval();
-                    stopStatusUpdates();
+                    stopPresenceUpdates();
                     setTimeout(setupRealtime, 2000);
                 }
             });
@@ -206,9 +210,9 @@
         }
     }
 
-    function startStatusUpdates() {
-        stopStatusUpdates();
-        presenceUpdateTimeout = setInterval(() => {
+    function startPresenceUpdates() {
+        stopPresenceUpdates();
+        presenceUpdateInterval = setInterval(() => {
             if (currentUser && isAppVisible) {
                 updateUserPresence(true);
                 checkOnlineStatuses();
@@ -216,10 +220,10 @@
         }, INTERVALS.STATUS_UPDATE);
     }
 
-    function stopStatusUpdates() {
-        if (presenceUpdateTimeout) {
-            clearInterval(presenceUpdateTimeout);
-            presenceUpdateTimeout = null;
+    function stopPresenceUpdates() {
+        if (presenceUpdateInterval) {
+            clearInterval(presenceUpdateInterval);
+            presenceUpdateInterval = null;
         }
     }
 
@@ -362,7 +366,7 @@
                 setupRealtime();
                 startPolling();
                 updateUserPresence(true);
-                setTimeout(checkOnlineStatuses, 1000);
+                setTimeout(() => checkOnlineStatuses(true), 1000);
             } catch (e) {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -376,7 +380,7 @@
         if (!currentUser) return;
         
         const now = Date.now();
-        if (!force && now - lastPresenceUpdate < 2000) return;
+        if (!force && now - lastPresenceUpdate < 1000) return;
         
         lastPresenceUpdate = now;
         
@@ -398,6 +402,8 @@
                 lastSeen: new Date().toISOString()
             });
             
+            updateUserStatusDisplay(isOnline);
+            
             if (currentChatWith) {
                 updateChatStatus();
             }
@@ -406,31 +412,49 @@
         }
     }
 
-    async function checkOnlineStatuses() {
+    function updateUserStatusDisplay(isOnline) {
+        if (elements.userStatusDot && elements.userStatusText) {
+            if (isOnline) {
+                elements.userStatusDot.className = 'status-dot online';
+                elements.userStatusText.textContent = 'online';
+            } else {
+                elements.userStatusDot.className = 'status-dot offline';
+                elements.userStatusText.textContent = 'offline';
+            }
+        }
+    }
+
+    async function checkOnlineStatuses(force = false) {
         if (!currentUser) return;
         
+        const now = Date.now();
+        if (!force && now - lastOnlineCheck < 2000) return;
+        lastOnlineCheck = now;
+        
         try {
-            const { data: users } = await supabase
+            const cutoffTime = new Date(now - 10000).toISOString();
+            
+            const { data: users, error } = await supabase
                 .from('users')
                 .select('username, last_seen, is_online')
                 .eq('deleted', false)
                 .neq('username', currentUser.username)
+                .gte('last_seen', cutoffTime)
                 .limit(50);
 
+            if (error) throw error;
+
             if (users) {
-                const now = Date.now();
                 users.forEach(user => {
-                    if (user.last_seen) {
-                        const lastSeen = new Date(user.last_seen).getTime();
-                        const diff = now - lastSeen;
-                        
-                        const isOnline = user.is_online && diff < 10000;
-                        
-                        onlineUsers.set(user.username, {
-                            isOnline: isOnline,
-                            lastSeen: user.last_seen
-                        });
-                    }
+                    const lastSeen = new Date(user.last_seen);
+                    const diff = now - lastSeen;
+                    
+                    const isOnline = user.is_online && diff < 10000;
+                    
+                    onlineUsers.set(user.username, {
+                        isOnline: isOnline,
+                        lastSeen: user.last_seen
+                    });
                 });
                 
                 updateChatStatus();
@@ -443,7 +467,7 @@
 
     function showLogin() {
         stopCheckReadInterval();
-        stopStatusUpdates();
+        stopPresenceUpdates();
         if (realtimeChannel) {
             supabase.removeChannel(realtimeChannel);
             realtimeChannel = null;
@@ -475,7 +499,7 @@
         hideSideMenu();
         elements.chatsTitle.textContent = 'Чаты (' + currentUser.username + ')';
         loadChats();
-        checkOnlineStatuses();
+        checkOnlineStatuses(true);
     }
 
     async function showChat(username) {
@@ -505,16 +529,17 @@
     function updateUserDisplay() {
         if (currentUser) {
             elements.currentUsernameDisplay.textContent = currentUser.username;
+            elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
         }
     }
 
     function updateChatStatus() {
-        if (!currentChatWith) return;
+        if (!currentChatWith || !elements.chatStatus) return;
         
         const userData = onlineUsers.get(currentChatWith);
         if (userData) {
             const lastSeen = new Date(userData.lastSeen);
-            const now = new Date();
+            const now = Date.now();
             const diff = now - lastSeen;
             
             if (userData.isOnline && diff < 10000) {
@@ -603,6 +628,8 @@
         elements.messageInput.addEventListener('input', function() {
             if (currentChatWith && this.value.length > 0) {
                 sendTypingIndicator();
+            } else if (currentChatWith && this.value.length === 0) {
+                stopTypingIndicator();
             }
         });
 
@@ -712,7 +739,7 @@
                 <div class="chat-info">
                     <div class="chat-name">
                         ${chat.username}
-                        ${isOnline ? '<span class="status-dot online"></span>' : '<span class="status-dot offline"></span>'}
+                        <span class="status-dot ${isOnline ? 'online' : 'offline'}"></span>
                     </div>
                     <div class="chat-last-message">
                         ${lastMessagePrefix}${escapeHtml(lastMessage)}
@@ -1031,7 +1058,7 @@
             
             currentUser = null;
             stopCheckReadInterval();
-            stopStatusUpdates();
+            stopPresenceUpdates();
             if (realtimeChannel) {
                 supabase.removeChannel(realtimeChannel);
                 realtimeChannel = null;
@@ -1199,7 +1226,7 @@
             const contacts = getContacts();
             const isContact = contacts.some(c => c.username === user.username);
             const lastSeen = new Date(user.last_seen);
-            const now = new Date();
+            const now = Date.now();
             const diff = now - lastSeen;
             const isOnline = user.is_online && diff < 10000;
             
@@ -1301,7 +1328,7 @@
             
             currentUser = null;
             stopCheckReadInterval();
-            stopStatusUpdates();
+            stopPresenceUpdates();
             if (realtimeChannel) {
                 supabase.removeChannel(realtimeChannel);
                 realtimeChannel = null;
