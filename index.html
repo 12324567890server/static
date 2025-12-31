@@ -1,141 +1,139 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>SpeedNexus</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SpeedNexus</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div id="loginScreen" class="login-screen" style="display: none;">
-    <div class="login-container">
-      <div class="login-header">SpeedNexus</div>
-      <div class="login-content">
-        <h2>Введите ваше имя</h2>
-        <input type="text" id="loginUsername" placeholder="Ваш никнейм" maxlength="20" autocomplete="off" class="login-input">
-        <div id="loginError" class="error-message"></div>
-        <button id="loginButton" class="login-button">Продолжить</button>
-        <div id="restoreSection" style="margin-top: 15px; display: none;">
-          <button id="restoreAccountBtn" class="restore-btn">Восстановить скрытый аккаунт</button>
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>SpeedNexus</h1>
+            </div>
+            <input type="text" id="loginUsername" class="login-input" placeholder="Введите ваш никнейм" maxlength="20">
+            <div id="loginError" class="error-message"></div>
+            <button id="loginButton" class="login-btn">Продолжить</button>
+            <div id="restoreSection">
+                <button id="restoreAccountBtn" class="restore-btn">Восстановить скрытый аккаунт</button>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
 
-  <div id="chatsScreen" class="chats-screen" style="display: none;">
-    <div class="chats-header">
-      <div class="header-content">
-        <span id="chatsTitle">Чаты</span>
-        <button id="chatsMenuBtn" class="menu-btn">☰</button>
-      </div>
-      <div class="search-container">
-        <input type="text" id="searchChats" placeholder="Поиск чатов..." class="search-input">
-      </div>
-    </div>
-    
-    <div id="chatsList" class="chats-list"></div>
-    
-    <button id="newChatBtn" class="new-chat-btn">+</button>
-  </div>
-
-  <div id="chatScreen" class="chat-screen" style="display: none;">
-    <div class="chat-header">
-      <button id="backToChats" class="back-btn">←</button>
-      <div class="chat-header-info">
-        <h3 id="chatWithUser">-</h3>
-        <div id="chatStatus" class="chat-status"></div>
-      </div>
-      <div style="width: 40px;"></div>
-    </div>
-    
-    <div id="privateMessages" class="private-messages"></div>
-    
-    <div class="chat-input">
-      <input type="text" id="messageInput" placeholder="Сообщение..." autocomplete="off">
-      <button id="sendMessageBtn">➤</button>
-    </div>
-  </div>
-
-  <div id="sideMenu" class="side-menu" style="display: none;">
-    <div class="side-menu-header">
-      <div class="user-info">
-        <div class="user-avatar">👤</div>
-        <div>
-          <h4 id="currentUsernameDisplay">-</h4>
-          <div class="user-status">
-            <span class="status-indicator online"></span>
-            <span>online</span>
-          </div>
+    <div id="chatsScreen" class="chats-screen">
+        <div class="chats-header">
+            <div class="header-content">
+                <span id="chatsTitle" class="chats-title">Чаты</span>
+                <button id="chatsMenuBtn" class="menu-btn">☰</button>
+            </div>
+            <input type="text" id="searchChats" class="search-input" placeholder="Поиск чатов...">
         </div>
-      </div>
-      <button id="closeMenu" class="close-menu-btn">×</button>
+        
+        <div id="chatsList" class="chats-list"></div>
+        
+        <button id="newChatBtn" class="new-chat-btn">+</button>
     </div>
-    
-    <div class="side-menu-content">
-      <button id="editProfileBtn" class="side-menu-btn">✏️ Изменить профиль</button>
-      <button id="findFriendsBtn" class="side-menu-btn">🔍 Найти друзей</button>
-      <button id="contactsBtn" class="side-menu-btn">👥 Контакты</button>
-      <button id="archiveAccountBtn" class="side-menu-btn delete">🗑️ Скрыть аккаунт</button>
-      <button id="logoutBtn" class="side-menu-btn logout">🚪 Выйти</button>
-    </div>
-  </div>
 
-  <div id="editProfileModal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Изменить профиль</h3>
-        <button class="close-modal" data-modal="editProfileModal">×</button>
-      </div>
-      <div class="modal-body">
-        <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
-        <div id="editUsernameError" class="error-message"></div>
-        <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
-      </div>
+    <div id="chatScreen" class="chat-screen">
+        <div class="chat-header">
+            <button id="backToChats" class="back-btn">←</button>
+            <div class="chat-header-info">
+                <div id="chatWithUser" class="chat-username">-</div>
+                <div id="chatStatus" class="chat-status">
+                    <span class="offline-dot">●</span> не в сети
+                </div>
+            </div>
+        </div>
+        
+        <div id="privateMessages" class="private-messages"></div>
+        
+        <div class="message-input-container">
+            <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
+            <button id="sendMessageBtn" class="send-btn">➤</button>
+        </div>
     </div>
-  </div>
 
-  <div id="findFriendsModal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Поиск</h3>
-        <button class="close-modal" data-modal="findFriendsModal">×</button>
-      </div>
-      <div class="modal-body">
-        <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя">
-        <div id="searchError" class="error-message"></div>
-        <button id="searchBtn" class="modal-btn">Найти</button>
-        <div id="searchResults" class="search-results"></div>
-      </div>
+    <div id="sideMenu" class="side-menu">
+        <div class="side-menu-header">
+            <div class="user-info">
+                <div id="userAvatar" class="user-avatar">👤</div>
+                <div>
+                    <h4 id="currentUsernameDisplay">-</h4>
+                    <div class="user-status">
+                        <span id="userStatusDot" class="status-dot online"></span>
+                        <span id="userStatusText">online</span>
+                    </div>
+                </div>
+            </div>
+            <button id="closeMenu" class="close-menu-btn">×</button>
+        </div>
+        
+        <div class="side-menu-content">
+            <button id="editProfileBtn" class="side-menu-btn">✏️ Изменить профиль</button>
+            <button id="findFriendsBtn" class="side-menu-btn">🔍 Найти друзей</button>
+            <button id="contactsBtn" class="side-menu-btn">👥 Контакты</button>
+            <button id="archiveAccountBtn" class="side-menu-btn">🗑️ Скрыть аккаунт</button>
+            <button id="logoutBtn" class="side-menu-btn logout">🚪 Выйти</button>
+        </div>
     </div>
-  </div>
 
-  <div id="contactsModal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Контакты</h3>
-        <button class="close-modal" data-modal="contactsModal">×</button>
-      </div>
-      <div class="modal-body">
-        <div id="contactsList" class="contacts-list"></div>
-      </div>
+    <div id="editProfileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Изменить профиль</h3>
+                <button class="close-modal" data-modal="editProfileModal">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
+                <div id="editUsernameError" class="error-message"></div>
+                <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <div id="newChatModal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Новый чат</h3>
-        <button class="close-modal" data-modal="newChatModal">×</button>
-      </div>
-      <div class="modal-body">
-        <input type="text" id="newChatUsername" class="modal-input" placeholder="Имя пользователя">
-        <div id="newChatError" class="error-message"></div>
-        <button id="startChatBtn" class="modal-btn">Начать чат</button>
-      </div>
+    <div id="findFriendsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Поиск</h3>
+                <button class="close-modal" data-modal="findFriendsModal">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя">
+                <div id="searchError" class="error-message"></div>
+                <button id="searchBtn" class="modal-btn">Найти</button>
+                <div id="searchResults" class="search-results"></div>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <script src="chat.js"></script>
+    <div id="contactsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Контакты</h3>
+                <button class="close-modal" data-modal="contactsModal">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="contactsList" class="contacts-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="newChatModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Новый чат</h3>
+                <button class="close-modal" data-modal="newChatModal">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="newChatUsername" class="modal-input" placeholder="Имя пользователя">
+                <div id="newChatError" class="error-message"></div>
+                <button id="startChatBtn" class="modal-btn">Начать чат</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="chat.js"></script>
 </body>
 </html>
