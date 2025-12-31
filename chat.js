@@ -67,11 +67,6 @@
     let onlineInterval = null;
     let presenceInterval = null;
 
-    // Универсальная функция для всех устройств
-    function isMobile() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    }
-
     function init() {
         checkUser();
         setupEventListeners();
@@ -109,7 +104,6 @@
     function startIntervals() {
         stopIntervals();
         
-        // Универсальные интервалы для всех устройств
         messageInterval = setInterval(() => {
             if (currentUser && currentChatWith) {
                 loadMessages(currentChatWith);
@@ -191,7 +185,6 @@
             .subscribe();
     }
 
-    // Универсальная функция индикатора набора
     async function sendTypingIndicator() {
         if (!currentChatWith || !currentUser) return;
         
@@ -246,7 +239,6 @@
         }
     }
 
-    // Проверка набора сообщения собеседником
     async function checkTypingStatus() {
         if (!currentChatWith || !currentUser) return;
         
