@@ -1,28 +1,3 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-}
-
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    background: linear-gradient(135deg, #1a0b2e 0%, #0d0719 100%);
-    color: white;
-    height: 100vh;
-    overflow: hidden;
-}
-
-.login-screen {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    padding: 20px;
-    background: linear-gradient(135deg, #1a0b2e 0%, #0d0719 100%);
-}
-
 .login-container {
     background: rgba(15, 10, 31, 0.95);
     border-radius: 20px;
@@ -197,27 +172,18 @@ body {
     font-size: 16px;
     font-weight: 600;
     color: white;
-    display: flex;
-    align-items: center;
-    gap: 8px;
     margin-bottom: 5px;
 }
 
-.status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+.chat-status-text {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
     display: inline-block;
+    margin-left: 8px;
 }
 
-.status-dot.online {
-    background: #4ade80;
-    animation: pulse 1.5s infinite;
-    box-shadow: 0 0 8px #4ade80;
-}
-
-.status-dot.offline {
-    background: rgba(255, 255, 255, 0.3);
+.chat-status-text.online {
+    color: #4ade80;
 }
 
 .chat-last-message {
@@ -312,31 +278,15 @@ body {
 .chat-status {
     font-size: 13px;
     color: rgba(255, 255, 255, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
     height: 18px;
     min-height: 18px;
     transition: all 0.3s ease;
-}
-
-.online-dot {
-    color: #4ade80;
-    font-size: 12px;
-    animation: pulse 2s infinite;
-}
-
-.offline-dot {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 12px;
 }
 
 .typing-text {
     color: #4ade80;
     font-style: italic;
     font-size: 13px;
-    animation: typingPulse 1.5s infinite;
 }
 
 .private-messages {
@@ -415,16 +365,27 @@ body {
 }
 
 .message-status {
-    font-size: 11px;
+    font-size: 10px;
     display: inline-block;
-}
-
-.message-status.read {
-    color: #4ade80;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-weight: 500;
 }
 
 .message-status.sent {
+    background: rgba(255, 255, 255, 0.1);
     color: rgba(255, 255, 255, 0.7);
+}
+
+.message-status.delivered {
+    background: rgba(74, 222, 128, 0.2);
+    color: #4ade80;
+}
+
+.message-status.read {
+    background: rgba(74, 222, 128, 0.3);
+    color: #4ade80;
+    font-weight: 600;
 }
 
 .message-input-container {
@@ -525,10 +486,9 @@ body {
     margin-bottom: 3px;
 }
 
-.user-status {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+.user-status span {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
 }
 
 .close-menu-btn {
@@ -788,33 +748,6 @@ body {
     transform: scale(0.95);
 }
 
-@keyframes pulse {
-    0% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.5;
-        transform: scale(1.1);
-    }
-    100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-@keyframes typingPulse {
-    0% {
-        opacity: 0.6;
-    }
-    50% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 0.6;
-    }
-}
-
 @keyframes modalAppear {
     from {
         opacity: 0;
@@ -831,11 +764,11 @@ body {
         max-width: 85%;
     }
     
-    .chat-input-container {
+    .message-input-container {
         padding: 10px 12px;
     }
     
-    .chat-input {
+    .message-input {
         padding: 11px 13px;
         font-size: 14px;
     }
@@ -852,7 +785,7 @@ body {
 }
 
 @media (max-width: 480px) {
-    .chats-header span {
+    .chats-title {
         font-size: 17px;
     }
     
@@ -882,7 +815,7 @@ body {
         right: 15px;
     }
     
-    .chat-header h3 {
+    .chat-username {
         font-size: 17px;
     }
     
