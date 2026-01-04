@@ -47,7 +47,6 @@
         restoreSection: document.getElementById('restoreSection'),
         restoreAccountBtn: document.getElementById('restoreAccountBtn'),
         userAvatar: document.getElementById('userAvatar'),
-        userStatusDot: document.getElementById('userStatusDot'),
         userStatusText: document.getElementById('userStatusText')
     };
 
@@ -70,6 +69,7 @@
     let lastOnlineCheck = 0;
     let lastPresenceUpdate = 0;
     let presenceUpdateInterval = null;
+    let messageStatusCache = new Map();
 
     const INTERVALS = {
         MESSAGES: 1000,
@@ -147,12 +147,11 @@
             .on('postgres_changes', {
                 event: 'UPDATE',
                 schema: 'public',
-                table: 'private_messages',
-                filter: `receiver=eq.${currentUser.username}`
+                table: 'private_messages'
             }, (payload) => {
                 const message = payload.new;
-                if (message.read && message.sender === currentChatWith) {
-                    updateMessageStatus(message.id);
+                if (message.read && message.sender === currentUser.username && currentChatWith === message.receiver) {
+                    updateMessageStatus(message.id, 'read');
                 }
             })
             .on('postgres_changes', {
@@ -245,7 +244,7 @@
             if (messages) {
                 messages.forEach(msg => {
                     if (!readMessageIds.has(msg.id)) {
-                        updateMessageStatus(msg.id);
+                        updateMessageStatus(msg.id, 'read');
                         readMessageIds.add(msg.id);
                     }
                 });
@@ -308,15 +307,20 @@
         }
     }
 
-    function updateMessageStatus(messageId) {
+    function updateMessageStatus(messageId, status) {
         const messageElement = document.querySelector(`.message[data-message-id="${messageId}"]`);
         if (messageElement) {
             const timeEl = messageElement.querySelector('.time');
             if (timeEl) {
                 const statusSpan = timeEl.querySelector('.message-status');
                 if (statusSpan) {
-                    statusSpan.textContent = '✓✓';
-                    statusSpan.className = 'message-status read';
+                    if (status === 'read') {
+                        statusSpan.textContent = 'Прочитано';
+                        statusSpan.className = 'message-status read';
+                    } else if (status === 'delivered') {
+                        statusSpan.textContent = 'Доставлено';
+                        statusSpan.className = 'message-status delivered';
+                    }
                     readMessageIds.add(messageId);
                 }
             }
@@ -413,13 +417,13 @@
     }
 
     function updateUserStatusDisplay(isOnline) {
-        if (elements.userStatusDot && elements.userStatusText) {
+        if (elements.userStatusText) {
             if (isOnline) {
-                elements.userStatusDot.className = 'status-dot online';
                 elements.userStatusText.textContent = 'online';
+                elements.userStatusText.style.color = '#4ade80';
             } else {
-                elements.userStatusDot.className = 'status-dot offline';
                 elements.userStatusText.textContent = 'offline';
+                elements.userStatusText.style.color = 'rgba(255, 255, 255, 0.5)';
             }
         }
     }
@@ -514,6 +518,7 @@
         messageIdsInView.clear();
         lastMessagesLoaded = [];
         readMessageIds.clear();
+        messageStatusCache.clear();
         
         await loadMessages(username);
         updateChatStatus();
@@ -539,28 +544,35 @@
         const userData = onlineUsers.get(currentChatWith);
         if (userData) {
             const lastSeen = new Date(userData.lastSeen);
-            const now = Date.now();
+            const now = new Date();
             const diff = now - lastSeen;
             
             if (userData.isOnline && diff < 10000) {
-                elements.chatStatus.innerHTML = '<span class="online-dot">●</span> онлайн';
+                elements.chatStatus.textContent = 'На связи';
                 elements.chatStatus.style.color = '#4ade80';
             } else {
                 const minutes = Math.floor(diff / 60000);
+                const seconds = Math.floor((diff % 60000) / 1000);
+                
+                let timeText = '';
                 if (minutes < 1) {
-                    elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> только что';
+                    timeText = `Был ${seconds} сек назад`;
                 } else if (minutes < 60) {
-                    elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> ${minutes} мин назад`;
+                    timeText = `Был ${minutes} мин ${seconds} сек назад`;
                 } else if (minutes < 1440) {
                     const hours = Math.floor(minutes / 60);
-                    elements.chatStatus.innerHTML = `<span class="offline-dot">●</span> ${hours} ч назад`;
+                    const remainingMinutes = minutes % 60;
+                    timeText = `Был ${hours} ч ${remainingMinutes} мин назад`;
                 } else {
-                    elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> не в сети';
+                    const days = Math.floor(minutes / 1440);
+                    timeText = `Был ${days} дн назад`;
                 }
+                
+                elements.chatStatus.textContent = timeText;
                 elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
             }
         } else {
-            elements.chatStatus.innerHTML = '<span class="offline-dot">●</span> не в сети';
+            elements.chatStatus.textContent = 'Не в сети';
             elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
         }
     }
@@ -739,7 +751,9 @@
                 <div class="chat-info">
                     <div class="chat-name">
                         ${chat.username}
-                        <span class="status-dot ${isOnline ? 'online' : 'offline'}"></span>
+                        <span class="chat-status-text ${isOnline ? 'online' : ''}">
+                            ${isOnline ? 'На связи' : 'Не в сети'}
+                        </span>
                     </div>
                     <div class="chat-last-message">
                         ${lastMessagePrefix}${escapeHtml(lastMessage)}
@@ -828,6 +842,7 @@
         
         lastMessagesLoaded.push(message.id);
         messageIdsInView.add(message.id);
+        messageStatusCache.set(message.id, isMyMessage ? 'sent' : '');
     }
 
     function displayMessages(messages) {
@@ -854,6 +869,7 @@
             `;
             
             elements.privateMessages.appendChild(div);
+            messageStatusCache.set(msg.id, isMyMessage ? (msg.read ? 'read' : 'sent') : '');
         });
         
         scrollToBottom();
@@ -873,9 +889,11 @@
 
     function getMessageStatus(msg) {
         if (msg.read) {
-            return '<span class="message-status read">✓✓</span>';
+            return '<span class="message-status read">Прочитано</span>';
+        } else if (msg.delivered || msg.created_at) {
+            return '<span class="message-status delivered">Доставлено</span>';
         } else {
-            return '<span class="message-status sent">✓</span>';
+            return '<span class="message-status sent">Отправлено</span>';
         }
     }
 
@@ -908,11 +926,31 @@
             if (data && data[0]) {
                 addMessageToDisplay(data[0], true);
                 await loadChats();
+                
+                setTimeout(async () => {
+                    await updateMessageDelivery(data[0].id);
+                }, 1000);
             }
             
         } catch (error) {
             console.error('Ошибка отправки:', error);
             alert('Ошибка отправки сообщения');
+        }
+    }
+
+    async function updateMessageDelivery(messageId) {
+        try {
+            const { data } = await supabase
+                .from('private_messages')
+                .select('read')
+                .eq('id', messageId)
+                .single();
+            
+            if (data && !data.read) {
+                updateMessageStatus(messageId, 'delivered');
+            }
+        } catch (error) {
+            console.error('Ошибка обновления доставки:', error);
         }
     }
 
@@ -1236,7 +1274,7 @@
                     <div>
                         <div class="user-result-name">${user.username}</div>
                         <div style="color: rgba(255,255,255,0.5); font-size: 12px;">
-                            ${isOnline ? 'онлайн' : 'не в сети'}
+                            ${isOnline ? 'На связи' : 'Не в сети'}
                         </div>
                     </div>
                 </div>
@@ -1302,7 +1340,7 @@
                     <div>
                         <div class="contact-name">${contact.username}</div>
                         <div style="color: rgba(255,255,255,0.5); font-size: 12px;">
-                            ${isOnline ? 'онлайн' : 'не в сети'}
+                            ${isOnline ? 'На связи' : 'Не в сети'}
                         </div>
                     </div>
                 </div>
@@ -1367,9 +1405,20 @@
         const now = new Date();
         const diff = now - date;
         
-        if (diff < 60000) return 'только что';
-        if (diff < 3600000) return Math.floor(diff / 60000) + ' мин назад';
-        if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч назад';
+        if (diff < 60000) {
+            const seconds = Math.floor(diff / 1000);
+            return `${seconds} сек назад`;
+        }
+        if (diff < 3600000) {
+            const minutes = Math.floor(diff / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            return `${minutes} мин ${seconds} сек назад`;
+        }
+        if (diff < 86400000) {
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            return `${hours} ч ${minutes} мин назад`;
+        }
         
         return date.toLocaleDateString('ru-RU', {
             day: 'numeric',
@@ -1394,17 +1443,14 @@
         chatItems.forEach(item => {
             const usernameElement = item.querySelector('.chat-name');
             if (usernameElement) {
-                const username = usernameElement.textContent.replace(/●/g, '').trim();
+                const username = usernameElement.textContent.replace(/На связи|Не в сети/g, '').trim();
                 const userData = onlineUsers.get(username);
                 const isOnline = userData ? userData.isOnline : false;
                 
-                const statusDot = item.querySelector('.status-dot');
-                if (statusDot) {
-                    if (isOnline) {
-                        statusDot.className = 'status-dot online';
-                    } else {
-                        statusDot.className = 'status-dot offline';
-                    }
+                const statusText = item.querySelector('.chat-status-text');
+                if (statusText) {
+                    statusText.textContent = isOnline ? 'На связи' : 'Не в сети';
+                    statusText.className = `chat-status-text ${isOnline ? 'online' : ''}`;
                 }
             }
         });
