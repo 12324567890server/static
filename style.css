@@ -1,19 +1,41 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: #ffffff;
+    color: #000000;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.login-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding: 20px;
+    background: #ffffff;
+}
+
 .login-container {
-    background: rgba(15, 10, 31, 0.95);
+    background: #f8f9fa;
     border-radius: 20px;
     padding: 40px 30px;
     width: 100%;
     max-width: 400px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(123, 44, 255, 0.2);
+    box-shadow: 0 10px 30px rgba(123, 44, 255, 0.1);
+    border: 1px solid rgba(123, 44, 255, 0.1);
 }
 
 .login-header h1 {
     font-size: 32px;
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #7b2cff;
     font-weight: 800;
     text-align: center;
     margin-bottom: 30px;
@@ -24,8 +46,8 @@
     padding: 15px 20px;
     border-radius: 12px;
     border: 2px solid rgba(123, 44, 255, 0.3);
-    background: rgba(42, 27, 74, 0.8);
-    color: white;
+    background: #ffffff;
+    color: #000000;
     font-size: 16px;
     margin-bottom: 15px;
     outline: none;
@@ -41,7 +63,7 @@
     padding: 16px;
     border-radius: 12px;
     border: none;
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     color: white;
     font-size: 16px;
     font-weight: 600;
@@ -66,7 +88,7 @@
 }
 
 .error-message {
-    color: #ff6b6b;
+    color: #ff3860;
     font-size: 14px;
     margin-bottom: 15px;
     text-align: center;
@@ -78,10 +100,11 @@
     display: none;
     flex-direction: column;
     height: 100vh;
+    background: #ffffff;
 }
 
 .chats-header {
-    background: linear-gradient(90deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     padding: 15px 20px;
 }
 
@@ -116,7 +139,7 @@
     padding: 12px 15px;
     border-radius: 10px;
     border: none;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.2);
     color: white;
     font-size: 14px;
     margin-top: 10px;
@@ -124,7 +147,7 @@
 }
 
 .search-input::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .chats-list {
@@ -132,26 +155,28 @@
     overflow-y: auto;
     padding: 15px 0;
     -webkit-overflow-scrolling: touch;
+    background: #ffffff;
 }
 
 .chat-item {
     display: flex;
     align-items: center;
     padding: 15px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
     transition: background 0.2s;
     position: relative;
+    background: #ffffff;
 }
 
 .chat-item:active {
-    background: rgba(255, 255, 255, 0.05);
+    background: #f5f5f5;
 }
 
 .chat-avatar {
     width: 50px;
     height: 50px;
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -171,24 +196,25 @@
 .chat-name {
     font-size: 16px;
     font-weight: 600;
-    color: white;
+    color: #000000;
     margin-bottom: 5px;
 }
 
 .chat-status-text {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
+    color: #666666;
     display: inline-block;
     margin-left: 8px;
 }
 
 .chat-status-text.online {
-    color: #4ade80;
+    color: #7b2cff;
+    font-weight: 500;
 }
 
 .chat-last-message {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.6);
+    color: #666666;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -196,7 +222,7 @@
 
 .chat-time {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.4);
+    color: #999999;
     margin-top: 3px;
 }
 
@@ -222,7 +248,7 @@
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     border: none;
     color: white;
     font-size: 28px;
@@ -235,10 +261,11 @@
     display: none;
     flex-direction: column;
     height: 100vh;
+    background: #ffffff;
 }
 
 .chat-header {
-    background: linear-gradient(90deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     padding: 15px 20px;
     display: flex;
     align-items: center;
@@ -277,14 +304,14 @@
 
 .chat-status {
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.9);
     height: 18px;
     min-height: 18px;
     transition: all 0.3s ease;
 }
 
 .typing-text {
-    color: #4ade80;
+    color: #7b2cff;
     font-style: italic;
     font-size: 13px;
 }
@@ -293,7 +320,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 20px;
-    background: linear-gradient(180deg, #0f0a1f 0%, #150d2b 100%);
+    background: #f5f5f5;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -338,14 +365,15 @@
 }
 
 .message.me .message-content {
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     color: white;
     border-bottom-right-radius: 5px;
 }
 
 .message.other .message-content {
-    background: rgba(42, 27, 74, 0.8);
-    color: white;
+    background: #ffffff;
+    color: #000000;
+    border: 1px solid #e0e0e0;
     border-bottom-left-radius: 5px;
 }
 
@@ -364,6 +392,14 @@
     margin-top: 4px;
 }
 
+.message.me .time {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.message.other .time {
+    color: #666666;
+}
+
 .message-status {
     font-size: 10px;
     display: inline-block;
@@ -373,18 +409,18 @@
 }
 
 .message-status.sent {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .message-status.delivered {
-    background: rgba(74, 222, 128, 0.2);
-    color: #4ade80;
+    background: rgba(123, 44, 255, 0.2);
+    color: #7b2cff;
 }
 
 .message-status.read {
-    background: rgba(74, 222, 128, 0.3);
-    color: #4ade80;
+    background: rgba(123, 44, 255, 0.3);
+    color: #7b2cff;
     font-weight: 600;
 }
 
@@ -392,8 +428,8 @@
     display: flex;
     gap: 10px;
     padding: 15px 20px;
-    background: #1a112e;
-    border-top: 1px solid rgba(123, 44, 255, 0.2);
+    background: #ffffff;
+    border-top: 1px solid #e0e0e0;
     flex-shrink: 0;
 }
 
@@ -401,9 +437,9 @@
     flex: 1;
     padding: 12px 15px;
     border-radius: 12px;
-    border: 2px solid transparent;
-    background: rgba(42, 27, 74, 0.8);
-    color: white;
+    border: 2px solid #e0e0e0;
+    background: #ffffff;
+    color: #000000;
     font-size: 15px;
     outline: none;
     min-height: 44px;
@@ -412,14 +448,13 @@
 
 .message-input:focus {
     border-color: #7b2cff;
-    background: rgba(42, 27, 74, 1);
 }
 
 .send-btn {
     padding: 0 20px;
     border-radius: 12px;
     border: none;
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     color: white;
     font-size: 20px;
     font-weight: 600;
@@ -442,10 +477,10 @@
     right: -300px;
     width: 280px;
     height: 100%;
-    background: #0f0a1f;
+    background: #ffffff;
     z-index: 2000;
     transition: right 0.3s ease;
-    border-left: 1px solid rgba(123, 44, 255, 0.2);
+    border-left: 1px solid #e0e0e0;
     display: none;
 }
 
@@ -455,7 +490,7 @@
 
 .side-menu-header {
     padding: 20px 15px;
-    background: linear-gradient(90deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -487,7 +522,7 @@
 }
 
 .user-status span {
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.9);
     font-size: 13px;
 }
 
@@ -507,15 +542,16 @@
 
 .side-menu-content {
     padding: 20px 15px;
+    background: #ffffff;
 }
 
 .side-menu-btn {
     width: 100%;
     padding: 15px;
-    background: rgba(42, 27, 74, 0.8);
-    border: 1px solid rgba(123, 44, 255, 0.3);
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
     border-radius: 12px;
-    color: white;
+    color: #000000;
     font-size: 15px;
     cursor: pointer;
     text-align: left;
@@ -527,13 +563,8 @@
 }
 
 .side-menu-btn:active {
-    background: rgba(42, 27, 74, 1);
+    background: #f0f0f0;
     transform: translateY(-1px);
-}
-
-.side-menu-btn.logout {
-    color: #ff6b6b;
-    border-color: rgba(255, 107, 107, 0.3);
 }
 
 .modal {
@@ -542,7 +573,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.5);
     display: none;
     justify-content: center;
     align-items: center;
@@ -551,19 +582,19 @@
 }
 
 .modal-content {
-    background: #0f0a1f;
+    background: #ffffff;
     border-radius: 16px;
     width: 100%;
     max-width: 400px;
     max-height: 90vh;
     overflow: hidden;
-    border: 1px solid rgba(123, 44, 255, 0.3);
+    border: 1px solid #e0e0e0;
     animation: modalAppear 0.3s ease;
 }
 
 .modal-header {
     padding: 18px;
-    background: linear-gradient(90deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     color: white;
     display: flex;
     justify-content: space-between;
@@ -593,15 +624,16 @@
     overflow-y: auto;
     max-height: calc(90vh - 70px);
     -webkit-overflow-scrolling: touch;
+    background: #ffffff;
 }
 
 .modal-input {
     width: 100%;
     padding: 14px 16px;
     border-radius: 12px;
-    border: 2px solid rgba(123, 44, 255, 0.3);
-    background: rgba(42, 27, 74, 0.8);
-    color: white;
+    border: 2px solid #e0e0e0;
+    background: #ffffff;
+    color: #000000;
     font-size: 15px;
     outline: none;
     margin-bottom: 15px;
@@ -610,7 +642,6 @@
 
 .modal-input:focus {
     border-color: #7b2cff;
-    background: rgba(42, 27, 74, 1);
 }
 
 .modal-btn {
@@ -618,7 +649,7 @@
     padding: 15px;
     border-radius: 12px;
     border: none;
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     color: white;
     font-size: 16px;
     font-weight: 600;
@@ -632,10 +663,11 @@
 
 .search-results {
     margin-top: 20px;
+    background: #ffffff;
 }
 
 .user-result {
-    background: rgba(42, 27, 74, 0.8);
+    background: #f8f9fa;
     border-radius: 12px;
     padding: 12px;
     display: flex;
@@ -643,6 +675,7 @@
     justify-content: space-between;
     margin-bottom: 8px;
     animation: messageAppear 0.2s ease;
+    border: 1px solid #e0e0e0;
 }
 
 .user-result-info {
@@ -654,7 +687,7 @@
 .user-result-avatar {
     width: 36px;
     height: 36px;
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -665,12 +698,12 @@
 }
 
 .user-result-name {
-    color: white;
+    color: #000000;
     font-weight: 500;
 }
 
 .add-contact-btn {
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     border: none;
     border-radius: 8px;
     padding: 6px 12px;
@@ -688,17 +721,18 @@
 }
 
 .add-contact-btn.added {
-    background: #4ade80;
+    background: #7b2cff;
 }
 
 .contacts-list {
     max-height: 300px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    background: #ffffff;
 }
 
 .contact-item {
-    background: rgba(42, 27, 74, 0.8);
+    background: #f8f9fa;
     border-radius: 12px;
     padding: 12px;
     display: flex;
@@ -706,6 +740,7 @@
     justify-content: space-between;
     margin-bottom: 8px;
     animation: messageAppear 0.2s ease;
+    border: 1px solid #e0e0e0;
 }
 
 .contact-info {
@@ -717,7 +752,7 @@
 .contact-avatar {
     width: 36px;
     height: 36px;
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -728,12 +763,12 @@
 }
 
 .contact-name {
-    color: white;
+    color: #000000;
     font-weight: 500;
 }
 
 .chat-btn {
-    background: linear-gradient(135deg, #7b2cff 0%, #9d4eff 100%);
+    background: #7b2cff;
     border: none;
     border-radius: 8px;
     padding: 6px 12px;
