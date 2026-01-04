@@ -7,8 +7,8 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    background: #ffffff;
-    color: #000000;
+    background: #2d1b69;
+    color: #ffffff;
     height: 100vh;
     overflow: hidden;
 }
@@ -20,22 +20,25 @@ body {
     justify-content: center;
     height: 100vh;
     padding: 20px;
-    background: #ffffff;
+    background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
 }
 
 .login-container {
-    background: #f8f9fa;
+    background: rgba(45, 27, 105, 0.9);
     border-radius: 20px;
     padding: 40px 30px;
     width: 100%;
     max-width: 400px;
-    box-shadow: 0 10px 30px rgba(123, 44, 255, 0.1);
-    border: 1px solid rgba(123, 44, 255, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(123, 44, 255, 0.3);
 }
 
 .login-header h1 {
     font-size: 32px;
-    color: #7b2cff;
+    background: linear-gradient(135deg, #b19cd9 0%, #d8bfd8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     font-weight: 800;
     text-align: center;
     margin-bottom: 30px;
@@ -45,17 +48,17 @@ body {
     width: 100%;
     padding: 15px 20px;
     border-radius: 12px;
-    border: 2px solid rgba(123, 44, 255, 0.3);
-    background: #ffffff;
-    color: #000000;
+    border: 2px solid rgba(177, 156, 217, 0.5);
+    background: rgba(74, 44, 140, 0.7);
+    color: #ffffff;
     font-size: 16px;
     margin-bottom: 15px;
     outline: none;
 }
 
 .login-input:focus {
-    border-color: #7b2cff;
-    box-shadow: 0 0 0 3px rgba(123, 44, 255, 0.2);
+    border-color: #b19cd9;
+    box-shadow: 0 0 0 3px rgba(177, 156, 217, 0.3);
 }
 
 .login-btn {
@@ -63,7 +66,7 @@ body {
     padding: 16px;
     border-radius: 12px;
     border: none;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     color: white;
     font-size: 16px;
     font-weight: 600;
@@ -79,16 +82,16 @@ body {
     width: 100%;
     padding: 12px;
     border-radius: 10px;
-    border: 1px solid #7b2cff;
+    border: 1px solid #b19cd9;
     background: transparent;
-    color: #7b2cff;
+    color: #b19cd9;
     font-size: 14px;
     cursor: pointer;
     margin-top: 15px;
 }
 
 .error-message {
-    color: #ff3860;
+    color: #ff7d7d;
     font-size: 14px;
     margin-bottom: 15px;
     text-align: center;
@@ -100,11 +103,11 @@ body {
     display: none;
     flex-direction: column;
     height: 100vh;
-    background: #ffffff;
+    background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
 }
 
 .chats-header {
-    background: #7b2cff;
+    background: linear-gradient(135deg, #6a0dad 0%, #8a2be2 100%);
     padding: 15px 20px;
 }
 
@@ -139,7 +142,7 @@ body {
     padding: 12px 15px;
     border-radius: 10px;
     border: none;
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(177, 156, 217, 0.2);
     color: white;
     font-size: 14px;
     margin-top: 10px;
@@ -155,28 +158,28 @@ body {
     overflow-y: auto;
     padding: 15px 0;
     -webkit-overflow-scrolling: touch;
-    background: #ffffff;
+    background: rgba(45, 27, 105, 0.5);
 }
 
 .chat-item {
     display: flex;
     align-items: center;
     padding: 15px 20px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid rgba(177, 156, 217, 0.2);
     cursor: pointer;
     transition: background 0.2s;
     position: relative;
-    background: #ffffff;
+    background: rgba(74, 44, 140, 0.3);
 }
 
 .chat-item:active {
-    background: #f5f5f5;
+    background: rgba(177, 156, 217, 0.2);
 }
 
 .chat-avatar {
     width: 50px;
     height: 50px;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -196,25 +199,26 @@ body {
 .chat-name {
     font-size: 16px;
     font-weight: 600;
-    color: #000000;
+    color: #ffffff;
     margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .chat-status-text {
     font-size: 12px;
-    color: #666666;
-    display: inline-block;
-    margin-left: 8px;
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .chat-status-text.online {
-    color: #7b2cff;
+    color: #b19cd9;
     font-weight: 500;
 }
 
 .chat-last-message {
     font-size: 14px;
-    color: #666666;
+    color: rgba(255, 255, 255, 0.8);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -222,12 +226,12 @@ body {
 
 .chat-time {
     font-size: 12px;
-    color: #999999;
+    color: rgba(255, 255, 255, 0.6);
     margin-top: 3px;
 }
 
 .unread-badge {
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     color: white;
     font-size: 12px;
     font-weight: 600;
@@ -248,12 +252,12 @@ body {
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     border: none;
     color: white;
     font-size: 28px;
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(123, 44, 255, 0.4);
+    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
     z-index: 100;
 }
 
@@ -261,11 +265,11 @@ body {
     display: none;
     flex-direction: column;
     height: 100vh;
-    background: #ffffff;
+    background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
 }
 
 .chat-header {
-    background: #7b2cff;
+    background: linear-gradient(135deg, #6a0dad 0%, #8a2be2 100%);
     padding: 15px 20px;
     display: flex;
     align-items: center;
@@ -311,7 +315,7 @@ body {
 }
 
 .typing-text {
-    color: #7b2cff;
+    color: #b19cd9;
     font-style: italic;
     font-size: 13px;
 }
@@ -320,7 +324,7 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
-    background: #f5f5f5;
+    background: linear-gradient(180deg, #2d1b69 0%, #3d237d 100%);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -365,15 +369,15 @@ body {
 }
 
 .message.me .message-content {
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     color: white;
     border-bottom-right-radius: 5px;
 }
 
 .message.other .message-content {
-    background: #ffffff;
-    color: #000000;
-    border: 1px solid #e0e0e0;
+    background: rgba(74, 44, 140, 0.7);
+    color: #ffffff;
+    border: 1px solid rgba(177, 156, 217, 0.3);
     border-bottom-left-radius: 5px;
 }
 
@@ -397,7 +401,7 @@ body {
 }
 
 .message.other .time {
-    color: #666666;
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .message-status {
@@ -414,13 +418,13 @@ body {
 }
 
 .message-status.delivered {
-    background: rgba(123, 44, 255, 0.2);
-    color: #7b2cff;
+    background: rgba(177, 156, 217, 0.3);
+    color: #b19cd9;
 }
 
 .message-status.read {
-    background: rgba(123, 44, 255, 0.3);
-    color: #7b2cff;
+    background: rgba(177, 156, 217, 0.4);
+    color: #b19cd9;
     font-weight: 600;
 }
 
@@ -428,8 +432,8 @@ body {
     display: flex;
     gap: 10px;
     padding: 15px 20px;
-    background: #ffffff;
-    border-top: 1px solid #e0e0e0;
+    background: rgba(45, 27, 105, 0.8);
+    border-top: 1px solid rgba(177, 156, 217, 0.3);
     flex-shrink: 0;
 }
 
@@ -437,9 +441,9 @@ body {
     flex: 1;
     padding: 12px 15px;
     border-radius: 12px;
-    border: 2px solid #e0e0e0;
-    background: #ffffff;
-    color: #000000;
+    border: 2px solid rgba(177, 156, 217, 0.5);
+    background: rgba(74, 44, 140, 0.7);
+    color: #ffffff;
     font-size: 15px;
     outline: none;
     min-height: 44px;
@@ -447,14 +451,14 @@ body {
 }
 
 .message-input:focus {
-    border-color: #7b2cff;
+    border-color: #b19cd9;
 }
 
 .send-btn {
     padding: 0 20px;
     border-radius: 12px;
     border: none;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     color: white;
     font-size: 20px;
     font-weight: 600;
@@ -477,10 +481,10 @@ body {
     right: -300px;
     width: 280px;
     height: 100%;
-    background: #ffffff;
+    background: rgba(45, 27, 105, 0.95);
     z-index: 2000;
     transition: right 0.3s ease;
-    border-left: 1px solid #e0e0e0;
+    border-left: 1px solid rgba(177, 156, 217, 0.3);
     display: none;
 }
 
@@ -490,7 +494,7 @@ body {
 
 .side-menu-header {
     padding: 20px 15px;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #6a0dad 0%, #8a2be2 100%);
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -512,7 +516,7 @@ body {
     justify-content: center;
     font-size: 24px;
     font-weight: bold;
-    color: #7b2cff;
+    color: #8a2be2;
 }
 
 .user-info h4 {
@@ -542,16 +546,16 @@ body {
 
 .side-menu-content {
     padding: 20px 15px;
-    background: #ffffff;
+    background: transparent;
 }
 
 .side-menu-btn {
     width: 100%;
     padding: 15px;
-    background: #f8f9fa;
-    border: 1px solid #e0e0e0;
+    background: rgba(74, 44, 140, 0.5);
+    border: 1px solid rgba(177, 156, 217, 0.3);
     border-radius: 12px;
-    color: #000000;
+    color: #ffffff;
     font-size: 15px;
     cursor: pointer;
     text-align: left;
@@ -563,7 +567,7 @@ body {
 }
 
 .side-menu-btn:active {
-    background: #f0f0f0;
+    background: rgba(177, 156, 217, 0.2);
     transform: translateY(-1px);
 }
 
@@ -573,7 +577,7 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.7);
     display: none;
     justify-content: center;
     align-items: center;
@@ -582,19 +586,19 @@ body {
 }
 
 .modal-content {
-    background: #ffffff;
+    background: rgba(45, 27, 105, 0.95);
     border-radius: 16px;
     width: 100%;
     max-width: 400px;
     max-height: 90vh;
     overflow: hidden;
-    border: 1px solid #e0e0e0;
+    border: 1px solid rgba(177, 156, 217, 0.3);
     animation: modalAppear 0.3s ease;
 }
 
 .modal-header {
     padding: 18px;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #6a0dad 0%, #8a2be2 100%);
     color: white;
     display: flex;
     justify-content: space-between;
@@ -624,16 +628,16 @@ body {
     overflow-y: auto;
     max-height: calc(90vh - 70px);
     -webkit-overflow-scrolling: touch;
-    background: #ffffff;
+    background: transparent;
 }
 
 .modal-input {
     width: 100%;
     padding: 14px 16px;
     border-radius: 12px;
-    border: 2px solid #e0e0e0;
-    background: #ffffff;
-    color: #000000;
+    border: 2px solid rgba(177, 156, 217, 0.5);
+    background: rgba(74, 44, 140, 0.7);
+    color: #ffffff;
     font-size: 15px;
     outline: none;
     margin-bottom: 15px;
@@ -641,7 +645,7 @@ body {
 }
 
 .modal-input:focus {
-    border-color: #7b2cff;
+    border-color: #b19cd9;
 }
 
 .modal-btn {
@@ -649,7 +653,7 @@ body {
     padding: 15px;
     border-radius: 12px;
     border: none;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     color: white;
     font-size: 16px;
     font-weight: 600;
@@ -663,11 +667,11 @@ body {
 
 .search-results {
     margin-top: 20px;
-    background: #ffffff;
+    background: transparent;
 }
 
 .user-result {
-    background: #f8f9fa;
+    background: rgba(74, 44, 140, 0.5);
     border-radius: 12px;
     padding: 12px;
     display: flex;
@@ -675,7 +679,7 @@ body {
     justify-content: space-between;
     margin-bottom: 8px;
     animation: messageAppear 0.2s ease;
-    border: 1px solid #e0e0e0;
+    border: 1px solid rgba(177, 156, 217, 0.3);
 }
 
 .user-result-info {
@@ -687,7 +691,7 @@ body {
 .user-result-avatar {
     width: 36px;
     height: 36px;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -698,12 +702,12 @@ body {
 }
 
 .user-result-name {
-    color: #000000;
+    color: #ffffff;
     font-weight: 500;
 }
 
 .add-contact-btn {
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     border: none;
     border-radius: 8px;
     padding: 6px 12px;
@@ -721,18 +725,18 @@ body {
 }
 
 .add-contact-btn.added {
-    background: #7b2cff;
+    background: linear-gradient(135deg, #9370db 0%, #b19cd9 100%);
 }
 
 .contacts-list {
     max-height: 300px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    background: #ffffff;
+    background: transparent;
 }
 
 .contact-item {
-    background: #f8f9fa;
+    background: rgba(74, 44, 140, 0.5);
     border-radius: 12px;
     padding: 12px;
     display: flex;
@@ -740,7 +744,7 @@ body {
     justify-content: space-between;
     margin-bottom: 8px;
     animation: messageAppear 0.2s ease;
-    border: 1px solid #e0e0e0;
+    border: 1px solid rgba(177, 156, 217, 0.3);
 }
 
 .contact-info {
@@ -752,7 +756,7 @@ body {
 .contact-avatar {
     width: 36px;
     height: 36px;
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -763,12 +767,12 @@ body {
 }
 
 .contact-name {
-    color: #000000;
+    color: #ffffff;
     font-weight: 500;
 }
 
 .chat-btn {
-    background: #7b2cff;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     border: none;
     border-radius: 8px;
     padding: 6px 12px;
