@@ -620,6 +620,14 @@
             if (e.key === 'Enter') handleSearch();
         });
 
+        elements.searchUsername.addEventListener('input', (e) => {
+            if (e.target.value.trim().length > 0) {
+                handleSearch();
+            } else {
+                elements.searchResults.innerHTML = '';
+            }
+        });
+
         elements.contactsBtn.onclick = () => {
             showModal('contactsModal');
             loadContacts();
@@ -1274,7 +1282,7 @@
                     <div>
                         <div class="user-result-name">${user.username}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
-                            ${isOnline ? 'На связи' : 'Не в сети'}
+                            ${isOnline ? 'На связи' : 'Без связи'}
                         </div>
                     </div>
                 </div>
@@ -1340,7 +1348,7 @@
                     <div>
                         <div class="contact-name">${contact.username}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
-                            ${isOnline ? 'На связи' : 'Не в сети'}
+                            ${isOnline ? 'На связи' : 'Без связи'}
                         </div>
                     </div>
                 </div>
@@ -1443,7 +1451,7 @@
         chatItems.forEach(item => {
             const usernameElement = item.querySelector('.chat-name');
             if (usernameElement) {
-                const username = usernameElement.textContent.replace(/На связи|Не в сети/g, '').trim();
+                const username = usernameElement.textContent.replace(/На связи|Без связи/g, '').trim();
                 const userData = onlineUsers.get(username);
                 const isOnline = userData ? userData.isOnline : false;
                 
@@ -1458,4 +1466,3 @@
 
     init();
 })();
-
