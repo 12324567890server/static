@@ -43,8 +43,6 @@
         startChatBtn: document.getElementById('startChatBtn'),
         newChatError: document.getElementById('newChatError'),
         chatsTitle: document.getElementById('chatsTitle'),
-        restoreSection: document.getElementById('restoreSection'),
-        restoreAccountBtn: document.getElementById('restoreAccountBtn'),
         userAvatar: document.getElementById('userAvatar'),
         userStatusText: document.getElementById('userStatusText')
     };
@@ -55,7 +53,6 @@
     let unreadMessages = new Map();
     let onlineUsers = new Map();
     let typingTimeout = null;
-    let typingCheckTimeout = null;
     let realtimeChannel = null;
 
     function init() {
@@ -76,10 +73,6 @@
         if (isVisible && currentUser) {
             updateUserPresence(true);
             checkOnlineStatuses();
-            if (currentChatWith) {
-                loadMessages(currentChatWith);
-            }
-            loadChats();
         } else if (!isVisible && currentUser) {
             updateUserPresence(false);
         }
@@ -92,18 +85,34 @@
         
         if (!currentUser) return;
         
-        realtimeChannel = supabase.channel('realtime_' + currentUser.username)
+        realtimeChannel = supabase.channel('instant_updates')
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'users'
+            }, (payload) => {
+                const user = payload.new;
+                onlineUsers.set(user.username, {
+                    isOnline: user.is_online
+                });
+                updateChatStatus();
+                updateChatsList();
+            })
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'private_messages',
                 filter: `receiver=eq.${currentUser.username}`
-            }, (payload) => {
+            }, async (payload) => {
                 const message = payload.new;
                 
                 if (currentChatWith && message.sender === currentChatWith) {
                     addMessageToDisplay(message, false);
-                    markMessageAsRead(message.id);
+                    await supabase
+                        .from('private_messages')
+                        .update({ read: true })
+                        .eq('id', message.id);
+                    updateMessageStatus(message.id, 'read');
                 } else if (message.sender !== currentUser.username) {
                     const count = unreadMessages.get(message.sender) || 0;
                     unreadMessages.set(message.sender, count + 1);
@@ -118,72 +127,11 @@
                 table: 'private_messages'
             }, (payload) => {
                 const message = payload.new;
-                if (message.read && message.sender === currentUser.username && currentChatWith === message.receiver) {
+                if (message.read && message.sender === currentUser.username) {
                     updateMessageStatus(message.id, 'read');
                 }
             })
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'typing_indicators',
-                filter: `receiver=eq.${currentUser.username}`
-            }, (payload) => {
-                if (payload.new && payload.new.sender === currentChatWith) {
-                    showTypingIndicator();
-                    if (typingCheckTimeout) clearTimeout(typingCheckTimeout);
-                    typingCheckTimeout = setTimeout(hideTypingIndicator, 3000);
-                }
-            })
             .subscribe();
-    }
-
-    function showTypingIndicator() {
-        if (elements.chatStatus && currentChatWith) {
-            elements.chatStatus.innerHTML = '<span class="typing-text">печатает...</span>';
-            elements.chatStatus.style.color = '#b19cd9';
-        }
-    }
-
-    function hideTypingIndicator() {
-        if (elements.chatStatus && currentChatWith) {
-            updateChatStatus();
-        }
-    }
-
-    async function sendTypingIndicator() {
-        if (!currentChatWith || !currentUser) return;
-        
-        try {
-            await supabase
-                .from('typing_indicators')
-                .upsert({
-                    sender: currentUser.username,
-                    receiver: currentChatWith,
-                    timestamp: new Date().toISOString()
-                });
-            
-            if (typingTimeout) clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => {
-                stopTypingIndicator();
-            }, 2000);
-            
-        } catch (error) {
-            console.error('Ошибка отправки индикатора:', error);
-        }
-    }
-
-    async function stopTypingIndicator() {
-        if (!currentChatWith || !currentUser) return;
-        
-        try {
-            await supabase
-                .from('typing_indicators')
-                .delete()
-                .eq('sender', currentUser.username)
-                .eq('receiver', currentChatWith);
-        } catch (error) {
-            console.error('Ошибка остановки индикатора:', error);
-        }
     }
 
     function updateMessageStatus(messageId, status) {
@@ -196,9 +144,6 @@
                     if (status === 'read') {
                         statusSpan.textContent = 'Прочитано';
                         statusSpan.className = 'message-status read';
-                    } else if (status === 'delivered') {
-                        statusSpan.textContent = 'Доставлено';
-                        statusSpan.className = 'message-status delivered';
                     }
                 }
             }
@@ -215,7 +160,6 @@
                 setupRealtime();
                 updateUserPresence(true);
                 checkOnlineStatuses();
-                startPolling();
             } catch (e) {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -223,19 +167,6 @@
         } else {
             showLogin();
         }
-    }
-
-    function startPolling() {
-        setInterval(() => {
-            if (currentUser) {
-                updateUserPresence(true);
-                checkOnlineStatuses();
-                loadChats();
-                if (currentChatWith) {
-                    loadMessages(currentChatWith);
-                }
-            }
-        }, 5000);
     }
 
     async function updateUserPresence(isOnline) {
@@ -278,8 +209,7 @@
             const { data: users } = await supabase
                 .from('users')
                 .select('username, is_online')
-                .neq('username', currentUser.username)
-                .limit(50);
+                .neq('username', currentUser.username);
 
             if (users) {
                 users.forEach(user => {
@@ -430,14 +360,6 @@
             }
         });
 
-        elements.messageInput.addEventListener('input', function() {
-            if (currentChatWith && this.value.length > 0) {
-                sendTypingIndicator();
-            } else if (currentChatWith && this.value.length === 0) {
-                stopTypingIndicator();
-            }
-        });
-
         elements.startChatBtn.onclick = handleStartNewChat;
 
         document.querySelectorAll('.close-modal').forEach(btn => {
@@ -581,7 +503,10 @@
                     .map(msg => msg.id);
                 
                 if (unreadIds.length > 0) {
-                    await markMessagesAsRead(unreadIds);
+                    await supabase
+                        .from('private_messages')
+                        .update({ read: true })
+                        .in('id', unreadIds);
                 }
             }
         } catch (error) {
@@ -685,7 +610,6 @@
             if (error) throw error;
             
             elements.messageInput.value = '';
-            stopTypingIndicator();
             
             if (data && data[0]) {
                 addMessageToDisplay(data[0], true);
@@ -695,28 +619,6 @@
         } catch (error) {
             console.error('Ошибка отправки:', error);
             alert('Ошибка отправки сообщения');
-        }
-    }
-
-    async function markMessagesAsRead(messageIds) {
-        try {
-            await supabase
-                .from('private_messages')
-                .update({ read: true })
-                .in('id', messageIds);
-        } catch (error) {
-            console.error('Ошибка пометки сообщений как прочитанных:', error);
-        }
-    }
-
-    async function markMessageAsRead(messageId) {
-        try {
-            await supabase
-                .from('private_messages')
-                .update({ read: true })
-                .eq('id', messageId);
-        } catch (error) {
-            console.error('Ошибка пометки сообщения как прочитанного:', error);
         }
     }
 
@@ -799,12 +701,6 @@
         }
 
         try {
-            const { data: existingUser } = await supabase
-                .from('users')
-                .select('*')
-                .eq('username', username)
-                .maybeSingle();
-
             currentUser = {
                 username: username,
                 createdAt: new Date().toISOString()
