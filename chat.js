@@ -297,7 +297,7 @@
     function showTypingIndicator() {
         if (elements.chatStatus && currentChatWith) {
             elements.chatStatus.innerHTML = '<span class="typing-text">печатает...</span>';
-            elements.chatStatus.style.color = '#4ade80';
+            elements.chatStatus.style.color = '#b19cd9';
         }
     }
 
@@ -419,11 +419,11 @@
     function updateUserStatusDisplay(isOnline) {
         if (elements.userStatusText) {
             if (isOnline) {
-                elements.userStatusText.textContent = 'online';
-                elements.userStatusText.style.color = '#4ade80';
+                elements.userStatusText.textContent = 'на связи';
+                elements.userStatusText.style.color = '#b19cd9';
             } else {
-                elements.userStatusText.textContent = 'offline';
-                elements.userStatusText.style.color = 'rgba(255, 255, 255, 0.5)';
+                elements.userStatusText.textContent = 'не в сети';
+                elements.userStatusText.style.color = 'rgba(255, 255, 255, 0.7)';
             }
         }
     }
@@ -549,7 +549,7 @@
             
             if (userData.isOnline && diff < 10000) {
                 elements.chatStatus.textContent = 'На связи';
-                elements.chatStatus.style.color = '#4ade80';
+                elements.chatStatus.style.color = '#b19cd9';
             } else {
                 const minutes = Math.floor(diff / 60000);
                 const seconds = Math.floor((diff % 60000) / 1000);
@@ -1273,7 +1273,7 @@
                     <div class="user-result-avatar">${getAvatarLetter(user.username)}</div>
                     <div>
                         <div class="user-result-name">${user.username}</div>
-                        <div style="color: rgba(255,255,255,0.5); font-size: 12px;">
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
                             ${isOnline ? 'На связи' : 'Не в сети'}
                         </div>
                     </div>
@@ -1339,7 +1339,7 @@
                     <div class="contact-avatar">${getAvatarLetter(contact.username)}</div>
                     <div>
                         <div class="contact-name">${contact.username}</div>
-                        <div style="color: rgba(255,255,255,0.5); font-size: 12px;">
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
                             ${isOnline ? 'На связи' : 'Не в сети'}
                         </div>
                     </div>
@@ -1449,7 +1449,7 @@
                 
                 const statusText = item.querySelector('.chat-status-text');
                 if (statusText) {
-                    statusText.textContent = isOnline ? 'На связи' : 'Не в сети';
+                    statusText.textContent = isOnline ? 'На связи' : 'Без связи';
                     statusText.className = `chat-status-text ${isOnline ? 'online' : ''}`;
                 }
             }
