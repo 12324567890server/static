@@ -78,18 +78,6 @@ body {
     transform: scale(0.98);
 }
 
-.restore-btn {
-    width: 100%;
-    padding: 12px;
-    border-radius: 10px;
-    border: 1px solid #b19cd9;
-    background: transparent;
-    color: #b19cd9;
-    font-size: 14px;
-    cursor: pointer;
-    margin-top: 15px;
-}
-
 .error-message {
     color: #ff7d7d;
     font-size: 14px;
@@ -410,8 +398,6 @@ body {
     padding: 2px 6px;
     border-radius: 4px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
 }
 
 .message-status.sent {
@@ -426,10 +412,9 @@ body {
 
 .message-status.read {
     background: #ffffff;
-    color: #6a0dad !important;
+    color: #6a0dad;
     border: 1px solid rgba(138, 43, 226, 0.4);
     font-weight: 700;
-    box-shadow: 0 2px 4px rgba(138, 43, 226, 0.2);
 }
 
 .message-input-container {
@@ -682,8 +667,13 @@ body {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
-    animation: messageAppear 0.2s ease;
+    cursor: pointer;
+    transition: all 0.2s;
     border: 1px solid rgba(177, 156, 217, 0.3);
+}
+
+.user-result:active {
+    background: rgba(177, 156, 217, 0.2);
 }
 
 .user-result-info {
@@ -710,28 +700,6 @@ body {
     font-weight: 500;
 }
 
-.add-contact-btn {
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    border: none;
-    border-radius: 8px;
-    padding: 6px 12px;
-    color: white;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    min-width: 32px;
-    min-height: 32px;
-}
-
-.add-contact-btn:active {
-    transform: scale(0.95);
-}
-
-.add-contact-btn.added {
-    background: linear-gradient(135deg, #9370db 0%, #b19cd9 100%);
-}
-
 .contacts-list {
     max-height: 300px;
     overflow-y: auto;
@@ -747,8 +715,13 @@ body {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
-    animation: messageAppear 0.2s ease;
+    cursor: pointer;
+    transition: all 0.2s;
     border: 1px solid rgba(177, 156, 217, 0.3);
+}
+
+.contact-item:active {
+    background: rgba(177, 156, 217, 0.2);
 }
 
 .contact-info {
@@ -773,22 +746,6 @@ body {
 .contact-name {
     color: #ffffff;
     font-weight: 500;
-}
-
-.chat-btn {
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    border: none;
-    border-radius: 8px;
-    padding: 6px 12px;
-    color: white;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.chat-btn:active {
-    transform: scale(0.95);
 }
 
 @keyframes modalAppear {
@@ -824,6 +781,19 @@ body {
     .side-menu {
         width: 85%;
         max-width: 280px;
+    }
+}
+
+@media (min-width: 769px) {
+    body {
+        max-width: 500px;
+        margin: 0 auto;
+        background: #2d1b69 !important;
+    }
+    
+    .chats-screen, .chat-screen, .login-screen {
+        max-width: 500px;
+        margin: 0 auto;
     }
 }
 
