@@ -52,7 +52,7 @@
     let chats = [];
     let unreadMessages = new Map();
     let onlineUsers = new Map();
-    let realtimeChannel = null;
+    let pollingInterval = null;
 
     function init() {
         checkUser();
@@ -60,136 +60,56 @@
         
         window.addEventListener('beforeunload', () => {
             if (currentUser) {
-                updateUserPresence(false);
+                setUserOffline();
             }
         });
     }
 
-    function setupRealtime() {
-        if (realtimeChannel) {
-            supabase.removeChannel(realtimeChannel);
-        }
+    function startPolling() {
+        if (pollingInterval) clearInterval(pollingInterval);
         
-        if (!currentUser) return;
-        
-        realtimeChannel = supabase.channel('instant_updates')
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'users'
-            }, (payload) => {
-                const user = payload.new;
-                if (user.username !== currentUser.username) {
-                    onlineUsers.set(user.username, user.is_online);
-                    updateChatStatus();
-                    updateChatsList();
-                }
-            })
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'private_messages',
-                filter: `receiver=eq.${currentUser.username}`
-            }, async (payload) => {
-                const message = payload.new;
+        pollingInterval = setInterval(async () => {
+            if (currentUser) {
+                await updateUserOnline();
+                await checkOnlineStatuses();
+                await loadChats();
                 
-                if (currentChatWith === message.sender) {
-                    addMessageToDisplay(message, false);
-                    await markMessageAsRead(message.id);
-                } else {
-                    const count = unreadMessages.get(message.sender) || 0;
-                    unreadMessages.set(message.sender, count + 1);
-                    updateUnreadNotifications();
-                }
-                
-                loadChats();
-            })
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'private_messages'
-            }, (payload) => {
-                const message = payload.new;
-                if (message.read && message.sender === currentUser.username && message.receiver === currentChatWith) {
-                    updateMessageStatus(message.id, 'read');
-                }
-            })
-            .subscribe((status) => {
-                if (status === 'CLOSED') {
-                    setTimeout(setupRealtime, 1000);
-                }
-            });
-    }
-
-    function updateMessageStatus(messageId, status) {
-        const messageElement = document.querySelector(`.message[data-message-id="${messageId}"]`);
-        if (messageElement) {
-            const timeEl = messageElement.querySelector('.time');
-            if (timeEl) {
-                const statusSpan = timeEl.querySelector('.message-status');
-                if (statusSpan) {
-                    if (status === 'read') {
-                        statusSpan.textContent = 'Прочитано';
-                        statusSpan.className = 'message-status read';
-                    }
+                if (currentChatWith) {
+                    await loadMessages(currentChatWith);
                 }
             }
-        }
+        }, 2000);
     }
 
-    function checkUser() {
-        const savedUser = localStorage.getItem('speednexus_user');
-        if (savedUser) {
-            try {
-                currentUser = JSON.parse(savedUser);
-                showChats();
-                updateUserDisplay();
-                setupRealtime();
-                updateUserPresence(true);
-                loadChats();
-                checkAllOnlineStatuses();
-            } catch (e) {
-                localStorage.removeItem('speednexus_user');
-                showLogin();
-            }
-        } else {
-            showLogin();
-        }
-    }
-
-    async function updateUserPresence(online) {
-        if (!currentUser) return;
-        
+    async function updateUserOnline() {
         try {
             await supabase
                 .from('users')
                 .upsert({
                     username: currentUser.username,
-                    is_online: online,
+                    is_online: true,
                     last_seen: new Date().toISOString()
                 });
-            
-            onlineUsers.set(currentUser.username, online);
-            updateUserStatusDisplay(online);
-            
-            if (currentChatWith) {
-                updateChatStatus();
-            }
         } catch (error) {
-            console.error('Ошибка обновления статуса:', error);
+            console.error('Ошибка обновления онлайн:', error);
         }
     }
 
-    function updateUserStatusDisplay(online) {
-        if (elements.userStatusText) {
-            elements.userStatusText.textContent = online ? 'на связи' : 'без связи';
-            elements.userStatusText.style.color = online ? '#b19cd9' : 'rgba(255, 255, 255, 0.7)';
+    async function setUserOffline() {
+        try {
+            await supabase
+                .from('users')
+                .update({
+                    is_online: false,
+                    last_seen: new Date().toISOString()
+                })
+                .eq('username', currentUser.username);
+        } catch (error) {
+            console.error('Ошибка установки оффлайн:', error);
         }
     }
 
-    async function checkAllOnlineStatuses() {
-        if (!currentUser) return;
-        
+    async function checkOnlineStatuses() {
         try {
             const { data: users } = await supabase
                 .from('users')
@@ -209,10 +129,29 @@
         }
     }
 
+    function checkUser() {
+        const savedUser = localStorage.getItem('speednexus_user');
+        if (savedUser) {
+            try {
+                currentUser = JSON.parse(savedUser);
+                showChats();
+                updateUserDisplay();
+                startPolling();
+                loadChats();
+                checkOnlineStatuses();
+            } catch (e) {
+                localStorage.removeItem('speednexus_user');
+                showLogin();
+            }
+        } else {
+            showLogin();
+        }
+    }
+
     function showLogin() {
-        if (realtimeChannel) {
-            supabase.removeChannel(realtimeChannel);
-            realtimeChannel = null;
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
         }
         
         elements.loginScreen.style.display = 'flex';
@@ -231,7 +170,7 @@
         hideSideMenu();
         elements.chatsTitle.textContent = 'Чаты (' + currentUser.username + ')';
         loadChats();
-        checkAllOnlineStatuses();
+        checkOnlineStatuses();
     }
 
     async function showChat(username) {
@@ -380,6 +319,7 @@
             if (error) throw error;
 
             const chatMap = new Map();
+            unreadMessages.clear();
             
             if (messages) {
                 for (const msg of messages) {
@@ -599,17 +539,6 @@
         }
     }
 
-    async function markMessageAsRead(messageId) {
-        try {
-            await supabase
-                .from('private_messages')
-                .update({ read: true })
-                .eq('id', messageId);
-        } catch (error) {
-            console.error('Ошибка пометки сообщения как прочитанного:', error);
-        }
-    }
-
     async function markChatAsRead(username) {
         if (!username) return;
         
@@ -706,7 +635,7 @@
 
             showChats();
             updateUserDisplay();
-            setupRealtime();
+            startPolling();
             
         } catch (error) {
             console.error('Ошибка регистрации:', error);
@@ -754,7 +683,6 @@
             hideModal('editProfileModal');
             elements.chatsTitle.textContent = 'Чаты (' + newUsername + ')';
             
-            setupRealtime();
             loadChats();
             if (currentChatWith) {
                 showChat(currentChatWith);
@@ -876,13 +804,13 @@
 
     async function handleLogout() {
         if (confirm('Вы уверены, что хотите выйти?')) {
-            await updateUserPresence(false);
+            await setUserOffline();
             localStorage.removeItem('speednexus_user');
             
             currentUser = null;
-            if (realtimeChannel) {
-                supabase.removeChannel(realtimeChannel);
-                realtimeChannel = null;
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
             }
             showLogin();
             elements.loginUsername.value = '';
