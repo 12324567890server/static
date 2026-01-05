@@ -52,30 +52,31 @@
     let chats = [];
     let unreadMessages = new Map();
     let onlineUsers = new Map();
-    let typingTimeout = null;
     let realtimeChannel = null;
+    let isOnline = false;
 
     function init() {
         checkUser();
         setupEventListeners();
         
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        
         window.addEventListener('beforeunload', () => {
             if (currentUser) {
-                updateUserPresence(false);
+                updateOnlineStatus(false);
             }
         });
-    }
 
-    function handleVisibilityChange() {
-        const isVisible = !document.hidden;
-        if (isVisible && currentUser) {
-            updateUserPresence(true);
-            checkOnlineStatuses();
-        } else if (!isVisible && currentUser) {
-            updateUserPresence(false);
-        }
+        window.addEventListener('online', () => {
+            if (currentUser) {
+                updateOnlineStatus(true);
+                setupRealtime();
+            }
+        });
+
+        window.addEventListener('offline', () => {
+            if (currentUser) {
+                updateOnlineStatus(false);
+            }
+        });
     }
 
     function setupRealtime() {
@@ -85,18 +86,18 @@
         
         if (!currentUser) return;
         
-        realtimeChannel = supabase.channel('instant_updates')
+        realtimeChannel = supabase.channel('chat_updates')
             .on('postgres_changes', {
                 event: 'UPDATE',
                 schema: 'public',
                 table: 'users'
             }, (payload) => {
                 const user = payload.new;
-                onlineUsers.set(user.username, {
-                    isOnline: user.is_online
-                });
-                updateChatStatus();
-                updateChatsList();
+                if (user.username !== currentUser.username) {
+                    onlineUsers.set(user.username, user.is_online);
+                    updateChatStatus();
+                    updateChatsList();
+                }
             })
             .on('postgres_changes', {
                 event: 'INSERT',
@@ -106,14 +107,10 @@
             }, async (payload) => {
                 const message = payload.new;
                 
-                if (currentChatWith && message.sender === currentChatWith) {
+                if (currentChatWith === message.sender) {
                     addMessageToDisplay(message, false);
-                    await supabase
-                        .from('private_messages')
-                        .update({ read: true })
-                        .eq('id', message.id);
-                    updateMessageStatus(message.id, 'read');
-                } else if (message.sender !== currentUser.username) {
+                    await markMessageAsRead(message.id);
+                } else {
                     const count = unreadMessages.get(message.sender) || 0;
                     unreadMessages.set(message.sender, count + 1);
                     updateUnreadNotifications();
@@ -127,11 +124,20 @@
                 table: 'private_messages'
             }, (payload) => {
                 const message = payload.new;
-                if (message.read && message.sender === currentUser.username) {
+                if (message.read && message.sender === currentUser.username && message.receiver === currentChatWith) {
                     updateMessageStatus(message.id, 'read');
                 }
             })
-            .subscribe();
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    isOnline = true;
+                    updateUserStatusDisplay(true);
+                } else if (status === 'CLOSED') {
+                    isOnline = false;
+                    updateUserStatusDisplay(false);
+                    setTimeout(setupRealtime, 1000);
+                }
+            });
     }
 
     function updateMessageStatus(messageId, status) {
@@ -158,8 +164,9 @@
                 showChats();
                 updateUserDisplay();
                 setupRealtime();
-                updateUserPresence(true);
-                checkOnlineStatuses();
+                updateOnlineStatus(true);
+                loadChats();
+                checkAllOnlineStatuses();
             } catch (e) {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -169,7 +176,7 @@
         }
     }
 
-    async function updateUserPresence(isOnline) {
+    async function updateOnlineStatus(online) {
         if (!currentUser) return;
         
         try {
@@ -177,15 +184,12 @@
                 .from('users')
                 .upsert({
                     username: currentUser.username,
-                    is_online: isOnline,
+                    is_online: online,
                     last_seen: new Date().toISOString()
                 });
             
-            onlineUsers.set(currentUser.username, {
-                isOnline: isOnline
-            });
-            
-            updateUserStatusDisplay(isOnline);
+            onlineUsers.set(currentUser.username, online);
+            updateUserStatusDisplay(online);
             
             if (currentChatWith) {
                 updateChatStatus();
@@ -195,27 +199,26 @@
         }
     }
 
-    function updateUserStatusDisplay(isOnline) {
+    function updateUserStatusDisplay(online) {
         if (elements.userStatusText) {
-            elements.userStatusText.textContent = isOnline ? 'на связи' : 'без связи';
-            elements.userStatusText.style.color = isOnline ? '#b19cd9' : 'rgba(255, 255, 255, 0.7)';
+            elements.userStatusText.textContent = online ? 'на связи' : 'без связи';
+            elements.userStatusText.style.color = online ? '#b19cd9' : 'rgba(255, 255, 255, 0.7)';
         }
     }
 
-    async function checkOnlineStatuses() {
+    async function checkAllOnlineStatuses() {
         if (!currentUser) return;
         
         try {
             const { data: users } = await supabase
                 .from('users')
                 .select('username, is_online')
-                .neq('username', currentUser.username);
+                .neq('username', currentUser.username)
+                .limit(100);
 
             if (users) {
                 users.forEach(user => {
-                    onlineUsers.set(user.username, {
-                        isOnline: user.is_online
-                    });
+                    onlineUsers.set(user.username, user.is_online);
                 });
                 
                 updateChatStatus();
@@ -248,7 +251,7 @@
         hideSideMenu();
         elements.chatsTitle.textContent = 'Чаты (' + currentUser.username + ')';
         loadChats();
-        checkOnlineStatuses();
+        checkAllOnlineStatuses();
     }
 
     async function showChat(username) {
@@ -281,15 +284,10 @@
     function updateChatStatus() {
         if (!currentChatWith || !elements.chatStatus) return;
         
-        const userData = onlineUsers.get(currentChatWith);
-        if (userData) {
-            if (userData.isOnline) {
-                elements.chatStatus.textContent = 'На связи';
-                elements.chatStatus.style.color = '#b19cd9';
-            } else {
-                elements.chatStatus.textContent = 'Без связи';
-                elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
-            }
+        const isUserOnline = onlineUsers.get(currentChatWith);
+        if (isUserOnline) {
+            elements.chatStatus.textContent = 'На связи';
+            elements.chatStatus.style.color = '#b19cd9';
         } else {
             elements.chatStatus.textContent = 'Без связи';
             elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
@@ -397,7 +395,8 @@
                 .from('private_messages')
                 .select('*')
                 .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(100);
 
             if (error) throw error;
 
@@ -450,8 +449,7 @@
             const date = new Date(chat.lastTime);
             const time = formatTime(date);
             const unreadCount = unreadMessages.get(chat.username) || 0;
-            const userData = onlineUsers.get(chat.username);
-            const isOnline = userData ? userData.isOnline : false;
+            const isUserOnline = onlineUsers.get(chat.username) || false;
             
             let lastMessagePrefix = chat.isMyMessage ? 'Вы: ' : '';
             let lastMessage = chat.lastMessage || '';
@@ -464,8 +462,8 @@
                 <div class="chat-info">
                     <div class="chat-name">
                         ${chat.username}
-                        <span class="chat-status-text ${isOnline ? 'online' : ''}">
-                            ${isOnline ? 'На связи' : 'Без связи'}
+                        <span class="chat-status-text ${isUserOnline ? 'online' : ''}">
+                            ${isUserOnline ? 'На связи' : 'Без связи'}
                         </span>
                     </div>
                     <div class="chat-last-message">
@@ -491,7 +489,8 @@
                 .from('private_messages')
                 .select('*')
                 .eq('chat_id', chatId)
-                .order('created_at', { ascending: true });
+                .order('created_at', { ascending: true })
+                .limit(100);
             
             if (error) throw error;
             
@@ -619,6 +618,17 @@
         } catch (error) {
             console.error('Ошибка отправки:', error);
             alert('Ошибка отправки сообщения');
+        }
+    }
+
+    async function markMessageAsRead(messageId) {
+        try {
+            await supabase
+                .from('private_messages')
+                .update({ read: true })
+                .eq('id', messageId);
+        } catch (error) {
+            console.error('Ошибка пометки сообщения как прочитанного:', error);
         }
     }
 
@@ -868,8 +878,7 @@
                 showChat(contact.username);
             };
             
-            const userData = onlineUsers.get(contact.username);
-            const isOnline = userData ? userData.isOnline : false;
+            const isUserOnline = onlineUsers.get(contact.username) || false;
             
             div.innerHTML = `
                 <div class="contact-info">
@@ -877,7 +886,7 @@
                     <div>
                         <div class="contact-name">${contact.username}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
-                            ${isOnline ? 'На связи' : 'Без связи'}
+                            ${isUserOnline ? 'На связи' : 'Без связи'}
                         </div>
                     </div>
                 </div>
@@ -889,7 +898,7 @@
 
     async function handleLogout() {
         if (confirm('Вы уверены, что хотите выйти?')) {
-            await updateUserPresence(false);
+            await updateOnlineStatus(false);
             localStorage.removeItem('speednexus_user');
             
             currentUser = null;
@@ -932,16 +941,15 @@
         const diff = now - date;
         
         if (diff < 60000) {
-            const seconds = Math.floor(diff / 1000);
-            return `${seconds} сек назад`;
+            return 'Только что';
         }
         if (diff < 3600000) {
             const minutes = Math.floor(diff / 60000);
-            return `${minutes} мин назад`;
+            return `${minutes} мин`;
         }
         if (diff < 86400000) {
             const hours = Math.floor(diff / 3600000);
-            return `${hours} ч назад`;
+            return `${hours} ч`;
         }
         
         return date.toLocaleDateString('ru-RU', {
@@ -968,13 +976,12 @@
             const usernameElement = item.querySelector('.chat-name');
             if (usernameElement) {
                 const username = usernameElement.textContent.replace(/На связи|Без связи/g, '').trim();
-                const userData = onlineUsers.get(username);
-                const isOnline = userData ? userData.isOnline : false;
+                const isUserOnline = onlineUsers.get(username) || false;
                 
                 const statusText = item.querySelector('.chat-status-text');
                 if (statusText) {
-                    statusText.textContent = isOnline ? 'На связи' : 'Без связи';
-                    statusText.className = `chat-status-text ${isOnline ? 'online' : ''}`;
+                    statusText.textContent = isUserOnline ? 'На связи' : 'Без связи';
+                    statusText.className = `chat-status-text ${isUserOnline ? 'online' : ''}`;
                 }
             }
         });
