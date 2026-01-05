@@ -422,7 +422,7 @@
                 elements.userStatusText.textContent = 'на связи';
                 elements.userStatusText.style.color = '#b19cd9';
             } else {
-                elements.userStatusText.textContent = 'не в сети';
+                elements.userStatusText.textContent = 'без связи';
                 elements.userStatusText.style.color = 'rgba(255, 255, 255, 0.7)';
             }
         }
@@ -572,7 +572,7 @@
                 elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
             }
         } else {
-            elements.chatStatus.textContent = 'Не в сети';
+            elements.chatStatus.textContent = 'Без связи';
             elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
         }
     }
@@ -752,7 +752,7 @@
                     <div class="chat-name">
                         ${chat.username}
                         <span class="chat-status-text ${isOnline ? 'online' : ''}">
-                            ${isOnline ? 'На связи' : 'Не в сети'}
+                            ${isOnline ? 'На связи' : 'Без связи'}
                         </span>
                     </div>
                     <div class="chat-last-message">
@@ -1458,3 +1458,4 @@
 
     init();
 })();
+
