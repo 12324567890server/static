@@ -53,7 +53,6 @@
     let unreadMessages = new Map();
     let onlineUsers = new Map();
     let realtimeChannel = null;
-    let isOnline = false;
 
     function init() {
         checkUser();
@@ -61,20 +60,7 @@
         
         window.addEventListener('beforeunload', () => {
             if (currentUser) {
-                updateOnlineStatus(false);
-            }
-        });
-
-        window.addEventListener('online', () => {
-            if (currentUser) {
-                updateOnlineStatus(true);
-                setupRealtime();
-            }
-        });
-
-        window.addEventListener('offline', () => {
-            if (currentUser) {
-                updateOnlineStatus(false);
+                updateUserPresence(false);
             }
         });
     }
@@ -86,7 +72,7 @@
         
         if (!currentUser) return;
         
-        realtimeChannel = supabase.channel('chat_updates')
+        realtimeChannel = supabase.channel('instant_updates')
             .on('postgres_changes', {
                 event: 'UPDATE',
                 schema: 'public',
@@ -129,12 +115,7 @@
                 }
             })
             .subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    isOnline = true;
-                    updateUserStatusDisplay(true);
-                } else if (status === 'CLOSED') {
-                    isOnline = false;
-                    updateUserStatusDisplay(false);
+                if (status === 'CLOSED') {
                     setTimeout(setupRealtime, 1000);
                 }
             });
@@ -164,7 +145,7 @@
                 showChats();
                 updateUserDisplay();
                 setupRealtime();
-                updateOnlineStatus(true);
+                updateUserPresence(true);
                 loadChats();
                 checkAllOnlineStatuses();
             } catch (e) {
@@ -176,7 +157,7 @@
         }
     }
 
-    async function updateOnlineStatus(online) {
+    async function updateUserPresence(online) {
         if (!currentUser) return;
         
         try {
@@ -213,8 +194,7 @@
             const { data: users } = await supabase
                 .from('users')
                 .select('username, is_online')
-                .neq('username', currentUser.username)
-                .limit(100);
+                .neq('username', currentUser.username);
 
             if (users) {
                 users.forEach(user => {
@@ -395,8 +375,7 @@
                 .from('private_messages')
                 .select('*')
                 .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
-                .order('created_at', { ascending: false })
-                .limit(100);
+                .order('created_at', { ascending: false });
 
             if (error) throw error;
 
@@ -489,8 +468,7 @@
                 .from('private_messages')
                 .select('*')
                 .eq('chat_id', chatId)
-                .order('created_at', { ascending: true })
-                .limit(100);
+                .order('created_at', { ascending: true });
             
             if (error) throw error;
             
@@ -898,7 +876,7 @@
 
     async function handleLogout() {
         if (confirm('Вы уверены, что хотите выйти?')) {
-            await updateOnlineStatus(false);
+            await updateUserPresence(false);
             localStorage.removeItem('speednexus_user');
             
             currentUser = null;
