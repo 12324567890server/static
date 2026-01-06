@@ -72,13 +72,14 @@
             if (currentUser) {
                 await updateUserOnline();
                 await checkOnlineStatuses();
+                await checkNewMessages();
                 await loadChats();
                 
                 if (currentChatWith) {
-                    await loadMessages(currentChatWith);
+                    await checkMessageReadStatus();
                 }
             }
-        }, 2000);
+        }, 1000);
     }
 
     async function updateUserOnline() {
@@ -126,6 +127,77 @@
             }
         } catch (error) {
             console.error('Ошибка проверки онлайн:', error);
+        }
+    }
+
+    async function checkNewMessages() {
+        if (!currentUser) return;
+        
+        try {
+            const { data: newMessages, error } = await supabase
+                .from('private_messages')
+                .select('*')
+                .eq('receiver', currentUser.username)
+                .eq('read', false)
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+
+            if (newMessages && newMessages.length > 0) {
+                for (const message of newMessages) {
+                    if (currentChatWith === message.sender) {
+                        addMessageToDisplay(message, false);
+                        await markMessageAsRead(message.id);
+                    } else {
+                        const count = unreadMessages.get(message.sender) || 0;
+                        unreadMessages.set(message.sender, count + 1);
+                    }
+                }
+                
+                updateUnreadNotifications();
+            }
+        } catch (error) {
+            console.error('Ошибка проверки сообщений:', error);
+        }
+    }
+
+    async function checkMessageReadStatus() {
+        if (!currentChatWith || !currentUser) return;
+        
+        try {
+            const usernames = [currentUser.username, currentChatWith].sort();
+            const chatId = usernames.join('_');
+            
+            const { data: readMessages } = await supabase
+                .from('private_messages')
+                .select('id')
+                .eq('chat_id', chatId)
+                .eq('sender', currentUser.username)
+                .eq('read', true);
+
+            if (readMessages) {
+                readMessages.forEach(msg => {
+                    updateMessageStatus(msg.id, 'read');
+                });
+            }
+        } catch (error) {
+            console.error('Ошибка проверки прочтения:', error);
+        }
+    }
+
+    function updateMessageStatus(messageId, status) {
+        const messageElement = document.querySelector(`.message[data-message-id="${messageId}"]`);
+        if (messageElement) {
+            const timeEl = messageElement.querySelector('.time');
+            if (timeEl) {
+                const statusSpan = timeEl.querySelector('.message-status');
+                if (statusSpan) {
+                    if (status === 'read') {
+                        statusSpan.textContent = 'Прочитано';
+                        statusSpan.className = 'message-status read';
+                    }
+                }
+            }
         }
     }
 
@@ -536,6 +608,17 @@
         } catch (error) {
             console.error('Ошибка отправки:', error);
             alert('Ошибка отправки сообщения');
+        }
+    }
+
+    async function markMessageAsRead(messageId) {
+        try {
+            await supabase
+                .from('private_messages')
+                .update({ read: true })
+                .eq('id', messageId);
+        } catch (error) {
+            console.error('Ошибка пометки сообщения как прочитанного:', error);
         }
     }
 
