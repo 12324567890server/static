@@ -1,5 +1,4 @@
-(function() {
-    const SUPABASE_URL = "https://bncysgnqsgpdpuupzgqj.supabase.co";
+const SUPABASE_URL = "https://bncysgnqsgpdpuupzgqj.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuY3lzZ25xc2dwZHB1dXB6Z3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3NDQ3ODUsImV4cCI6MjA4MjMyMDc4NX0.5MRgyFqLvk6NiBBvY2u-_BOhsBkjYCfkis5BM1QIBoc";
     
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -978,3 +977,4 @@
 
     init();
 })();
+
