@@ -74,10 +74,6 @@
                 await checkOnlineStatuses();
                 await checkNewMessages();
                 await loadChats();
-                
-                if (currentChatWith) {
-                    await checkMessageReadStatus();
-                }
             }
         }, 1000);
     }
@@ -147,7 +143,7 @@
                 for (const message of newMessages) {
                     if (currentChatWith === message.sender) {
                         addMessageToDisplay(message, false);
-                        await markMessageAsRead(message.id);
+                        await markChatAsRead(message.sender);
                     } else {
                         const count = unreadMessages.get(message.sender) || 0;
                         unreadMessages.set(message.sender, count + 1);
@@ -158,46 +154,6 @@
             }
         } catch (error) {
             console.error('Ошибка проверки сообщений:', error);
-        }
-    }
-
-    async function checkMessageReadStatus() {
-        if (!currentChatWith || !currentUser) return;
-        
-        try {
-            const usernames = [currentUser.username, currentChatWith].sort();
-            const chatId = usernames.join('_');
-            
-            const { data: readMessages } = await supabase
-                .from('private_messages')
-                .select('id')
-                .eq('chat_id', chatId)
-                .eq('sender', currentUser.username)
-                .eq('read', true);
-
-            if (readMessages) {
-                readMessages.forEach(msg => {
-                    updateMessageStatus(msg.id, 'read');
-                });
-            }
-        } catch (error) {
-            console.error('Ошибка проверки прочтения:', error);
-        }
-    }
-
-    function updateMessageStatus(messageId, status) {
-        const messageElement = document.querySelector(`.message[data-message-id="${messageId}"]`);
-        if (messageElement) {
-            const timeEl = messageElement.querySelector('.time');
-            if (timeEl) {
-                const statusSpan = timeEl.querySelector('.message-status');
-                if (statusSpan) {
-                    if (status === 'read') {
-                        statusSpan.textContent = 'Прочитано';
-                        statusSpan.className = 'message-status read';
-                    }
-                }
-            }
         }
     }
 
@@ -487,15 +443,16 @@
             displayMessages(messages || []);
             
             if (messages && messages.length > 0) {
-                const unreadIds = messages
-                    .filter(msg => msg.receiver === currentUser.username && !msg.read)
-                    .map(msg => msg.id);
+                const unreadMessages = messages
+                    .filter(msg => msg.receiver === currentUser.username && !msg.read);
                 
-                if (unreadIds.length > 0) {
+                if (unreadMessages.length > 0) {
                     await supabase
                         .from('private_messages')
                         .update({ read: true })
-                        .in('id', unreadIds);
+                        .eq('chat_id', chatId)
+                        .eq('receiver', currentUser.username)
+                        .eq('read', false);
                 }
             }
         } catch (error) {
@@ -506,7 +463,7 @@
     function addMessageToDisplay(message, isMyMessage) {
         const div = document.createElement('div');
         div.className = `message ${isMyMessage ? 'me' : 'other'}`;
-        div.dataset.messageId = message.id;
+        div.dataset.timestamp = message.created_at;
         
         const date = new Date(message.created_at);
         const time = date.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
@@ -533,7 +490,7 @@
             const div = document.createElement('div');
             const isMyMessage = msg.sender === currentUser.username;
             div.className = `message ${isMyMessage ? 'me' : 'other'}`;
-            div.dataset.messageId = msg.id;
+            div.dataset.timestamp = msg.created_at;
             
             const date = new Date(msg.created_at);
             const time = date.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
@@ -585,6 +542,13 @@
             const usernames = [currentUser.username, currentChatWith].sort();
             const chatId = usernames.join('_');
             
+            console.log('Отправка сообщения:', {
+                chat_id: chatId,
+                sender: currentUser.username,
+                receiver: currentChatWith,
+                message: message
+            });
+            
             const { data, error } = await supabase
                 .from('private_messages')
                 .insert({
@@ -596,7 +560,13 @@
                 })
                 .select();
             
-            if (error) throw error;
+            if (error) {
+                console.error('Ошибка Supabase:', error);
+                alert('Ошибка отправки: ' + error.message);
+                return;
+            }
+            
+            console.log('Сообщение отправлено:', data);
             
             elements.messageInput.value = '';
             
@@ -606,19 +576,8 @@
             }
             
         } catch (error) {
-            console.error('Ошибка отправки:', error);
-            alert('Ошибка отправки сообщения');
-        }
-    }
-
-    async function markMessageAsRead(messageId) {
-        try {
-            await supabase
-                .from('private_messages')
-                .update({ read: true })
-                .eq('id', messageId);
-        } catch (error) {
-            console.error('Ошибка пометки сообщения как прочитанного:', error);
+            console.error('Общая ошибка:', error);
+            alert('Ошибка отправки сообщения: ' + error.message);
         }
     }
 
