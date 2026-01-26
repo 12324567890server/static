@@ -907,31 +907,29 @@
         
         const diff = now - localDate;
         
-        // Если разница отрицательная (дата в будущем) или слишком большая
-        if (diff < 0 || diff > 31536000000) { // больше года
+        if (diff < 0 || diff > 31536000000) {
             return localDate.toLocaleDateString('ru-RU', {
                 day: 'numeric',
                 month: 'short'
             });
         }
         
-        if (diff < 60000) { // меньше минуты
+        if (diff < 60000) {
             return 'Только что';
         }
-        if (diff < 3600000) { // меньше часа
+        if (diff < 3600000) {
             const minutes = Math.floor(diff / 60000);
             return `${minutes} мин`;
         }
-        if (diff < 86400000) { // меньше суток
+        if (diff < 86400000) {
             const hours = Math.floor(diff / 3600000);
             return `${hours} ч`;
         }
-        if (diff < 604800000) { // меньше недели
+        if (diff < 604800000) {
             const days = Math.floor(diff / 86400000);
             return `${days} д`;
         }
         
-        // Больше недели - показываем дату
         return localDate.toLocaleDateString('ru-RU', {
             day: 'numeric',
             month: 'short'
@@ -969,3 +967,4 @@
 
     init();
 })();
+
