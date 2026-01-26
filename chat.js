@@ -57,17 +57,13 @@
     function init() {
         checkUser();
         setupEventListeners();
-        
         window.addEventListener('beforeunload', () => {
-            if (currentUser) {
-                setUserOffline();
-            }
+            if (currentUser) setUserOffline();
         });
     }
 
     function startPolling() {
         if (pollingInterval) clearInterval(pollingInterval);
-        
         pollingInterval = setInterval(async () => {
             if (currentUser) {
                 await updateUserOnline();
@@ -75,18 +71,16 @@
                 await checkNewMessages();
                 await loadChats();
             }
-        }, 1000);
+        }, 3000);
     }
 
     async function updateUserOnline() {
         try {
-            await supabase
-                .from('users')
-                .upsert({
-                    username: currentUser.username,
-                    is_online: true,
-                    last_seen: new Date().toISOString()
-                });
+            await supabase.from('users').upsert({
+                username: currentUser.username,
+                is_online: true,
+                last_seen: new Date().toISOString()
+            });
         } catch (error) {
             console.error('Ошибка обновления онлайн:', error);
         }
@@ -94,13 +88,10 @@
 
     async function setUserOffline() {
         try {
-            await supabase
-                .from('users')
-                .update({
-                    is_online: false,
-                    last_seen: new Date().toISOString()
-                })
-                .eq('username', currentUser.username);
+            await supabase.from('users').update({
+                is_online: false,
+                last_seen: new Date().toISOString()
+            }).eq('username', currentUser.username);
         } catch (error) {
             console.error('Ошибка установки оффлайн:', error);
         }
@@ -108,16 +99,11 @@
 
     async function checkOnlineStatuses() {
         try {
-            const { data: users } = await supabase
-                .from('users')
-                .select('username, is_online')
-                .neq('username', currentUser.username);
-
+            const { data: users } = await supabase.from('users')
+                .select('username, is_online').neq('username', currentUser.username);
             if (users) {
-                users.forEach(user => {
-                    onlineUsers.set(user.username, user.is_online);
-                });
-                
+                onlineUsers.clear();
+                users.forEach(user => onlineUsers.set(user.username, user.is_online));
                 updateChatStatus();
                 updateChatsList();
             }
@@ -128,17 +114,10 @@
 
     async function checkNewMessages() {
         if (!currentUser) return;
-        
         try {
-            const { data: newMessages, error } = await supabase
-                .from('private_messages')
-                .select('*')
-                .eq('receiver', currentUser.username)
-                .eq('read', false)
-                .order('created_at', { ascending: true });
-
-            if (error) throw error;
-
+            const { data: newMessages } = await supabase.from('private_messages')
+                .select('*').eq('receiver', currentUser.username)
+                .eq('read', false).order('created_at', { ascending: true });
             if (newMessages && newMessages.length > 0) {
                 for (const message of newMessages) {
                     if (currentChatWith === message.sender) {
@@ -149,7 +128,6 @@
                         unreadMessages.set(message.sender, count + 1);
                     }
                 }
-                
                 updateUnreadNotifications();
             }
         } catch (error) {
@@ -181,7 +159,6 @@
             clearInterval(pollingInterval);
             pollingInterval = null;
         }
-        
         elements.loginScreen.style.display = 'flex';
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'none';
@@ -208,15 +185,11 @@
         elements.chatScreen.style.display = 'flex';
         closeAllModals();
         hideSideMenu();
-        
         elements.privateMessages.innerHTML = '';
-        
         await loadMessages(username);
         updateChatStatus();
         elements.messageInput.focus();
-        
         await markChatAsRead(username);
-        
         unreadMessages.delete(username);
         updateUnreadNotifications();
     }
@@ -230,129 +203,55 @@
 
     function updateChatStatus() {
         if (!currentChatWith || !elements.chatStatus) return;
-        
         const isUserOnline = onlineUsers.get(currentChatWith);
-        if (isUserOnline) {
-            elements.chatStatus.textContent = 'На связи';
-            elements.chatStatus.style.color = '#b19cd9';
-        } else {
-            elements.chatStatus.textContent = 'Без связи';
-            elements.chatStatus.style.color = 'rgba(255, 255, 255, 0.7)';
-        }
+        elements.chatStatus.textContent = isUserOnline ? 'На связи' : 'Без связи';
+        elements.chatStatus.style.color = isUserOnline ? '#b19cd9' : 'rgba(255, 255, 255, 0.7)';
     }
 
     function setupEventListeners() {
         elements.loginButton.onclick = handleLogin;
-        elements.loginUsername.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleLogin();
-        });
-
-        elements.chatsMenuBtn.onclick = function() {
-            elements.sideMenu.style.display = 'block';
-            setTimeout(() => {
-                elements.sideMenu.classList.add('show');
-            }, 10);
-        };
-
+        elements.loginUsername.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
+        elements.chatsMenuBtn.onclick = function() { elements.sideMenu.style.display = 'block'; setTimeout(() => elements.sideMenu.classList.add('show'), 10); };
         elements.closeMenu.onclick = hideSideMenu;
-
         document.addEventListener('click', function(event) {
-            if (!elements.sideMenu.contains(event.target) && 
-                !elements.chatsMenuBtn.contains(event.target) &&
-                elements.sideMenu.classList.contains('show')) {
+            if (!elements.sideMenu.contains(event.target) && !elements.chatsMenuBtn.contains(event.target) && elements.sideMenu.classList.contains('show')) {
                 hideSideMenu();
             }
         });
-
-        elements.newChatBtn.onclick = function() {
-            elements.newChatUsername.value = '';
-            showModal('newChatModal');
-        };
-
-        elements.backToChats.onclick = function() {
-            showChats();
-        };
-
+        elements.newChatBtn.onclick = function() { elements.newChatUsername.value = ''; showModal('newChatModal'); };
+        elements.backToChats.onclick = function() { showChats(); };
         elements.editProfileBtn.onclick = () => showModal('editProfileModal');
         elements.saveProfileBtn.onclick = handleEditProfile;
-
         elements.findFriendsBtn.onclick = () => showModal('findFriendsModal');
         elements.searchBtn.onclick = handleSearch;
-        elements.searchUsername.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleSearch();
-        });
-
-        elements.searchUsername.addEventListener('input', (e) => {
-            if (e.target.value.trim().length > 0) {
-                handleSearch();
-            } else {
-                elements.searchResults.innerHTML = '';
-            }
-        });
-
-        elements.contactsBtn.onclick = () => {
-            showModal('contactsModal');
-            loadContacts();
-        };
-
+        elements.searchUsername.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearch(); });
+        elements.searchUsername.addEventListener('input', (e) => { if (e.target.value.trim().length > 0) handleSearch(); else elements.searchResults.innerHTML = ''; });
+        elements.contactsBtn.onclick = () => { showModal('contactsModal'); loadContacts(); };
         elements.logoutBtn.onclick = handleLogout;
-
         elements.sendMessageBtn.onclick = handleSendMessage;
-        elements.messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-            }
-        });
-
+        elements.messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } });
         elements.startChatBtn.onclick = handleStartNewChat;
-
-        document.querySelectorAll('.close-modal').forEach(btn => {
-            btn.onclick = (e) => {
-                const modalId = e.target.closest('.close-modal').dataset.modal;
-                hideModal(modalId);
-            };
-        });
-
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.onclick = (e) => {
-                if (e.target === modal) hideModal(modal.id);
-            };
-        });
-
-        if (elements.searchChats) {
-            elements.searchChats.addEventListener('input', function() {
-                filterChats(this.value);
-            });
-        }
+        document.querySelectorAll('.close-modal').forEach(btn => { btn.onclick = (e) => { const modalId = e.target.closest('.close-modal').dataset.modal; hideModal(modalId); }; });
+        document.querySelectorAll('.modal').forEach(modal => { modal.onclick = (e) => { if (e.target === modal) hideModal(modal.id); }; });
+        if (elements.searchChats) elements.searchChats.addEventListener('input', function() { filterChats(this.value); });
     }
 
     function hideSideMenu() {
         elements.sideMenu.classList.remove('show');
-        setTimeout(() => {
-            elements.sideMenu.style.display = 'none';
-        }, 300);
+        setTimeout(() => { elements.sideMenu.style.display = 'none'; }, 300);
     }
 
     async function loadChats() {
         if (!currentUser) return;
-        
         try {
-            const { data: messages, error } = await supabase
-                .from('private_messages')
-                .select('*')
-                .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
+            const { data: messages } = await supabase.from('private_messages')
+                .select('*').or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
                 .order('created_at', { ascending: false });
-
-            if (error) throw error;
-
             const chatMap = new Map();
             unreadMessages.clear();
-            
             if (messages) {
                 for (const msg of messages) {
                     const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
-                    
                     if (!chatMap.has(otherUser)) {
                         chatMap.set(otherUser, {
                             username: otherUser,
@@ -361,17 +260,14 @@
                             isMyMessage: msg.sender === currentUser.username
                         });
                     }
-                    
                     if (msg.receiver === currentUser.username && !msg.read) {
                         const count = unreadMessages.get(otherUser) || 0;
                         unreadMessages.set(otherUser, count + 1);
                     }
                 }
             }
-
             chats = Array.from(chatMap.values());
             displayChats(chats);
-            
             updateUnreadNotifications();
         } catch (error) {
             console.error('Ошибка загрузки чатов:', error);
@@ -380,79 +276,44 @@
 
     function displayChats(chatList) {
         elements.chatsList.innerHTML = '';
-        
         if (chatList.length === 0) {
-            elements.chatsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px 20px;">Нет чатов. Начните новый чат!</div>';
+            elements.chatsList.innerHTML = '<div style="color:rgba(255,255,255,0.5);text-align:center;padding:40px 20px;">Нет чатов. Начните новый чат!</div>';
             return;
         }
-
         chatList.sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
-
         chatList.forEach(chat => {
             const div = document.createElement('div');
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
-            
             const date = new Date(chat.lastTime);
             const time = formatTime(date);
             const unreadCount = unreadMessages.get(chat.username) || 0;
             const isUserOnline = onlineUsers.get(chat.username) || false;
-            
             let lastMessagePrefix = chat.isMyMessage ? 'Вы: ' : '';
             let lastMessage = chat.lastMessage || '';
-            if (lastMessage.length > 25) {
-                lastMessage = lastMessage.substring(0, 25) + '...';
-            }
-            
-            div.innerHTML = `
-                <div class="chat-avatar">${getAvatarLetter(chat.username)}</div>
-                <div class="chat-info">
-                    <div class="chat-name">
-                        ${chat.username}
-                        <span class="chat-status-text ${isUserOnline ? 'online' : ''}">
-                            ${isUserOnline ? 'На связи' : 'Без связи'}
-                        </span>
-                    </div>
-                    <div class="chat-last-message">
-                        ${lastMessagePrefix}${escapeHtml(lastMessage)}
-                    </div>
-                    <div class="chat-time">${time}</div>
-                </div>
-                ${unreadCount > 0 ? `<div class="unread-badge">${unreadCount}</div>` : ''}
-            `;
-            
+            if (lastMessage.length > 25) lastMessage = lastMessage.substring(0, 25) + '...';
+            div.innerHTML = `<div class="chat-avatar">${getAvatarLetter(chat.username)}</div>
+                <div class="chat-info"><div class="chat-name">${chat.username}<span class="chat-status-text ${isUserOnline?'online':''}">${isUserOnline?'На связи':'Без связи'}</span></div>
+                <div class="chat-last-message">${lastMessagePrefix}${escapeHtml(lastMessage)}</div>
+                <div class="chat-time">${time}</div></div>
+                ${unreadCount>0?`<div class="unread-badge">${unreadCount}</div>`:''}`;
             elements.chatsList.appendChild(div);
         });
     }
 
     async function loadMessages(username) {
         if (!username) return;
-        
         try {
             const usernames = [currentUser.username, username].sort();
             const chatId = usernames.join('_');
-            
-            const { data: messages, error } = await supabase
-                .from('private_messages')
-                .select('*')
-                .eq('chat_id', chatId)
-                .order('created_at', { ascending: true });
-            
-            if (error) throw error;
-            
+            const { data: messages } = await supabase.from('private_messages')
+                .select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
             displayMessages(messages || []);
-            
             if (messages && messages.length > 0) {
-                const unreadMessages = messages
-                    .filter(msg => msg.receiver === currentUser.username && !msg.read);
-                
-                if (unreadMessages.length > 0) {
-                    await supabase
-                        .from('private_messages')
-                        .update({ read: true })
-                        .eq('chat_id', chatId)
-                        .eq('receiver', currentUser.username)
-                        .eq('read', false);
+                const unreadMsgs = messages.filter(msg => msg.receiver === currentUser.username && !msg.read);
+                if (unreadMsgs.length > 0) {
+                    await supabase.from('private_messages').update({ read: true })
+                        .eq('chat_id', chatId).eq('receiver', currentUser.username).eq('read', false);
                 }
             }
         } catch (error) {
@@ -462,63 +323,29 @@
 
     function addMessageToDisplay(message, isMyMessage) {
         const div = document.createElement('div');
-        div.className = `message ${isMyMessage ? 'me' : 'other'}`;
-        
+        div.className = `message ${isMyMessage?'me':'other'}`;
         const date = new Date(message.created_at);
-        // Используем локальное время пользователя
-        const time = date.toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        });
-        
+        const time = formatMessageTime(date);
         const status = isMyMessage ? getMessageStatus(message) : '';
-        
-        div.innerHTML = `
-            <div class="message-content">
-                <div class="text">${escapeHtml(message.message)}</div>
-                <div class="time">
-                    ${time}
-                    ${status}
-                </div>
-            </div>
-        `;
-        
+        div.innerHTML = `<div class="message-content"><div class="text">${escapeHtml(message.message)}</div>
+            <div class="time">${time}${status}</div></div>`;
         elements.privateMessages.appendChild(div);
         scrollToBottom();
     }
 
     function displayMessages(messages) {
         elements.privateMessages.innerHTML = '';
-        
         messages.forEach(msg => {
             const div = document.createElement('div');
             const isMyMessage = msg.sender === currentUser.username;
-            div.className = `message ${isMyMessage ? 'me' : 'other'}`;
-            
+            div.className = `message ${isMyMessage?'me':'other'}`;
             const date = new Date(msg.created_at);
-            // Используем локальное время пользователя
-            const time = date.toLocaleTimeString('ru-RU', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            });
-            
+            const time = formatMessageTime(date);
             const status = isMyMessage ? getMessageStatus(msg) : '';
-            
-            div.innerHTML = `
-                <div class="message-content">
-                    <div class="text">${escapeHtml(msg.message)}</div>
-                    <div class="time">
-                        ${time}
-                        ${status}
-                    </div>
-                </div>
-            `;
-            
+            div.innerHTML = `<div class="message-content"><div class="text">${escapeHtml(msg.message)}</div>
+                <div class="time">${time}${status}</div></div>`;
             elements.privateMessages.appendChild(div);
         });
-        
         scrollToBottom();
     }
 
@@ -529,62 +356,41 @@
     }
 
     function scrollToBottom() {
-        setTimeout(() => {
-            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-        }, 100);
+        setTimeout(() => { elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight; }, 100);
     }
 
     function getMessageStatus(msg) {
-        if (msg.read) {
-            return '<span class="message-status read">Прочитано</span>';
-        } else {
-            return '<span class="message-status delivered">Доставлено</span>';
-        }
+        if (msg.read) return '<span class="message-status read">Прочитано</span>';
+        else return '<span class="message-status delivered">Доставлено</span>';
     }
 
     async function handleSendMessage() {
         if (!currentChatWith || !currentUser) return;
-        
         const message = elements.messageInput.value.trim();
         if (!message) return;
-        
         try {
             const usernames = [currentUser.username, currentChatWith].sort();
             const chatId = usernames.join('_');
-            
-            console.log('Отправка сообщения:', {
+            const now = new Date();
+            const { data, error } = await supabase.from('private_messages').insert({
                 chat_id: chatId,
                 sender: currentUser.username,
                 receiver: currentChatWith,
-                message: message
-            });
-            
-            const { data, error } = await supabase
-                .from('private_messages')
-                .insert({
-                    chat_id: chatId,
-                    sender: currentUser.username,
-                    receiver: currentChatWith,
-                    message: message,
-                    read: false
-                })
-                .select();
-            
+                message: message,
+                created_at: now.toISOString(),
+                read: false
+            }).select();
             if (error) {
                 console.error('Ошибка Supabase:', error);
                 alert('Ошибка отправки: ' + error.message);
                 return;
             }
-            
-            console.log('Сообщение отправлено:', data);
-            
             elements.messageInput.value = '';
-            
             if (data && data[0]) {
+                data[0].created_at = now.toISOString();
                 addMessageToDisplay(data[0], true);
                 loadChats();
             }
-            
         } catch (error) {
             console.error('Общая ошибка:', error);
             alert('Ошибка отправки сообщения: ' + error.message);
@@ -593,15 +399,9 @@
 
     async function markChatAsRead(username) {
         if (!username) return;
-        
         try {
-            await supabase
-                .from('private_messages')
-                .update({ read: true })
-                .eq('receiver', currentUser.username)
-                .eq('sender', username)
-                .eq('read', false);
-            
+            await supabase.from('private_messages').update({ read: true })
+                .eq('receiver', currentUser.username).eq('sender', username).eq('read', false);
             unreadMessages.delete(username);
             updateUnreadNotifications();
         } catch (error) {
@@ -611,45 +411,19 @@
 
     function updateUnreadNotifications() {
         let totalUnread = 0;
-        for (const count of unreadMessages.values()) {
-            totalUnread += count;
-        }
-        
-        if (totalUnread > 0) {
-            document.title = `(${totalUnread}) SpeedNexus`;
-        } else {
-            document.title = 'SpeedNexus';
-        }
+        for (const count of unreadMessages.values()) totalUnread += count;
+        document.title = totalUnread > 0 ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
     }
 
     async function handleStartNewChat() {
         const username = elements.newChatUsername.value.trim();
-        
-        if (!username) {
-            showError(elements.newChatError, 'Введите имя пользователя');
-            return;
-        }
-        
-        if (username === currentUser.username) {
-            showError(elements.newChatError, 'Нельзя начать чат с самим собой');
-            return;
-        }
-
+        if (!username) { showError(elements.newChatError, 'Введите имя пользователя'); return; }
+        if (username === currentUser.username) { showError(elements.newChatError, 'Нельзя начать чат с самим собой'); return; }
         try {
-            const { data: existingUser, error } = await supabase
-                .from('users')
-                .select('*')
-                .eq('username', username)
-                .maybeSingle();
-
-            if (error || !existingUser) {
-                showError(elements.newChatError, 'Пользователь не найден');
-                return;
-            }
-
+            const { data: existingUser } = await supabase.from('users').select('*').eq('username', username).maybeSingle();
+            if (!existingUser) { showError(elements.newChatError, 'Пользователь не найден'); return; }
             hideModal('newChatModal');
             showChat(username);
-            
         } catch (error) {
             console.error('Ошибка:', error);
             showError(elements.newChatError, 'Ошибка поиска пользователя');
@@ -658,37 +432,15 @@
 
     async function handleLogin() {
         const username = elements.loginUsername.value.trim();
-        
-        if (!username) {
-            showError(elements.loginError, 'Введите имя пользователя');
-            return;
-        }
-        
-        if (username.length < 3) {
-            showError(elements.loginError, 'Имя должно быть не менее 3 символов');
-            return;
-        }
-
+        if (!username) { showError(elements.loginError, 'Введите имя пользователя'); return; }
+        if (username.length < 3) { showError(elements.loginError, 'Имя должно быть не менее 3 символов'); return; }
         try {
-            currentUser = {
-                username: username,
-                createdAt: new Date().toISOString()
-            };
-            
+            currentUser = { username: username, createdAt: new Date().toISOString() };
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            
-            await supabase
-                .from('users')
-                .upsert({
-                    username: username,
-                    is_online: true,
-                    last_seen: new Date().toISOString()
-                });
-
+            await supabase.from('users').upsert({ username: username, is_online: true, last_seen: new Date().toISOString() });
             showChats();
             updateUserDisplay();
             startPolling();
-            
         } catch (error) {
             console.error('Ошибка регистрации:', error);
             showError(elements.loginError, 'Ошибка входа');
@@ -697,48 +449,19 @@
 
     async function handleEditProfile() {
         const newUsername = elements.editUsername.value.trim();
-        
-        if (!newUsername) {
-            showError(elements.editUsernameError, 'Введите новое имя');
-            return;
-        }
-        
-        if (newUsername === currentUser.username) {
-            hideModal('editProfileModal');
-            return;
-        }
-
+        if (!newUsername) { showError(elements.editUsernameError, 'Введите новое имя'); return; }
+        if (newUsername === currentUser.username) { hideModal('editProfileModal'); return; }
         try {
-            const { data: existingUser } = await supabase
-                .from('users')
-                .select('*')
-                .eq('username', newUsername)
-                .maybeSingle();
-
-            if (existingUser) {
-                showError(elements.editUsernameError, 'Этот никнейм уже используется');
-                return;
-            }
-
-            await supabase
-                .from('users')
-                .upsert({
-                    username: newUsername,
-                    is_online: true,
-                    last_seen: new Date().toISOString()
-                });
-
+            const { data: existingUser } = await supabase.from('users').select('*').eq('username', newUsername).maybeSingle();
+            if (existingUser) { showError(elements.editUsernameError, 'Этот никнейм уже используется'); return; }
+            await supabase.from('users').upsert({ username: newUsername, is_online: true, last_seen: new Date().toISOString() });
             currentUser.username = newUsername;
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            
             updateUserDisplay();
             hideModal('editProfileModal');
             elements.chatsTitle.textContent = 'Чаты (' + newUsername + ')';
-            
             loadChats();
-            if (currentChatWith) {
-                showChat(currentChatWith);
-            }
+            if (currentChatWith) showChat(currentChatWith);
         } catch (error) {
             console.error('Ошибка изменения имени:', error);
             showError(elements.editUsernameError, 'Ошибка изменения имени');
@@ -747,20 +470,11 @@
 
     async function handleSearch() {
         const searchTerm = elements.searchUsername.value.trim();
-        
-        if (!searchTerm) {
-            showSearchResults([]);
-            return;
-        }
-
+        if (!searchTerm) { showSearchResults([]); return; }
         try {
-            const { data: users } = await supabase
-                .from('users')
-                .select('username, is_online')
-                .ilike('username', `%${searchTerm}%`)
-                .neq('username', currentUser.username)
-                .limit(10);
-
+            const { data: users } = await supabase.from('users')
+                .select('username, is_online').ilike('username', `%${searchTerm}%`)
+                .neq('username', currentUser.username).limit(10);
             showSearchResults(users || []);
         } catch (error) {
             console.error('Ошибка поиска:', error);
@@ -769,52 +483,27 @@
 
     function showSearchResults(users) {
         elements.searchResults.innerHTML = '';
-        
         if (users.length === 0) {
-            elements.searchResults.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center;">Пользователи не найдены</p>';
+            elements.searchResults.innerHTML = '<p style="color:rgba(255,255,255,0.5);text-align:center;">Пользователи не найдены</p>';
             return;
         }
-
         users.forEach(user => {
             const div = document.createElement('div');
             div.className = 'user-result';
-            div.onclick = () => {
-                hideModal('findFriendsModal');
-                showChat(user.username);
-            };
-            
-            div.innerHTML = `
-                <div class="user-result-info">
-                    <div class="user-result-avatar">${getAvatarLetter(user.username)}</div>
-                    <div>
-                        <div class="user-result-name">${user.username}</div>
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
-                            ${user.is_online ? 'На связи' : 'Без связи'}
-                        </div>
-                    </div>
-                </div>
-            `;
-            
+            div.onclick = () => { hideModal('findFriendsModal'); showChat(user.username); };
+            div.innerHTML = `<div class="user-result-info"><div class="user-result-avatar">${getAvatarLetter(user.username)}</div>
+                <div><div class="user-result-name">${user.username}</div><div style="color:rgba(255,255,255,0.7);font-size:12px;">
+                ${user.is_online?'На связи':'Без связи'}</div></div></div>`;
             elements.searchResults.appendChild(div);
         });
     }
 
-    function getContacts() {
-        const contacts = localStorage.getItem('speednexus_contacts');
-        return contacts ? JSON.parse(contacts) : [];
-    }
-
-    function saveContacts(contacts) {
-        localStorage.setItem('speednexus_contacts', JSON.stringify(contacts));
-    }
-
+    function getContacts() { const contacts = localStorage.getItem('speednexus_contacts'); return contacts ? JSON.parse(contacts) : []; }
+    function saveContacts(contacts) { localStorage.setItem('speednexus_contacts', JSON.stringify(contacts)); }
     function addToContacts(username) {
         const contacts = getContacts();
         if (!contacts.some(c => c.username === username)) {
-            contacts.push({
-                username: username,
-                addedAt: new Date().toISOString()
-            });
+            contacts.push({ username: username, addedAt: new Date().toISOString() });
             saveContacts(contacts);
         }
     }
@@ -822,34 +511,18 @@
     function loadContacts() {
         const contacts = getContacts();
         elements.contactsList.innerHTML = '';
-        
         if (contacts.length === 0) {
-            elements.contactsList.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center;">Контакты не найдены</p>';
+            elements.contactsList.innerHTML = '<p style="color:rgba(255,255,255,0.5);text-align:center;">Контакты не найдены</p>';
             return;
         }
-
         contacts.forEach(contact => {
             const div = document.createElement('div');
             div.className = 'contact-item';
-            div.onclick = () => {
-                hideModal('contactsModal');
-                showChat(contact.username);
-            };
-            
+            div.onclick = () => { hideModal('contactsModal'); showChat(contact.username); };
             const isUserOnline = onlineUsers.get(contact.username) || false;
-            
-            div.innerHTML = `
-                <div class="contact-info">
-                    <div class="contact-avatar">${getAvatarLetter(contact.username)}</div>
-                    <div>
-                        <div class="contact-name">${contact.username}</div>
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
-                            ${isUserOnline ? 'На связи' : 'Без связи'}
-                        </div>
-                    </div>
-                </div>
-            `;
-            
+            div.innerHTML = `<div class="contact-info"><div class="contact-avatar">${getAvatarLetter(contact.username)}</div>
+                <div><div class="contact-name">${contact.username}</div><div style="color:rgba(255,255,255,0.7);font-size:12px;">
+                ${isUserOnline?'На связи':'Без связи'}</div></div></div>`;
             elements.contactsList.appendChild(div);
         });
     }
@@ -858,93 +531,43 @@
         if (confirm('Вы уверены, что хотите выйти?')) {
             await setUserOffline();
             localStorage.removeItem('speednexus_user');
-            
             currentUser = null;
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-                pollingInterval = null;
-            }
+            if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
             showLogin();
             elements.loginUsername.value = '';
         }
     }
 
-    function showModal(modalId) {
-        document.getElementById(modalId).style.display = 'flex';
-        hideSideMenu();
-    }
-
-    function hideModal(modalId) {
-        document.getElementById(modalId).style.display = 'none';
-    }
-
-    function closeAllModals() {
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.style.display = 'none';
-        });
-    }
-
-    function showError(element, message) {
-        element.textContent = message;
-        element.style.display = 'block';
-        setTimeout(() => element.style.display = 'none', 3000);
-    }
-
-    function getAvatarLetter(username) {
-        return username.charAt(0).toUpperCase();
-    }
+    function showModal(modalId) { document.getElementById(modalId).style.display = 'flex'; hideSideMenu(); }
+    function hideModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+    function closeAllModals() { document.querySelectorAll('.modal').forEach(modal => modal.style.display = 'none'); }
+    function showError(element, message) { element.textContent = message; element.style.display = 'block'; setTimeout(() => element.style.display = 'none', 3000); }
+    function getAvatarLetter(username) { return username.charAt(0).toUpperCase(); }
 
     function formatTime(date) {
         if (!date) return '';
-        
         const localDate = new Date(date);
+        if (isNaN(localDate.getTime())) return '';
         const now = new Date();
-        
-        // Проверка на валидность даты
-        if (isNaN(localDate.getTime())) {
-            return '';
-        }
-        
         const diff = now - localDate;
-        
-        if (diff < 0 || diff > 31536000000) {
-            return localDate.toLocaleDateString('ru-RU', {
-                day: 'numeric',
-                month: 'short'
-            });
-        }
-        
-        if (diff < 60000) {
-            return 'Только что';
-        }
-        if (diff < 3600000) {
-            const minutes = Math.floor(diff / 60000);
-            return `${minutes} мин`;
-        }
-        if (diff < 86400000) {
-            const hours = Math.floor(diff / 3600000);
-            return `${hours} ч`;
-        }
-        if (diff < 604800000) {
-            const days = Math.floor(diff / 86400000);
-            return `${days} д`;
-        }
-        
-        return localDate.toLocaleDateString('ru-RU', {
-            day: 'numeric',
-            month: 'short'
-        });
+        if (diff < 0) return localDate.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
+        if (diff < 60000) return 'Только что';
+        if (diff < 3600000) return Math.floor(diff / 60000) + ' мин';
+        if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч';
+        if (diff < 604800000) return Math.floor(diff / 86400000) + ' д';
+        return localDate.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
+    }
+
+    function formatMessageTime(date) {
+        if (!date) return '';
+        const localDate = new Date(date);
+        if (isNaN(localDate.getTime())) return '';
+        return localDate.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', hour12:false });
     }
 
     function filterChats(searchTerm) {
-        if (!searchTerm) {
-            displayChats(chats);
-            return;
-        }
-        
-        const filtered = chats.filter(chat => 
-            chat.username.toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        if (!searchTerm) { displayChats(chats); return; }
+        const filtered = chats.filter(chat => chat.username.toLowerCase().includes(searchTerm.toLowerCase()));
         displayChats(filtered);
     }
 
@@ -955,11 +578,10 @@
             if (usernameElement) {
                 const username = usernameElement.textContent.replace(/На связи|Без связи/g, '').trim();
                 const isUserOnline = onlineUsers.get(username) || false;
-                
                 const statusText = item.querySelector('.chat-status-text');
                 if (statusText) {
                     statusText.textContent = isUserOnline ? 'На связи' : 'Без связи';
-                    statusText.className = `chat-status-text ${isUserOnline ? 'online' : ''}`;
+                    statusText.className = `chat-status-text ${isUserOnline?'online':''}`;
                 }
             }
         });
@@ -967,4 +589,3 @@
 
     init();
 })();
-
