@@ -463,10 +463,15 @@
     function addMessageToDisplay(message, isMyMessage) {
         const div = document.createElement('div');
         div.className = `message ${isMyMessage ? 'me' : 'other'}`;
-        div.dataset.timestamp = message.created_at;
         
         const date = new Date(message.created_at);
-        const time = date.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+        // Используем локальное время пользователя
+        const time = date.toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        
         const status = isMyMessage ? getMessageStatus(message) : '';
         
         div.innerHTML = `
@@ -490,10 +495,15 @@
             const div = document.createElement('div');
             const isMyMessage = msg.sender === currentUser.username;
             div.className = `message ${isMyMessage ? 'me' : 'other'}`;
-            div.dataset.timestamp = msg.created_at;
             
             const date = new Date(msg.created_at);
-            const time = date.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+            // Используем локальное время пользователя
+            const time = date.toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
             const status = isMyMessage ? getMessageStatus(msg) : '';
             
             div.innerHTML = `
@@ -885,22 +895,44 @@
     }
 
     function formatTime(date) {
-        const now = new Date();
-        const diff = now - date;
+        if (!date) return '';
         
-        if (diff < 60000) {
+        const localDate = new Date(date);
+        const now = new Date();
+        
+        // Проверка на валидность даты
+        if (isNaN(localDate.getTime())) {
+            return '';
+        }
+        
+        const diff = now - localDate;
+        
+        // Если разница отрицательная (дата в будущем) или слишком большая
+        if (diff < 0 || diff > 31536000000) { // больше года
+            return localDate.toLocaleDateString('ru-RU', {
+                day: 'numeric',
+                month: 'short'
+            });
+        }
+        
+        if (diff < 60000) { // меньше минуты
             return 'Только что';
         }
-        if (diff < 3600000) {
+        if (diff < 3600000) { // меньше часа
             const minutes = Math.floor(diff / 60000);
             return `${minutes} мин`;
         }
-        if (diff < 86400000) {
+        if (diff < 86400000) { // меньше суток
             const hours = Math.floor(diff / 3600000);
             return `${hours} ч`;
         }
+        if (diff < 604800000) { // меньше недели
+            const days = Math.floor(diff / 86400000);
+            return `${days} д`;
+        }
         
-        return date.toLocaleDateString('ru-RU', {
+        // Больше недели - показываем дату
+        return localDate.toLocaleDateString('ru-RU', {
             day: 'numeric',
             month: 'short'
         });
