@@ -52,66 +52,237 @@
     let chats = [];
     let unreadMessages = new Map();
     let onlineUsers = new Map();
-    let pollingInterval = null;
+    let userStatusSubscription = null;
+    let messagesSubscription = null;
+    let isOnline = true;
+    let onlineCheckInterval = null;
+    let typingTimeout = null;
+    let usersTyping = new Set();
 
     function init() {
         checkUser();
         setupEventListeners();
+        setupNetworkListeners();
         
-        window.addEventListener('beforeunload', () => {
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('pagehide', handleBeforeUnload);
+    }
+
+    function setupNetworkListeners() {
+        window.addEventListener('online', () => {
+            isOnline = true;
+            console.log('Сеть восстановлена');
             if (currentUser) {
-                setUserOffline();
+                updateUserOnline();
+                setupSubscriptions();
             }
+        });
+
+        window.addEventListener('offline', () => {
+            isOnline = false;
+            console.log('Нет сети');
+            updateUserOfflineStatus();
         });
     }
 
-    function startPolling() {
-        if (pollingInterval) clearInterval(pollingInterval);
-        
-        pollingInterval = setInterval(async () => {
-            if (currentUser) {
-                await updateUserOnline();
-                await checkOnlineStatuses();
-                await checkNewMessages();
-                await loadChats();
-            }
-        }, 1000);
+    function handleBeforeUnload() {
+        if (currentUser) {
+            updateUserOffline();
+        }
     }
 
     async function updateUserOnline() {
         try {
-            await supabase
+            const { error } = await supabase
                 .from('users')
                 .upsert({
                     username: currentUser.username,
                     is_online: true,
-                    last_seen: new Date().toISOString()
+                    last_seen: new Date().toISOString(),
+                    online_at: new Date().toISOString()
+                }, {
+                    onConflict: 'username'
                 });
+
+            if (error) throw error;
+            
+            elements.userStatusText.textContent = 'в сети';
+            elements.userStatusText.style.color = '#b19cd9';
+            
         } catch (error) {
-            console.error('Ошибка обновления онлайн:', error);
+            console.error('Ошибка обновления онлайн статуса:', error);
         }
     }
 
-    async function setUserOffline() {
+    async function updateUserOffline() {
         try {
-            await supabase
-                .from('users')
-                .update({
+            await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${encodeURIComponent(currentUser.username)}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({
                     is_online: false,
                     last_seen: new Date().toISOString()
-                })
-                .eq('username', currentUser.username);
+                }),
+                keepalive: true
+            });
         } catch (error) {
             console.error('Ошибка установки оффлайн:', error);
         }
     }
 
+    function updateUserOfflineStatus() {
+        elements.userStatusText.textContent = 'нет сети';
+        elements.userStatusText.style.color = '#ff6b6b';
+        
+        const chatItems = elements.chatsList.querySelectorAll('.chat-item');
+        chatItems.forEach(item => {
+            const statusText = item.querySelector('.chat-status-text');
+            if (statusText) {
+                statusText.textContent = 'нет сети';
+                statusText.className = 'chat-status-text offline';
+            }
+        });
+    }
+
+    function setupSubscriptions() {
+        setupUserStatusSubscription();
+        setupMessagesSubscription();
+        startOnlineCheck();
+    }
+
+    function setupUserStatusSubscription() {
+        if (userStatusSubscription) {
+            supabase.removeChannel(userStatusSubscription);
+        }
+
+        userStatusSubscription = supabase
+            .channel('online_users')
+            .on('postgres_changes', 
+                { 
+                    event: '*', 
+                    schema: 'public', 
+                    table: 'users',
+                    filter: `username=neq.${currentUser.username}`
+                }, 
+                (payload) => {
+                    handleUserStatusUpdate(payload);
+                }
+            )
+            .on('presence', { event: 'sync' }, () => {
+                const state = userStatusSubscription.presenceState();
+                console.log('Presence state:', state);
+            })
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('Подписался на статусы пользователей');
+                }
+            });
+    }
+
+    function handleUserStatusUpdate(payload) {
+        const user = payload.new || payload.old;
+        if (!user) return;
+
+        const username = user.username;
+        const isOnline = user.is_online;
+        
+        onlineUsers.set(username, isOnline);
+        
+        updateChatStatus();
+        updateChatsList();
+        
+        if (currentChatWith === username) {
+            showStatusNotification(username, isOnline);
+        }
+    }
+
+    function showStatusNotification(username, isOnline) {
+        const notification = document.createElement('div');
+        notification.className = 'status-notification';
+        notification.textContent = `${username} ${isOnline ? 'в сети' : 'вышел из сети'}`;
+        notification.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: ${isOnline ? '#4CAF50' : '#ff6b6b'};
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+
+    function setupMessagesSubscription() {
+        if (messagesSubscription) {
+            supabase.removeChannel(messagesSubscription);
+        }
+
+        messagesSubscription = supabase
+            .channel('private_messages')
+            .on('postgres_changes', 
+                { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'private_messages',
+                    filter: `receiver=eq.${currentUser.username}`
+                }, 
+                (payload) => {
+                    handleNewMessage(payload.new);
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('Подписался на сообщения');
+                }
+            });
+    }
+
+    function startOnlineCheck() {
+        if (onlineCheckInterval) clearInterval(onlineCheckInterval);
+        
+        onlineCheckInterval = setInterval(async () => {
+            if (!currentUser || !isOnline) return;
+            
+            await updateUserOnline();
+            await checkOnlineStatuses();
+        }, 15000);
+    }
+
     async function checkOnlineStatuses() {
         try {
-            const { data: users } = await supabase
+            const usernamesToCheck = new Set();
+            
+            if (currentChatWith) {
+                usernamesToCheck.add(currentChatWith);
+            }
+            
+            chats.forEach(chat => {
+                usernamesToCheck.add(chat.username);
+            });
+            
+            const usernamesArray = Array.from(usernamesToCheck);
+            
+            if (usernamesArray.length === 0) return;
+            
+            const { data: users, error } = await supabase
                 .from('users')
-                .select('username, is_online')
-                .neq('username', currentUser.username);
+                .select('username, is_online, last_seen')
+                .in('username', usernamesArray);
+
+            if (error) throw error;
 
             if (users) {
                 users.forEach(user => {
@@ -126,35 +297,36 @@
         }
     }
 
-    async function checkNewMessages() {
-        if (!currentUser) return;
+    function handleNewMessage(message) {
+        if (message.receiver !== currentUser.username) return;
         
-        try {
-            const { data: newMessages, error } = await supabase
-                .from('private_messages')
-                .select('*')
-                .eq('receiver', currentUser.username)
-                .eq('read', false)
-                .order('created_at', { ascending: true });
-
-            if (error) throw error;
-
-            if (newMessages && newMessages.length > 0) {
-                for (const message of newMessages) {
-                    if (currentChatWith === message.sender) {
-                        addMessageToDisplay(message, false);
-                        await markChatAsRead(message.sender);
-                    } else {
-                        const count = unreadMessages.get(message.sender) || 0;
-                        unreadMessages.set(message.sender, count + 1);
-                    }
-                }
-                
-                updateUnreadNotifications();
+        if (currentChatWith === message.sender) {
+            addMessageToDisplay(message, false);
+            markChatAsRead(message.sender);
+        } else {
+            const count = unreadMessages.get(message.sender) || 0;
+            unreadMessages.set(message.sender, count + 1);
+            updateUnreadNotifications();
+            loadChats();
+            
+            if (Notification.permission === 'granted' && document.hidden) {
+                showDesktopNotification(message);
             }
-        } catch (error) {
-            console.error('Ошибка проверки сообщений:', error);
         }
+    }
+
+    function showDesktopNotification(message) {
+        const notification = new Notification('Новое сообщение', {
+            body: `${message.sender}: ${message.message.substring(0, 50)}...`,
+            icon: 'https://cdn-icons-png.flaticon.com/512/733/733585.png',
+            tag: 'message'
+        });
+
+        notification.onclick = function() {
+            window.focus();
+            showChat(message.sender);
+            notification.close();
+        };
     }
 
     function checkUser() {
@@ -164,9 +336,13 @@
                 currentUser = JSON.parse(savedUser);
                 showChats();
                 updateUserDisplay();
-                startPolling();
+                setupSubscriptions();
                 loadChats();
                 checkOnlineStatuses();
+                
+                if (Notification.permission === 'default') {
+                    Notification.requestPermission();
+                }
             } catch (e) {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -177,9 +353,17 @@
     }
 
     function showLogin() {
-        if (pollingInterval) {
-            clearInterval(pollingInterval);
-            pollingInterval = null;
+        if (userStatusSubscription) {
+            supabase.removeChannel(userStatusSubscription);
+            userStatusSubscription = null;
+        }
+        if (messagesSubscription) {
+            supabase.removeChannel(messagesSubscription);
+            messagesSubscription = null;
+        }
+        if (onlineCheckInterval) {
+            clearInterval(onlineCheckInterval);
+            onlineCheckInterval = null;
         }
         
         elements.loginScreen.style.display = 'flex';
@@ -225,6 +409,8 @@
         if (currentUser) {
             elements.currentUsernameDisplay.textContent = currentUser.username;
             elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
+            elements.userStatusText.textContent = 'в сети';
+            elements.userStatusText.style.color = '#b19cd9';
         }
     }
 
@@ -282,12 +468,21 @@
             if (e.key === 'Enter') handleSearch();
         });
 
+        let searchTimeout;
         elements.searchUsername.addEventListener('input', (e) => {
-            if (e.target.value.trim().length > 0) {
-                handleSearch();
-            } else {
+            clearTimeout(searchTimeout);
+            const searchTerm = e.target.value.trim();
+            
+            if (searchTerm.length === 0) {
                 elements.searchResults.innerHTML = '';
+                return;
             }
+            
+            if (searchTerm.length < 2) return;
+            
+            searchTimeout = setTimeout(() => {
+                handleSearch();
+            }, 300);
         });
 
         elements.contactsBtn.onclick = () => {
@@ -305,6 +500,8 @@
             }
         });
 
+        elements.messageInput.addEventListener('input', handleTyping);
+
         elements.startChatBtn.onclick = handleStartNewChat;
 
         document.querySelectorAll('.close-modal').forEach(btn => {
@@ -321,10 +518,33 @@
         });
 
         if (elements.searchChats) {
+            let chatSearchTimeout;
             elements.searchChats.addEventListener('input', function() {
-                filterChats(this.value);
+                clearTimeout(chatSearchTimeout);
+                const searchTerm = this.value;
+                chatSearchTimeout = setTimeout(() => {
+                    filterChats(searchTerm);
+                }, 200);
             });
         }
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && currentChatWith) {
+                markChatAsRead(currentChatWith);
+            }
+        });
+    }
+
+    function handleTyping() {
+        if (!currentChatWith || typingTimeout) return;
+        
+        elements.chatStatus.textContent = 'печатает...';
+        elements.chatStatus.style.color = '#b19cd9';
+        
+        typingTimeout = setTimeout(() => {
+            elements.chatStatus.textContent = 'На связи';
+            typingTimeout = null;
+        }, 1000);
     }
 
     function hideSideMenu() {
@@ -342,7 +562,8 @@
                 .from('private_messages')
                 .select('*')
                 .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(50);
 
             if (error) throw error;
 
@@ -375,6 +596,7 @@
             updateUnreadNotifications();
         } catch (error) {
             console.error('Ошибка загрузки чатов:', error);
+            showError('Ошибка загрузки чатов');
         }
     }
 
@@ -382,7 +604,7 @@
         elements.chatsList.innerHTML = '';
         
         if (chatList.length === 0) {
-            elements.chatsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px 20px;">Нет чатов. Начните новый чат!</div>';
+            elements.chatsList.innerHTML = '<div class="empty-state">Нет чатов. Начните новый чат!</div>';
             return;
         }
 
@@ -405,10 +627,10 @@
             }
             
             div.innerHTML = `
-                <div class="chat-avatar">${getAvatarLetter(chat.username)}</div>
+                <div class="chat-avatar ${isUserOnline ? 'online' : ''}">${getAvatarLetter(chat.username)}</div>
                 <div class="chat-info">
                     <div class="chat-name">
-                        ${chat.username}
+                        ${escapeHtml(chat.username)}
                         <span class="chat-status-text ${isUserOnline ? 'online' : ''}">
                             ${isUserOnline ? 'На связи' : 'Без связи'}
                         </span>
@@ -436,7 +658,8 @@
                 .from('private_messages')
                 .select('*')
                 .eq('chat_id', chatId)
-                .order('created_at', { ascending: true });
+                .order('created_at', { ascending: true })
+                .limit(100);
             
             if (error) throw error;
             
@@ -456,10 +679,14 @@
             }
         } catch (error) {
             console.error('Ошибка загрузки сообщений:', error);
+            showError('Ошибка загрузки сообщений');
         }
     }
 
     function addMessageToDisplay(message, isMyMessage) {
+        const existingMessage = document.querySelector(`[data-message-id="${message.id}"]`);
+        if (existingMessage) return;
+        
         const div = document.createElement('div');
         div.className = `message ${isMyMessage ? 'me' : 'other'}`;
         div.dataset.messageId = message.id;
@@ -512,6 +739,7 @@
     }
 
     function escapeHtml(text) {
+        if (!text) return '';
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
@@ -525,9 +753,9 @@
 
     function getMessageStatus(msg) {
         if (msg.read) {
-            return '<span class="message-status read">Прочитано</span>';
+            return '<span class="message-status read">✓✓</span>';
         } else {
-            return '<span class="message-status delivered">Доставлено</span>';
+            return '<span class="message-status delivered">✓</span>';
         }
     }
 
@@ -563,7 +791,7 @@
             
         } catch (error) {
             console.error('Ошибка отправки:', error);
-            alert('Ошибка отправки сообщения');
+            showError('Ошибка отправки сообщения');
         }
     }
 
@@ -618,7 +846,9 @@
                 .eq('username', username)
                 .maybeSingle();
 
-            if (error || !existingUser) {
+            if (error) throw error;
+
+            if (!existingUser) {
                 showError(elements.newChatError, 'Пользователь не найден');
                 return;
             }
@@ -658,12 +888,15 @@
                 .upsert({
                     username: username,
                     is_online: true,
-                    last_seen: new Date().toISOString()
+                    last_seen: new Date().toISOString(),
+                    online_at: new Date().toISOString()
+                }, {
+                    onConflict: 'username'
                 });
 
             showChats();
             updateUserDisplay();
-            startPolling();
+            setupSubscriptions();
             
         } catch (error) {
             console.error('Ошибка регистрации:', error);
@@ -685,23 +918,30 @@
         }
 
         try {
-            const { data: existingUser } = await supabase
+            const { data: existingUser, error } = await supabase
                 .from('users')
                 .select('*')
                 .eq('username', newUsername)
                 .maybeSingle();
+
+            if (error) throw error;
 
             if (existingUser) {
                 showError(elements.editUsernameError, 'Этот никнейм уже используется');
                 return;
             }
 
+            await updateUserOffline();
+            
             await supabase
                 .from('users')
                 .upsert({
                     username: newUsername,
                     is_online: true,
-                    last_seen: new Date().toISOString()
+                    last_seen: new Date().toISOString(),
+                    online_at: new Date().toISOString()
+                }, {
+                    onConflict: 'username'
                 });
 
             currentUser.username = newUsername;
@@ -724,18 +964,20 @@
     async function handleSearch() {
         const searchTerm = elements.searchUsername.value.trim();
         
-        if (!searchTerm) {
+        if (!searchTerm || searchTerm.length < 2) {
             showSearchResults([]);
             return;
         }
 
         try {
-            const { data: users } = await supabase
+            const { data: users, error } = await supabase
                 .from('users')
                 .select('username, is_online')
                 .ilike('username', `%${searchTerm}%`)
                 .neq('username', currentUser.username)
                 .limit(10);
+
+            if (error) throw error;
 
             showSearchResults(users || []);
         } catch (error) {
@@ -747,7 +989,7 @@
         elements.searchResults.innerHTML = '';
         
         if (users.length === 0) {
-            elements.searchResults.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center;">Пользователи не найдены</p>';
+            elements.searchResults.innerHTML = '<p class="no-results">Пользователи не найдены</p>';
             return;
         }
 
@@ -761,10 +1003,10 @@
             
             div.innerHTML = `
                 <div class="user-result-info">
-                    <div class="user-result-avatar">${getAvatarLetter(user.username)}</div>
+                    <div class="user-result-avatar ${user.is_online ? 'online' : ''}">${getAvatarLetter(user.username)}</div>
                     <div>
-                        <div class="user-result-name">${user.username}</div>
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
+                        <div class="user-result-name">${escapeHtml(user.username)}</div>
+                        <div class="user-result-status">
                             ${user.is_online ? 'На связи' : 'Без связи'}
                         </div>
                     </div>
@@ -800,7 +1042,7 @@
         elements.contactsList.innerHTML = '';
         
         if (contacts.length === 0) {
-            elements.contactsList.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center;">Контакты не найдены</p>';
+            elements.contactsList.innerHTML = '<p class="no-contacts">Контакты не найдены</p>';
             return;
         }
 
@@ -816,10 +1058,10 @@
             
             div.innerHTML = `
                 <div class="contact-info">
-                    <div class="contact-avatar">${getAvatarLetter(contact.username)}</div>
+                    <div class="contact-avatar ${isUserOnline ? 'online' : ''}">${getAvatarLetter(contact.username)}</div>
                     <div>
-                        <div class="contact-name">${contact.username}</div>
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">
+                        <div class="contact-name">${escapeHtml(contact.username)}</div>
+                        <div class="contact-status">
                             ${isUserOnline ? 'На связи' : 'Без связи'}
                         </div>
                     </div>
@@ -832,14 +1074,23 @@
 
     async function handleLogout() {
         if (confirm('Вы уверены, что хотите выйти?')) {
-            await setUserOffline();
+            await updateUserOffline();
             localStorage.removeItem('speednexus_user');
             
-            currentUser = null;
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-                pollingInterval = null;
+            if (userStatusSubscription) {
+                supabase.removeChannel(userStatusSubscription);
+                userStatusSubscription = null;
             }
+            if (messagesSubscription) {
+                supabase.removeChannel(messagesSubscription);
+                messagesSubscription = null;
+            }
+            if (onlineCheckInterval) {
+                clearInterval(onlineCheckInterval);
+                onlineCheckInterval = null;
+            }
+            
+            currentUser = null;
             showLogin();
             elements.loginUsername.value = '';
         }
@@ -847,20 +1098,27 @@
 
     function showModal(modalId) {
         document.getElementById(modalId).style.display = 'flex';
+        document.body.style.overflow = 'hidden';
         hideSideMenu();
     }
 
     function hideModal(modalId) {
         document.getElementById(modalId).style.display = 'none';
+        document.body.style.overflow = '';
     }
 
     function closeAllModals() {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.style.display = 'none';
         });
+        document.body.style.overflow = '';
     }
 
     function showError(element, message) {
+        if (typeof element === 'string') {
+            console.error(element);
+            return;
+        }
         element.textContent = message;
         element.style.display = 'block';
         setTimeout(() => element.style.display = 'none', 3000);
@@ -875,7 +1133,7 @@
         const diff = now - date;
         
         if (diff < 60000) {
-            return 'Только что';
+            return 'только что';
         }
         if (diff < 3600000) {
             const minutes = Math.floor(diff / 60000);
@@ -909,8 +1167,14 @@
         chatItems.forEach(item => {
             const usernameElement = item.querySelector('.chat-name');
             if (usernameElement) {
-                const username = usernameElement.textContent.replace(/На связи|Без связи/g, '').trim();
+                const text = usernameElement.textContent;
+                const username = text.replace(/На связи|Без связи/g, '').trim();
                 const isUserOnline = onlineUsers.get(username) || false;
+                
+                const avatar = item.querySelector('.chat-avatar');
+                if (avatar) {
+                    avatar.className = `chat-avatar ${isUserOnline ? 'online' : ''}`;
+                }
                 
                 const statusText = item.querySelector('.chat-status-text');
                 if (statusText) {
@@ -922,4 +1186,14 @@
     }
 
     init();
+
+    window.addEventListener('load', () => {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(() => {
+                console.log('Service Worker зарегистрирован');
+            }).catch(err => {
+                console.log('Service Worker ошибка:', err);
+            });
+        }
+    });
 })();
