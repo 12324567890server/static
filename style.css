@@ -164,6 +164,10 @@ body {
     background: rgba(177, 156, 217, 0.2);
 }
 
+.chat-item:hover {
+    background: rgba(177, 156, 217, 0.1);
+}
+
 .chat-avatar {
     width: 50px;
     height: 50px;
@@ -177,6 +181,19 @@ body {
     color: white;
     margin-right: 15px;
     flex-shrink: 0;
+    position: relative;
+}
+
+.chat-avatar.online::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    background: #4CAF50;
+    border: 2px solid #2d1b69;
+    border-radius: 50%;
 }
 
 .chat-info {
@@ -202,6 +219,10 @@ body {
 .chat-status-text.online {
     color: #b19cd9;
     font-weight: 500;
+}
+
+.chat-status-text.offline {
+    color: #ff6b6b;
 }
 
 .chat-last-message {
@@ -393,28 +414,16 @@ body {
 }
 
 .message-status {
-    font-size: 10px;
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 600;
-}
-
-.message-status.sent {
-    background: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.message-status.delivered {
-    background: rgba(177, 156, 217, 0.3);
-    color: #d0c2e9;
+    font-size: 12px;
+    opacity: 0.8;
 }
 
 .message-status.read {
-    background: #ffffff;
-    color: #6a0dad;
-    border: 1px solid rgba(138, 43, 226, 0.4);
-    font-weight: 700;
+    color: #4CAF50;
+}
+
+.message-status.delivered {
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .message-input-container {
@@ -693,11 +702,29 @@ body {
     font-size: 16px;
     font-weight: bold;
     color: white;
+    position: relative;
+}
+
+.user-result-avatar.online::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    background: #4CAF50;
+    border: 2px solid #2d1b69;
+    border-radius: 50%;
 }
 
 .user-result-name {
     color: #ffffff;
     font-weight: 500;
+}
+
+.user-result-status {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
 }
 
 .contacts-list {
@@ -741,11 +768,29 @@ body {
     font-size: 16px;
     font-weight: bold;
     color: white;
+    position: relative;
+}
+
+.contact-avatar.online::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    background: #4CAF50;
+    border: 2px solid #2d1b69;
+    border-radius: 50%;
 }
 
 .contact-name {
     color: #ffffff;
     font-weight: 500;
+}
+
+.contact-status {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
 }
 
 @keyframes modalAppear {
@@ -757,6 +802,63 @@ body {
         opacity: 1;
         transform: translateY(0) scale(1);
     }
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+.empty-state {
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    padding: 40px 20px;
+    font-size: 14px;
+}
+
+.no-results {
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    padding: 20px;
+    font-size: 14px;
+}
+
+.no-contacts {
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    padding: 20px;
+    font-size: 14px;
+}
+
+.status-notification {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: #4CAF50;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    z-index: 10000;
+    animation: slideIn 0.3s ease;
+    max-width: 250px;
+    word-wrap: break-word;
 }
 
 @media (max-width: 768px) {
