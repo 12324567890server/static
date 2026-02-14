@@ -56,6 +56,8 @@
     let userSubscription = null;
     let heartbeatTimer = null;
 
+    init();
+
     function init() {
         checkUser();
         setupEventListeners();
@@ -72,9 +74,9 @@
                 .single();
             
             if (data) {
-                await setOnline(true);
+                await goOnline();
                 showChats();
-                updateUserDisplay();
+                updateUI();
                 setupRealtime();
                 loadChats();
                 startHeartbeat();
@@ -114,109 +116,106 @@
         elements.messageInput.focus();
         
         await loadMessages(username);
-        await markAsRead(username);
-        updateChatStatus();
-        
-        setTimeout(() => {
-            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-        }, 200);
+        await markRead(username);
+        updateStatus();
+        scrollToBottom();
     }
 
-    function updateUserDisplay() {
+    function updateUI() {
         if (currentUser) {
             elements.currentUsernameDisplay.textContent = currentUser.username;
             elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
-            elements.userStatusDisplay.textContent = 'на связи';
+            elements.userStatusDisplay.textContent = 'online';
         }
     }
 
     function setupEventListeners() {
-        elements.loginButton.addEventListener('click', handleLogin);
-        elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && handleLogin());
+        elements.loginButton.onclick = login;
+        elements.loginUsername.onkeypress = e => e.key === 'Enter' && login();
 
-        elements.chatsMenuBtn.addEventListener('click', () => {
+        elements.chatsMenuBtn.onclick = () => {
             elements.sideMenu.style.display = 'block';
             setTimeout(() => elements.sideMenu.classList.add('show'), 10);
-        });
+        };
 
-        elements.closeMenu.addEventListener('click', hideSideMenu);
+        elements.closeMenu.onclick = closeMenu;
 
-        document.addEventListener('click', e => {
+        document.onclick = e => {
             if (!elements.sideMenu.contains(e.target) && 
                 !elements.chatsMenuBtn.contains(e.target) &&
                 elements.sideMenu.classList.contains('show')) {
-                hideSideMenu();
+                closeMenu();
             }
-        });
+        };
 
-        elements.newChatBtn.addEventListener('click', () => {
+        elements.newChatBtn.onclick = () => {
             elements.newChatUsername.value = '';
             showModal('newChatModal');
-        });
+        };
 
-        elements.backToChats.addEventListener('click', () => {
+        elements.backToChats.onclick = () => {
             currentChatWith = null;
             showChats();
-        });
+        };
 
-        elements.editProfileBtn.addEventListener('click', () => {
+        elements.editProfileBtn.onclick = () => {
             elements.editUsername.value = currentUser.username;
             showModal('editProfileModal');
-        });
+        };
 
-        elements.saveProfileBtn.addEventListener('click', handleEditProfile);
+        elements.saveProfileBtn.onclick = editProfile;
 
-        elements.findFriendsBtn.addEventListener('click', () => {
+        elements.findFriendsBtn.onclick = () => {
             elements.searchUsername.value = '';
             showModal('findFriendsModal');
-            setTimeout(() => handleSearch(), 100);
-        });
+            setTimeout(() => searchUsers(), 100);
+        };
 
-        elements.searchBtn.addEventListener('click', handleSearch);
-        elements.searchUsername.addEventListener('input', handleSearch);
-        elements.searchUsername.addEventListener('keypress', e => e.key === 'Enter' && handleSearch());
+        elements.searchBtn.onclick = searchUsers;
+        elements.searchUsername.oninput = searchUsers;
+        elements.searchUsername.onkeypress = e => e.key === 'Enter' && searchUsers();
 
-        elements.contactsBtn.addEventListener('click', () => {
+        elements.contactsBtn.onclick = () => {
             loadContacts();
             showModal('contactsModal');
-        });
+        };
 
-        elements.logoutBtn.addEventListener('click', handleLogout);
+        elements.logoutBtn.onclick = logout;
 
-        elements.sendMessageBtn.addEventListener('click', handleSendMessage);
-        elements.messageInput.addEventListener('keypress', e => {
+        elements.sendMessageBtn.onclick = sendMessage;
+        elements.messageInput.onkeypress = e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSendMessage();
+                sendMessage();
             }
-        });
+        };
 
-        elements.startChatBtn.addEventListener('click', handleStartNewChat);
+        elements.startChatBtn.onclick = startChat;
 
         document.querySelectorAll('.close-modal').forEach(btn => {
-            btn.addEventListener('click', e => {
+            btn.onclick = e => {
                 const modal = e.target.closest('.modal');
                 if (modal) hideModal(modal.id);
-            });
+            };
         });
 
         document.querySelectorAll('.modal').forEach(modal => {
-            modal.addEventListener('click', e => {
+            modal.onclick = e => {
                 if (e.target === modal) hideModal(modal.id);
-            });
+            };
         });
 
-        document.addEventListener('keydown', e => {
+        document.onkeydown = e => {
             if (e.key === 'Escape') {
                 closeAllModals();
-                hideSideMenu();
+                closeMenu();
             }
-        });
+        };
 
-        elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+        elements.searchChats.oninput = e => filterChats(e.target.value);
     }
 
-    function hideSideMenu() {
+    function closeMenu() {
         elements.sideMenu.classList.remove('show');
         setTimeout(() => elements.sideMenu.style.display = 'none', 300);
     }
@@ -240,7 +239,7 @@
                     const user = payload.new;
                     if (user.username !== currentUser.username) {
                         onlineUsers[user.username] = user.is_online;
-                        if (currentChatWith === user.username) updateChatStatus();
+                        if (currentChatWith === user.username) updateStatus();
                         updateChatsList();
                         updateSearchResults();
                     }
@@ -252,12 +251,14 @@
     function cleanupSubscriptions() {
         if (messageSubscription) supabase.removeChannel(messageSubscription);
         if (userSubscription) supabase.removeChannel(userSubscription);
+        messageSubscription = null;
+        userSubscription = null;
     }
 
     function startHeartbeat() {
         stopHeartbeat();
-        setOnline(true);
-        heartbeatTimer = setInterval(() => setOnline(true), 30000);
+        goOnline();
+        heartbeatTimer = setInterval(() => goOnline(), 30000);
     }
 
     function stopHeartbeat() {
@@ -267,14 +268,27 @@
         }
     }
 
-    async function setOnline(status) {
+    async function goOnline() {
         if (!currentUser) return;
         try {
             await supabase
                 .from('users')
                 .upsert({ 
                     username: currentUser.username, 
-                    is_online: status, 
+                    is_online: true, 
+                    last_seen: new Date().toISOString() 
+                }, { onConflict: 'username' });
+        } catch (e) {}
+    }
+
+    async function goOffline() {
+        if (!currentUser) return;
+        try {
+            await supabase
+                .from('users')
+                .upsert({ 
+                    username: currentUser.username, 
+                    is_online: false, 
                     last_seen: new Date().toISOString() 
                 }, { onConflict: 'username' });
         } catch (e) {}
@@ -285,11 +299,9 @@
         
         if (currentChatWith === msg.sender) {
             if (!document.querySelector(`[data-message-id="${msg.id}"]`)) {
-                displayOneMessage(msg, false);
-                setTimeout(() => {
-                    elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-                }, 100);
-                markAsRead(msg.sender);
+                showMessage(msg, false);
+                scrollToBottom();
+                markRead(msg.sender);
             }
         } else if (msg.receiver === currentUser.username) {
             unreadCounts[msg.sender] = (unreadCounts[msg.sender] || 0) + 1;
@@ -298,7 +310,7 @@
         }
     }
 
-    function updateChatStatus() {
+    function updateStatus() {
         if (!currentChatWith || !elements.chatStatus) return;
         const online = onlineUsers[currentChatWith] === true;
         elements.chatStatus.textContent = online ? 'на связи' : 'без связи';
@@ -336,12 +348,12 @@
         }
 
         chats = Object.values(chatsMap);
-        displayChats();
+        showChatsList();
         updateTitle();
         loadOnlineStatuses();
     }
 
-    async function displayChats() {
+    async function showChatsList() {
         elements.chatsList.innerHTML = '';
         
         if (chats.length === 0) {
@@ -429,15 +441,13 @@
         elements.privateMessages.innerHTML = '';
         
         if (data) {
-            data.forEach(msg => displayOneMessage(msg, msg.sender === currentUser.username));
+            data.forEach(msg => showMessage(msg, msg.sender === currentUser.username));
         }
         
-        setTimeout(() => {
-            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-        }, 200);
+        scrollToBottom();
     }
 
-    function displayOneMessage(msg, isMyMessage) {
+    function showMessage(msg, isMyMessage) {
         const div = document.createElement('div');
         div.className = `message ${isMyMessage ? 'me' : 'other'}`;
         div.dataset.messageId = msg.id;
@@ -453,15 +463,15 @@
         `;
         
         elements.privateMessages.appendChild(div);
-        
-        if (isMyMessage || currentChatWith === msg.sender) {
-            setTimeout(() => {
-                elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-            }, 100);
-        }
     }
 
-    async function handleSendMessage() {
+    function scrollToBottom() {
+        setTimeout(() => {
+            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+        }, 100);
+    }
+
+    async function sendMessage() {
         if (!currentChatWith || !currentUser || !elements.messageInput.value.trim()) return;
         
         const message = elements.messageInput.value.trim();
@@ -481,13 +491,13 @@
             .select();
 
         if (data && data[0]) {
-            displayOneMessage(data[0], true);
-            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+            showMessage(data[0], true);
+            scrollToBottom();
             loadChats();
         }
     }
 
-    async function markAsRead(username) {
+    async function markRead(username) {
         if (!username || !currentUser) return;
         
         await supabase
@@ -506,7 +516,7 @@
         document.title = total ? `(${total}) SpeedNexus` : 'SpeedNexus';
     }
 
-    async function handleStartNewChat() {
+    async function startChat() {
         const username = elements.newChatUsername.value.trim();
         if (!username) {
             showError(elements.newChatError, 'Введите имя');
@@ -533,7 +543,7 @@
         showChat(username);
     }
 
-    async function handleLogin() {
+    async function login() {
         const username = elements.loginUsername.value.trim();
         if (!username || username.length < 3) {
             showError(elements.loginError, 'Минимум 3 символа');
@@ -557,13 +567,13 @@
             }, { onConflict: 'username' });
 
         showChats();
-        updateUserDisplay();
+        updateUI();
         setupRealtime();
         loadChats();
         startHeartbeat();
     }
 
-    async function handleEditProfile() {
+    async function editProfile() {
         const newUsername = elements.editUsername.value.trim();
         if (!newUsername || newUsername.length < 3) {
             showError(elements.editUsernameError, 'Минимум 3 символа');
@@ -591,7 +601,7 @@
             return;
         }
 
-        await setOnline(false);
+        await goOffline();
         await supabase
             .from('users')
             .upsert({ 
@@ -603,12 +613,12 @@
         currentUser.username = newUsername;
         localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
         
-        updateUserDisplay();
+        updateUI();
         hideModal('editProfileModal');
         loadChats();
     }
 
-    async function handleSearch() {
+    async function searchUsers() {
         const term = elements.searchUsername.value.trim();
         
         let query = supabase
@@ -697,22 +707,60 @@
 
         if (data) {
             data.forEach(u => onlineUsers[u.username] = u.is_online);
-            updateChatStatus();
+            updateStatus();
             updateChatsList();
         }
     }
 
     function filterChats(term) {
         if (!term) {
-            displayChats();
+            showChatsList();
             return;
         }
         const filtered = chats.filter(c => c.username.toLowerCase().includes(term.toLowerCase()));
-        displayChats(filtered);
+        showChatsList(filtered);
     }
 
-    function handleLogout() {
-        setOnline(false);
+    function showChatsList(filtered = chats) {
+        elements.chatsList.innerHTML = '';
+        
+        if (filtered.length === 0) {
+            elements.chatsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px 20px;">Нет чатов</div>';
+            return;
+        }
+
+        filtered.sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+
+        for (const chat of filtered) {
+            const div = document.createElement('div');
+            div.className = 'chat-item';
+            div.onclick = () => showChat(chat.username);
+            
+            const online = onlineUsers[chat.username] === true;
+            const unread = unreadCounts[chat.username] || 0;
+            const time = formatTime(new Date(chat.lastTime));
+            const prefix = chat.isMyMessage ? 'Вы: ' : '';
+            const lastMsg = chat.lastMessage.length > 25 ? chat.lastMessage.substr(0, 25) + '...' : chat.lastMessage;
+            
+            div.innerHTML = `
+                <div class="chat-avatar ${online ? 'online' : ''}">${chat.username.charAt(0).toUpperCase()}</div>
+                <div class="chat-info">
+                    <div class="chat-name">
+                        ${escapeHtml(chat.username)}
+                        <span class="chat-status-text ${online ? 'online' : ''}">${online ? 'на связи' : 'без связи'}</span>
+                    </div>
+                    <div class="chat-last-message">${escapeHtml(prefix + lastMsg)}</div>
+                    <div class="chat-time">${time}</div>
+                </div>
+                ${unread ? `<div class="unread-badge">${unread}</div>` : ''}
+            `;
+            
+            elements.chatsList.appendChild(div);
+        }
+    }
+
+    function logout() {
+        goOffline();
         localStorage.removeItem('speednexus_user');
         stopHeartbeat();
         cleanupSubscriptions();
@@ -755,9 +803,7 @@
         return div.innerHTML;
     }
 
-    init();
-
     window.addEventListener('beforeunload', () => {
-        setOnline(false);
+        goOffline();
     });
 })();
