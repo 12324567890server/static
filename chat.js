@@ -1,8 +1,16 @@
 (function() {
-    const SUPABASE_URL = "https://bncysgnqsgpdpuupzgqj.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuY3lzZ25xc2dwZHB1dXB6Z3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3NDQ3ODUsImV4cCI6MjA4MjMyMDc4NX0.5MRgyFqLvk6NiBBvY2u-_BOhsBkjYCfkis5BM1QIBoc";
-    
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const firebaseConfig = {
+        apiKey: "AIzaSyCVdthLC_AX8EI5lKsL-6UOpP7B01dIjQ8",
+        authDomain: "speednexusrus.firebaseapp.com",
+        projectId: "speednexusrus",
+        storageBucket: "speednexusrus.firebasestorage.app",
+        messagingSenderId: "524449944041",
+        appId: "1:524449944041:web:362f4343ed1507ec2d3b78",
+        measurementId: "G-YZ2JD6V0Y7"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
     const elements = {
         loginScreen: document.getElementById('loginScreen'),
@@ -53,8 +61,8 @@
     let chats = [];
     let unreadCounts = {};
     let onlineUsers = {};
-    let messageSubscription = null;
-    let userSubscription = null;
+    let unsubscribeMessages = null;
+    let unsubscribeUsers = null;
     let heartbeatInterval = null;
 
     function init() {
@@ -68,13 +76,9 @@
             const saved = localStorage.getItem('speednexus_user');
             if (saved) {
                 currentUser = JSON.parse(saved);
-                const { data } = await supabase
-                    .from('users')
-                    .select('username')
-                    .eq('username', currentUser.username)
-                    .maybeSingle();
+                const userDoc = await db.collection('users').doc(currentUser.username).get();
                 
-                if (data) {
+                if (userDoc.exists) {
                     await setOnline(true);
                     showChats();
                     updateUI();
@@ -264,34 +268,38 @@
     }
 
     function cleanupSubscriptions() {
-        if (messageSubscription) {
-            messageSubscription.unsubscribe();
-            messageSubscription = null;
+        if (unsubscribeMessages) {
+            unsubscribeMessages();
+            unsubscribeMessages = null;
         }
-        if (userSubscription) {
-            userSubscription.unsubscribe();
-            userSubscription = null;
+        if (unsubscribeUsers) {
+            unsubscribeUsers();
+            unsubscribeUsers = null;
         }
     }
 
     function setupRealtimeSubscriptions() {
         cleanupSubscriptions();
 
-        messageSubscription = supabase
-            .channel('messages-channel')
-            .on('postgres_changes', 
-                { event: 'INSERT', schema: 'public', table: 'private_messages' }, 
-                payload => handleNewMessage(payload.new)
-            )
-            .subscribe();
+        unsubscribeMessages = db.collection('messages')
+            .orderBy('created_at')
+            .onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        handleNewMessage(change.doc.data(), change.doc.id);
+                    }
+                });
+            });
 
-        userSubscription = supabase
-            .channel('users-channel')
-            .on('postgres_changes', 
-                { event: 'UPDATE', schema: 'public', table: 'users' }, 
-                payload => handleUserUpdate(payload.new)
-            )
-            .subscribe();
+        unsubscribeUsers = db.collection('users')
+            .onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'modified') {
+                        const user = change.doc.data();
+                        handleUserUpdate(user);
+                    }
+                });
+            });
     }
 
     function handleUserUpdate(user) {
@@ -321,23 +329,21 @@
     async function setOnline(status) {
         if (!currentUser) return;
         try {
-            await supabase
-                .from('users')
-                .update({ 
-                    is_online: status, 
-                    last_seen: new Date().toISOString() 
-                })
-                .eq('username', currentUser.username);
+            await db.collection('users').doc(currentUser.username).set({
+                username: currentUser.username,
+                is_online: status,
+                last_seen: new Date().toISOString()
+            });
         } catch (e) {}
     }
 
-    function handleNewMessage(msg) {
+    function handleNewMessage(msg, msgId) {
         if (!currentUser) return;
         
         if (msg.receiver === currentUser.username || msg.sender === currentUser.username) {
             if (currentChatWith === (msg.sender === currentUser.username ? msg.receiver : msg.sender)) {
-                if (!document.querySelector(`[data-message-id="${msg.id}"]`)) {
-                    displayMessage(msg, msg.sender === currentUser.username);
+                if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
+                    displayMessage(msg, msg.sender === currentUser.username, msgId);
                     scrollToBottom();
                     if (msg.receiver === currentUser.username) {
                         markMessagesAsRead(msg.sender);
@@ -360,33 +366,31 @@
     async function loadChats() {
         if (!currentUser) return;
         
-        const { data } = await supabase
-            .from('private_messages')
-            .select('*')
-            .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
-            .order('created_at', { ascending: false });
+        const snapshot = await db.collection('messages')
+            .where('participants', 'array-contains', currentUser.username)
+            .orderBy('created_at', 'desc')
+            .get();
 
         const chatsMap = new Map();
         const newUnreadCounts = {};
 
-        if (data) {
-            for (const msg of data) {
-                const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
-                
-                if (!chatsMap.has(otherUser) || new Date(msg.created_at) > new Date(chatsMap.get(otherUser).lastTime)) {
-                    chatsMap.set(otherUser, {
-                        username: otherUser,
-                        lastMessage: msg.message,
-                        lastTime: msg.created_at,
-                        isMyMessage: msg.sender === currentUser.username
-                    });
-                }
-                
-                if (msg.receiver === currentUser.username && !msg.read) {
-                    newUnreadCounts[otherUser] = (newUnreadCounts[otherUser] || 0) + 1;
-                }
+        snapshot.forEach(doc => {
+            const msg = doc.data();
+            const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
+            
+            if (!chatsMap.has(otherUser) || new Date(msg.created_at) > new Date(chatsMap.get(otherUser).lastTime)) {
+                chatsMap.set(otherUser, {
+                    username: otherUser,
+                    lastMessage: msg.message,
+                    lastTime: msg.created_at,
+                    isMyMessage: msg.sender === currentUser.username
+                });
             }
-        }
+            
+            if (msg.receiver === currentUser.username && !msg.read) {
+                newUnreadCounts[otherUser] = (newUnreadCounts[otherUser] || 0) + 1;
+            }
+        });
 
         chats = Array.from(chatsMap.values());
         unreadCounts = newUnreadCounts;
@@ -481,25 +485,22 @@
     async function loadMessages(username) {
         if (!username || !currentUser) return;
         
-        const chatId = [currentUser.username, username].sort().join('_');
-        const { data } = await supabase
-            .from('private_messages')
-            .select('*')
-            .eq('chat_id', chatId)
-            .order('created_at', { ascending: true });
+        const snapshot = await db.collection('messages')
+            .where('chat_id', '==', [currentUser.username, username].sort().join('_'))
+            .orderBy('created_at')
+            .get();
 
-        if (data) {
-            elements.privateMessages.innerHTML = '';
-            data.forEach(msg => {
-                displayMessage(msg, msg.sender === currentUser.username);
-            });
-        }
+        elements.privateMessages.innerHTML = '';
+        snapshot.forEach(doc => {
+            const msg = doc.data();
+            displayMessage(msg, msg.sender === currentUser.username, doc.id);
+        });
     }
 
-    function displayMessage(msg, isMyMessage) {
+    function displayMessage(msg, isMyMessage, msgId) {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
-        messageElement.dataset.messageId = msg.id;
+        messageElement.dataset.messageId = msgId;
         
         const messageTime = new Date(msg.created_at);
         const timeString = messageTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -530,38 +531,37 @@
         elements.messageInput.value = '';
         
         const chatId = [currentUser.username, currentChatWith].sort().join('_');
-        const { data } = await supabase
-            .from('private_messages')
-            .insert({
-                chat_id: chatId,
-                sender: currentUser.username,
-                receiver: currentChatWith,
-                message: messageText,
-                read: false,
-                created_at: new Date().toISOString()
-            })
-            .select();
+        
+        await db.collection('messages').add({
+            chat_id: chatId,
+            participants: [currentUser.username, currentChatWith],
+            sender: currentUser.username,
+            receiver: currentChatWith,
+            message: messageText,
+            read: false,
+            created_at: new Date().toISOString()
+        });
 
-        if (data && data[0]) {
-            displayMessage(data[0], true);
-            scrollToBottom();
-            loadChats();
-        }
+        loadChats();
     }
 
     async function markMessagesAsRead(username) {
         if (!username || !currentUser) return;
         
-        await supabase
-            .from('private_messages')
-            .update({ read: true })
-            .eq('receiver', currentUser.username)
-            .eq('sender', username)
-            .eq('read', false);
+        const snapshot = await db.collection('messages')
+            .where('receiver', '==', currentUser.username)
+            .where('sender', '==', username)
+            .where('read', '==', false)
+            .get();
+
+        const batch = db.batch();
+        snapshot.forEach(doc => {
+            batch.update(doc.ref, { read: true });
+        });
+        await batch.commit();
         
         delete unreadCounts[username];
         updateTitle();
-        loadChats();
     }
 
     function updateTitle() {
@@ -583,13 +583,9 @@
 
         showLoading(true);
         try {
-            const { data } = await supabase
-                .from('users')
-                .select('username')
-                .eq('username', username)
-                .maybeSingle();
+            const userDoc = await db.collection('users').doc(username).get();
 
-            if (!data) {
+            if (!userDoc.exists) {
                 showError(elements.newChatError, 'Пользователь не найден');
                 return;
             }
@@ -617,33 +613,11 @@
 
         showLoading(true);
         try {
-            const { data: existingUser } = await supabase
-                .from('users')
-                .select('username')
-                .eq('username', username)
-                .maybeSingle();
-
-            if (!existingUser) {
-                const { error } = await supabase
-                    .from('users')
-                    .insert({ 
-                        username: username, 
-                        is_online: true, 
-                        last_seen: new Date().toISOString() 
-                    });
-                
-                if (error) throw error;
-            } else {
-                const { error } = await supabase
-                    .from('users')
-                    .update({ 
-                        is_online: true, 
-                        last_seen: new Date().toISOString() 
-                    })
-                    .eq('username', username);
-                
-                if (error) throw error;
-            }
+            await db.collection('users').doc(username).set({
+                username: username,
+                is_online: true,
+                last_seen: new Date().toISOString()
+            });
 
             currentUser = { username };
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
@@ -681,26 +655,20 @@
 
         showLoading(true);
         try {
-            const { data } = await supabase
-                .from('users')
-                .select('username')
-                .eq('username', newUsername)
-                .maybeSingle();
+            const userDoc = await db.collection('users').doc(newUsername).get();
 
-            if (data) {
+            if (userDoc.exists) {
                 showError(elements.editUsernameError, 'Имя пользователя уже занято');
                 return;
             }
 
-            await setOnline(false);
+            await db.collection('users').doc(currentUser.username).delete();
             
-            await supabase
-                .from('users')
-                .insert({ 
-                    username: newUsername, 
-                    is_online: true, 
-                    last_seen: new Date().toISOString() 
-                });
+            await db.collection('users').doc(newUsername).set({
+                username: newUsername,
+                is_online: true,
+                last_seen: new Date().toISOString()
+            });
 
             currentUser.username = newUsername;
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
@@ -720,31 +688,26 @@
         const searchTerm = elements.searchUsername.value.trim();
         
         try {
-            let query = supabase
-                .from('users')
-                .select('username, is_online');
+            const snapshot = await db.collection('users').get();
+            const users = [];
             
-            if (searchTerm) {
-                query = query.ilike('username', `%${searchTerm}%`);
-            }
-            
-            const { data } = await query.limit(50);
+            snapshot.forEach(doc => {
+                const user = doc.data();
+                if (!searchTerm || user.username.toLowerCase().includes(searchTerm.toLowerCase())) {
+                    if (user.username !== currentUser?.username) {
+                        users.push(user);
+                    }
+                }
+            });
 
             elements.searchResults.innerHTML = '';
             
-            if (!data || data.length === 0) {
+            if (users.length === 0) {
                 elements.searchResults.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Пользователи не найдены</div>';
                 return;
             }
 
-            const filteredUsers = data.filter(user => user.username !== currentUser?.username);
-
-            if (filteredUsers.length === 0) {
-                elements.searchResults.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Пользователи не найдены</div>';
-                return;
-            }
-
-            filteredUsers.forEach(user => {
+            users.forEach(user => {
                 const userElement = document.createElement('div');
                 userElement.className = 'user-result';
                 userElement.onclick = () => {
@@ -812,18 +775,16 @@
         
         if (usernames.length === 0) return;
 
-        const { data } = await supabase
-            .from('users')
-            .select('username, is_online')
-            .in('username', usernames);
-
-        if (data) {
-            data.forEach(user => {
+        for (const username of usernames) {
+            const userDoc = await db.collection('users').doc(username).get();
+            if (userDoc.exists) {
+                const user = userDoc.data();
                 onlineUsers[user.username] = user.is_online;
-            });
-            updateChatStatus();
-            updateChatsList();
+            }
         }
+        
+        updateChatStatus();
+        updateChatsList();
     }
 
     function filterChats(searchTerm) {
