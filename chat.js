@@ -101,7 +101,7 @@
         elements.loginScreen.style.display = 'none';
         elements.chatsScreen.style.display = 'flex';
         elements.chatScreen.style.display = 'none';
-        elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
+        elements.chatsTitle.textContent = `Чаты`;
     }
 
     async function showChat(username) {
@@ -116,6 +116,10 @@
         await loadMessages(username);
         await markAsRead(username);
         updateChatStatus();
+        
+        setTimeout(() => {
+            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+        }, 200);
     }
 
     function updateUserDisplay() {
@@ -135,13 +139,17 @@
             setTimeout(() => elements.sideMenu.classList.add('show'), 10);
         });
 
-        elements.closeMenu.addEventListener('click', hideSideMenu);
+        elements.closeMenu.addEventListener('click', () => {
+            elements.sideMenu.classList.remove('show');
+            setTimeout(() => elements.sideMenu.style.display = 'none', 300);
+        });
 
         document.addEventListener('click', e => {
             if (!elements.sideMenu.contains(e.target) && 
                 !elements.chatsMenuBtn.contains(e.target) &&
                 elements.sideMenu.classList.contains('show')) {
-                hideSideMenu();
+                elements.sideMenu.classList.remove('show');
+                setTimeout(() => elements.sideMenu.style.display = 'none', 300);
             }
         });
 
@@ -162,9 +170,17 @@
 
         elements.saveProfileBtn.addEventListener('click', handleEditProfile);
 
-        elements.findFriendsBtn.addEventListener('click', () => showModal('findFriendsModal'));
+        elements.findFriendsBtn.addEventListener('click', () => {
+            elements.searchUsername.value = '';
+            elements.searchResults.innerHTML = '';
+            showModal('findFriendsModal');
+            setTimeout(() => handleSearch(), 100);
+        });
 
         elements.searchBtn.addEventListener('click', handleSearch);
+        
+        elements.searchUsername.addEventListener('input', handleSearch);
+        
         elements.searchUsername.addEventListener('keypress', e => e.key === 'Enter' && handleSearch());
 
         elements.contactsBtn.addEventListener('click', () => {
@@ -175,6 +191,7 @@
         elements.logoutBtn.addEventListener('click', handleLogout);
 
         elements.sendMessageBtn.addEventListener('click', handleSendMessage);
+        
         elements.messageInput.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -200,16 +217,14 @@
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 closeAllModals();
-                hideSideMenu();
+                if (elements.sideMenu.classList.contains('show')) {
+                    elements.sideMenu.classList.remove('show');
+                    setTimeout(() => elements.sideMenu.style.display = 'none', 300);
+                }
             }
         });
 
         elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
-    }
-
-    function hideSideMenu() {
-        elements.sideMenu.classList.remove('show');
-        setTimeout(() => elements.sideMenu.style.display = 'none', 300);
     }
 
     function setupRealtime() {
@@ -233,6 +248,7 @@
                         onlineUsers[user.username] = user.is_online;
                         if (currentChatWith === user.username) updateChatStatus();
                         updateChatsList();
+                        updateSearchResults();
                     }
                 }
             )
@@ -278,6 +294,9 @@
         if (currentChatWith === msg.sender) {
             if (!document.querySelector(`[data-message-id="${msg.id}"]`)) {
                 displayOneMessage(msg, false);
+                setTimeout(() => {
+                    elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+                }, 100);
                 markAsRead(msg.sender);
             }
         } else if (msg.receiver === currentUser.username) {
@@ -389,6 +408,22 @@
         });
     }
 
+    function updateSearchResults() {
+        const items = elements.searchResults.querySelectorAll('.user-result');
+        items.forEach(item => {
+            const nameEl = item.querySelector('.user-result-name');
+            if (!nameEl) return;
+            
+            const username = nameEl.textContent;
+            const online = onlineUsers[username] === true;
+            const avatar = item.querySelector('.user-result-avatar');
+            
+            if (avatar) {
+                avatar.className = `user-result-avatar ${online ? 'online' : ''}`;
+            }
+        });
+    }
+
     async function loadMessages(username) {
         if (!username || !currentUser) return;
         
@@ -407,7 +442,7 @@
         
         setTimeout(() => {
             elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-        }, 100);
+        }, 200);
     }
 
     function displayOneMessage(msg, isMyMessage) {
@@ -426,6 +461,12 @@
         `;
         
         elements.privateMessages.appendChild(div);
+        
+        if (isMyMessage || currentChatWith === msg.sender) {
+            setTimeout(() => {
+                elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+            }, 100);
+        }
     }
 
     async function handleSendMessage() {
@@ -449,9 +490,7 @@
 
         if (data && data[0]) {
             displayOneMessage(data[0], true);
-            setTimeout(() => {
-                elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-            }, 100);
+            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
             loadChats();
         }
     }
@@ -579,22 +618,23 @@
 
     async function handleSearch() {
         const term = elements.searchUsername.value.trim();
-        if (!term) {
-            elements.searchResults.innerHTML = '';
-            return;
-        }
-
-        const { data } = await supabase
+        
+        let query = supabase
             .from('users')
             .select('username, is_online')
-            .ilike('username', `%${term}%`)
             .neq('username', currentUser.username)
-            .limit(10);
+            .limit(20);
+        
+        if (term) {
+            query = query.ilike('username', `%${term}%`);
+        }
+        
+        const { data } = await query;
 
         elements.searchResults.innerHTML = '';
         
         if (!data || data.length === 0) {
-            elements.searchResults.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center;">Ничего не найдено</p>';
+            elements.searchResults.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center;">Никого нет</p>';
             return;
         }
 
@@ -717,6 +757,7 @@
     }
 
     function escapeHtml(text) {
+        if (!text) return '';
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
