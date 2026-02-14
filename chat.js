@@ -57,8 +57,6 @@
     let userSubscription = null;
     let heartbeatInterval = null;
 
-    init();
-
     function init() {
         checkUser();
         setupEventListeners();
@@ -162,7 +160,7 @@
 
         elements.newChatBtn.addEventListener('click', () => {
             elements.newChatUsername.value = '';
-            hideError(elements.newChatError);
+            elements.newChatError.style.display = 'none';
             showModal('newChatModal');
         });
 
@@ -173,7 +171,7 @@
 
         elements.editProfileBtn.addEventListener('click', () => {
             elements.editUsername.value = currentUser?.username || '';
-            hideError(elements.editUsernameError);
+            elements.editUsernameError.style.display = 'none';
             showModal('editProfileModal');
         });
 
@@ -253,10 +251,6 @@
         element.style.display = 'block';
     }
 
-    function hideError(element) {
-        element.style.display = 'none';
-    }
-
     function debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
@@ -308,7 +302,6 @@
             }
             updateChatsList();
             updateSearchResults();
-            updateContactsStatus();
         }
     }
 
@@ -330,11 +323,11 @@
         try {
             await supabase
                 .from('users')
-                .upsert({ 
-                    username: currentUser.username, 
+                .update({ 
                     is_online: status, 
                     last_seen: new Date().toISOString() 
-                }, { onConflict: 'username' });
+                })
+                .eq('username', currentUser.username);
         } catch (e) {}
     }
 
@@ -485,22 +478,6 @@
         });
     }
 
-    function updateContactsStatus() {
-        const contactItems = elements.contactsList.querySelectorAll('.contact-item');
-        contactItems.forEach(item => {
-            const nameElement = item.querySelector('.contact-name');
-            if (!nameElement) return;
-            
-            const username = nameElement.textContent;
-            const isOnline = onlineUsers[username] === true;
-            const avatarElement = item.querySelector('.contact-avatar');
-            
-            if (avatarElement) {
-                avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
-            }
-        });
-    }
-
     async function loadMessages(username) {
         if (!username || !currentUser) return;
         
@@ -640,16 +617,36 @@
 
         showLoading(true);
         try {
+            const { data: existingUser } = await supabase
+                .from('users')
+                .select('username')
+                .eq('username', username)
+                .maybeSingle();
+
+            if (!existingUser) {
+                const { error } = await supabase
+                    .from('users')
+                    .insert({ 
+                        username: username, 
+                        is_online: true, 
+                        last_seen: new Date().toISOString() 
+                    });
+                
+                if (error) throw error;
+            } else {
+                const { error } = await supabase
+                    .from('users')
+                    .update({ 
+                        is_online: true, 
+                        last_seen: new Date().toISOString() 
+                    })
+                    .eq('username', username);
+                
+                if (error) throw error;
+            }
+
             currentUser = { username };
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            
-            await supabase
-                .from('users')
-                .upsert({ 
-                    username, 
-                    is_online: true, 
-                    last_seen: new Date().toISOString() 
-                }, { onConflict: 'username' });
 
             showChats();
             updateUI();
@@ -699,11 +696,11 @@
             
             await supabase
                 .from('users')
-                .upsert({ 
+                .insert({ 
                     username: newUsername, 
                     is_online: true, 
                     last_seen: new Date().toISOString() 
-                }, { onConflict: 'username' });
+                });
 
             currentUser.username = newUsername;
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
@@ -762,7 +759,7 @@
                         <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
                         <div>
                             <div class="user-result-name">${escapeHtml(user.username)}</div>
-                            <div class="user-result-status">${isOnline ? 'на связи' : 'без связи'}</div>
+                            <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
                         </div>
                     </div>
                 `;
@@ -798,7 +795,7 @@
                     <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
                     <div>
                         <div class="contact-name">${escapeHtml(contact.username)}</div>
-                        <div class="contact-status">${isOnline ? 'на связи' : 'без связи'}</div>
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
                     </div>
                 </div>
             `;
@@ -884,4 +881,6 @@
             setOnline(false);
         }
     });
+
+    init();
 })();
