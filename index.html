@@ -13,7 +13,7 @@
             <div class="login-header">
                 <h1>SpeedNexus</h1>
             </div>
-            <input type="text" id="loginUsername" class="login-input" placeholder="Введите ваш никнейм" maxlength="20">
+            <input type="text" id="loginUsername" class="login-input" placeholder="Введите ваш никнейм" maxlength="20" pattern="[A-Za-z0-9_]+" title="Только буквы, цифры и _">
             <div id="loginError" class="error-message"></div>
             <button id="loginButton" class="login-btn">Продолжить</button>
         </div>
@@ -38,14 +38,14 @@
             <button id="backToChats" class="back-btn">←</button>
             <div class="chat-header-info">
                 <div id="chatWithUser" class="chat-username">-</div>
-                <div id="chatStatus" class="chat-status">Не в сети</div>
+                <div id="chatStatus" class="chat-status">без связи</div>
             </div>
         </div>
         
         <div id="privateMessages" class="private-messages"></div>
         
         <div class="message-input-container">
-            <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
+            <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off" maxlength="1000">
             <button id="sendMessageBtn" class="send-btn">➤</button>
         </div>
     </div>
@@ -56,19 +56,17 @@
                 <div id="userAvatar" class="user-avatar">U</div>
                 <div>
                     <h4 id="currentUsernameDisplay">-</h4>
-                    <div class="user-status">
-                        <span id="userStatusText">не в сети</span>
-                    </div>
+                    <div id="userStatusDisplay" class="user-status">не в сети</div>
                 </div>
             </div>
             <button id="closeMenu" class="close-menu-btn">×</button>
         </div>
         
         <div class="side-menu-content">
-            <button id="editProfileBtn" class="side-menu-btn">Изменить профиль</button>
-            <button id="findFriendsBtn" class="side-menu-btn">Найти друзей</button>
-            <button id="contactsBtn" class="side-menu-btn">Контакты</button>
-            <button id="logoutBtn" class="side-menu-btn">Выйти</button>
+            <button id="editProfileBtn" class="side-menu-btn">✎ Изменить профиль</button>
+            <button id="findFriendsBtn" class="side-menu-btn">🔍 Найти друзей</button>
+            <button id="contactsBtn" class="side-menu-btn">📒 Контакты</button>
+            <button id="logoutBtn" class="side-menu-btn">🚪 Выйти</button>
         </div>
     </div>
 
@@ -76,10 +74,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Изменить профиль</h3>
-                <button class="close-modal" data-modal="editProfileModal">×</button>
+                <button class="close-modal" data-close="editProfileModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
+                <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм" pattern="[A-Za-z0-9_]+">
                 <div id="editUsernameError" class="error-message"></div>
                 <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
             </div>
@@ -90,10 +88,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Поиск</h3>
-                <button class="close-modal" data-modal="findFriendsModal">×</button>
+                <button class="close-modal" data-close="findFriendsModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя">
+                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя" maxlength="20">
                 <div id="searchError" class="error-message"></div>
                 <button id="searchBtn" class="modal-btn">Найти</button>
                 <div id="searchResults" class="search-results"></div>
@@ -105,7 +103,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Контакты</h3>
-                <button class="close-modal" data-modal="contactsModal">×</button>
+                <button class="close-modal" data-close="contactsModal">×</button>
             </div>
             <div class="modal-body">
                 <div id="contactsList" class="contacts-list"></div>
@@ -117,14 +115,18 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Новый чат</h3>
-                <button class="close-modal" data-modal="newChatModal">×</button>
+                <button class="close-modal" data-close="newChatModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="newChatUsername" class="modal-input" placeholder="Имя пользователя">
+                <input type="text" id="newChatUsername" class="modal-input" placeholder="Имя пользователя" maxlength="20">
                 <div id="newChatError" class="error-message"></div>
                 <button id="startChatBtn" class="modal-btn">Начать чат</button>
             </div>
         </div>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
     </div>
 
     <script src="chat.js"></script>
