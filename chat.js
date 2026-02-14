@@ -71,14 +71,14 @@
                 .from('users')
                 .select('username')
                 .eq('username', currentUser.username)
-                .single();
+                .maybeSingle();
             
             if (data) {
                 await goOnline();
                 showChats();
                 updateUI();
                 setupRealtime();
-                loadChats();
+                await loadChats();
                 startHeartbeat();
             } else {
                 localStorage.removeItem('speednexus_user');
@@ -103,7 +103,7 @@
         elements.loginScreen.style.display = 'none';
         elements.chatsScreen.style.display = 'flex';
         elements.chatScreen.style.display = 'none';
-        elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
+        elements.chatsTitle.textContent = `Чаты`;
     }
 
     async function showChat(username) {
@@ -125,94 +125,94 @@
         if (currentUser) {
             elements.currentUsernameDisplay.textContent = currentUser.username;
             elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
-            elements.userStatusDisplay.textContent = 'online';
+            elements.userStatusDisplay.textContent = 'на связи';
         }
     }
 
     function setupEventListeners() {
-        elements.loginButton.onclick = login;
-        elements.loginUsername.onkeypress = e => e.key === 'Enter' && login();
+        elements.loginButton.addEventListener('click', login);
+        elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
 
-        elements.chatsMenuBtn.onclick = () => {
+        elements.chatsMenuBtn.addEventListener('click', () => {
             elements.sideMenu.style.display = 'block';
             setTimeout(() => elements.sideMenu.classList.add('show'), 10);
-        };
+        });
 
-        elements.closeMenu.onclick = closeMenu;
+        elements.closeMenu.addEventListener('click', closeMenu);
 
-        document.onclick = e => {
+        document.addEventListener('click', e => {
             if (!elements.sideMenu.contains(e.target) && 
                 !elements.chatsMenuBtn.contains(e.target) &&
                 elements.sideMenu.classList.contains('show')) {
                 closeMenu();
             }
-        };
+        });
 
-        elements.newChatBtn.onclick = () => {
+        elements.newChatBtn.addEventListener('click', () => {
             elements.newChatUsername.value = '';
             showModal('newChatModal');
-        };
+        });
 
-        elements.backToChats.onclick = () => {
+        elements.backToChats.addEventListener('click', () => {
             currentChatWith = null;
             showChats();
-        };
+        });
 
-        elements.editProfileBtn.onclick = () => {
+        elements.editProfileBtn.addEventListener('click', () => {
             elements.editUsername.value = currentUser.username;
             showModal('editProfileModal');
-        };
+        });
 
-        elements.saveProfileBtn.onclick = editProfile;
+        elements.saveProfileBtn.addEventListener('click', editProfile);
 
-        elements.findFriendsBtn.onclick = () => {
+        elements.findFriendsBtn.addEventListener('click', () => {
             elements.searchUsername.value = '';
             showModal('findFriendsModal');
             setTimeout(() => searchUsers(), 100);
-        };
+        });
 
-        elements.searchBtn.onclick = searchUsers;
-        elements.searchUsername.oninput = searchUsers;
-        elements.searchUsername.onkeypress = e => e.key === 'Enter' && searchUsers();
+        elements.searchBtn.addEventListener('click', searchUsers);
+        elements.searchUsername.addEventListener('input', searchUsers);
+        elements.searchUsername.addEventListener('keypress', e => e.key === 'Enter' && searchUsers());
 
-        elements.contactsBtn.onclick = () => {
+        elements.contactsBtn.addEventListener('click', () => {
             loadContacts();
             showModal('contactsModal');
-        };
+        });
 
-        elements.logoutBtn.onclick = logout;
+        elements.logoutBtn.addEventListener('click', logout);
 
-        elements.sendMessageBtn.onclick = sendMessage;
-        elements.messageInput.onkeypress = e => {
+        elements.sendMessageBtn.addEventListener('click', sendMessage);
+        elements.messageInput.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
             }
-        };
+        });
 
-        elements.startChatBtn.onclick = startChat;
+        elements.startChatBtn.addEventListener('click', startChat);
 
         document.querySelectorAll('.close-modal').forEach(btn => {
-            btn.onclick = e => {
+            btn.addEventListener('click', e => {
                 const modal = e.target.closest('.modal');
                 if (modal) hideModal(modal.id);
-            };
+            });
         });
 
         document.querySelectorAll('.modal').forEach(modal => {
-            modal.onclick = e => {
+            modal.addEventListener('click', e => {
                 if (e.target === modal) hideModal(modal.id);
-            };
+            });
         });
 
-        document.onkeydown = e => {
+        document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 closeAllModals();
                 closeMenu();
             }
-        };
+        });
 
-        elements.searchChats.oninput = e => filterChats(e.target.value);
+        elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
     }
 
     function closeMenu() {
@@ -234,10 +234,10 @@
         userSubscription = supabase
             .channel('users')
             .on('postgres_changes', 
-                { event: 'UPDATE', schema: 'public', table: 'users' }, 
+                { event: '*', schema: 'public', table: 'users' }, 
                 payload => {
                     const user = payload.new;
-                    if (user.username !== currentUser.username) {
+                    if (user && user.username !== currentUser.username) {
                         onlineUsers[user.username] = user.is_online;
                         if (currentChatWith === user.username) updateStatus();
                         updateChatsList();
@@ -258,7 +258,7 @@
     function startHeartbeat() {
         stopHeartbeat();
         goOnline();
-        heartbeatTimer = setInterval(() => goOnline(), 30000);
+        heartbeatTimer = setInterval(() => goOnline(), 25000);
     }
 
     function stopHeartbeat() {
@@ -295,6 +295,7 @@
     }
 
     function handleNewMessage(msg) {
+        if (!msg || !currentUser) return;
         if (msg.receiver !== currentUser.username && msg.sender !== currentUser.username) return;
         
         if (currentChatWith === msg.sender) {
@@ -326,7 +327,7 @@
             .order('created_at', { ascending: false });
 
         const chatsMap = {};
-        unreadCounts = {};
+        const newUnread = {};
 
         if (data) {
             for (const msg of data) {
@@ -342,18 +343,20 @@
                 }
                 
                 if (msg.receiver === currentUser.username && !msg.read) {
-                    unreadCounts[other] = (unreadCounts[other] || 0) + 1;
+                    newUnread[other] = (newUnread[other] || 0) + 1;
                 }
             }
         }
 
         chats = Object.values(chatsMap);
+        unreadCounts = newUnread;
         showChatsList();
         updateTitle();
         loadOnlineStatuses();
     }
 
-    async function showChatsList() {
+    function showChatsList() {
+        if (!elements.chatsList) return;
         elements.chatsList.innerHTML = '';
         
         if (chats.length === 0) {
@@ -361,9 +364,9 @@
             return;
         }
 
-        chats.sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+        const sorted = [...chats].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
 
-        for (const chat of chats) {
+        for (const chat of sorted) {
             const div = document.createElement('div');
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
@@ -372,7 +375,7 @@
             const unread = unreadCounts[chat.username] || 0;
             const time = formatTime(new Date(chat.lastTime));
             const prefix = chat.isMyMessage ? 'Вы: ' : '';
-            const lastMsg = chat.lastMessage.length > 25 ? chat.lastMessage.substr(0, 25) + '...' : chat.lastMessage;
+            const lastMsg = chat.lastMessage.length > 25 ? chat.lastMessage.substring(0, 25) + '...' : chat.lastMessage;
             
             div.innerHTML = `
                 <div class="chat-avatar ${online ? 'online' : ''}">${chat.username.charAt(0).toUpperCase()}</div>
@@ -467,8 +470,10 @@
 
     function scrollToBottom() {
         setTimeout(() => {
-            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-        }, 100);
+            if (elements.privateMessages) {
+                elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+            }
+        }, 50);
     }
 
     async function sendMessage() {
@@ -509,6 +514,7 @@
         
         delete unreadCounts[username];
         updateTitle();
+        loadChats();
     }
 
     function updateTitle() {
@@ -532,7 +538,7 @@
             .from('users')
             .select('username')
             .eq('username', username)
-            .single();
+            .maybeSingle();
 
         if (!data) {
             showError(elements.newChatError, 'Пользователь не найден');
@@ -569,7 +575,7 @@
         showChats();
         updateUI();
         setupRealtime();
-        loadChats();
+        await loadChats();
         startHeartbeat();
     }
 
@@ -594,7 +600,7 @@
             .from('users')
             .select('username')
             .eq('username', newUsername)
-            .single();
+            .maybeSingle();
 
         if (data) {
             showError(elements.editUsernameError, 'Имя занято');
@@ -615,7 +621,7 @@
         
         updateUI();
         hideModal('editProfileModal');
-        loadChats();
+        await loadChats();
     }
 
     async function searchUsers() {
@@ -625,7 +631,7 @@
             .from('users')
             .select('username, is_online')
             .neq('username', currentUser.username)
-            .limit(20);
+            .limit(50);
         
         if (term) {
             query = query.ilike('username', `%${term}%`);
@@ -722,6 +728,7 @@
     }
 
     function showChatsList(filtered = chats) {
+        if (!elements.chatsList) return;
         elements.chatsList.innerHTML = '';
         
         if (filtered.length === 0) {
@@ -729,9 +736,9 @@
             return;
         }
 
-        filtered.sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+        const sorted = [...filtered].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
 
-        for (const chat of filtered) {
+        for (const chat of sorted) {
             const div = document.createElement('div');
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
@@ -740,7 +747,7 @@
             const unread = unreadCounts[chat.username] || 0;
             const time = formatTime(new Date(chat.lastTime));
             const prefix = chat.isMyMessage ? 'Вы: ' : '';
-            const lastMsg = chat.lastMessage.length > 25 ? chat.lastMessage.substr(0, 25) + '...' : chat.lastMessage;
+            const lastMsg = chat.lastMessage.length > 25 ? chat.lastMessage.substring(0, 25) + '...' : chat.lastMessage;
             
             div.innerHTML = `
                 <div class="chat-avatar ${online ? 'online' : ''}">${chat.username.charAt(0).toUpperCase()}</div>
@@ -770,11 +777,13 @@
     }
 
     function showModal(id) {
-        document.getElementById(id).style.display = 'flex';
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = 'flex';
     }
 
     function hideModal(id) {
-        document.getElementById(id).style.display = 'none';
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = 'none';
     }
 
     function closeAllModals() {
@@ -782,6 +791,7 @@
     }
 
     function showError(el, msg) {
+        if (!el) return;
         el.textContent = msg;
         el.style.display = 'block';
         setTimeout(() => el.style.display = 'none', 3000);
