@@ -71,7 +71,7 @@
                 .from('users')
                 .select('username')
                 .eq('username', currentUser.username)
-                .single();
+                .maybeSingle();
             
             if (data) {
                 await setOnline(true);
@@ -124,6 +124,7 @@
         if (currentUser) {
             elements.currentUsernameDisplay.textContent = currentUser.username;
             elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
+            elements.userStatusDisplay.textContent = 'на связи';
         }
     }
 
@@ -490,7 +491,7 @@
             .from('users')
             .select('username')
             .eq('username', username)
-            .single();
+            .maybeSingle();
 
         if (!data) {
             showError(elements.newChatError, 'Пользователь не найден');
@@ -542,7 +543,7 @@
             .from('users')
             .select('username')
             .eq('username', newUsername)
-            .single();
+            .maybeSingle();
 
         if (data) {
             showError(elements.editUsernameError, 'Имя занято');
@@ -572,14 +573,13 @@
         let query = supabase
             .from('users')
             .select('username, is_online')
-            .neq('username', currentUser.username)
-            .limit(50);
+            .neq('username', currentUser.username);
         
         if (term) {
             query = query.ilike('username', `%${term}%`);
         }
         
-        const { data } = await query;
+        const { data } = await query.limit(50);
 
         elements.searchResults.innerHTML = '';
         
@@ -749,10 +749,7 @@
 
     window.addEventListener('beforeunload', () => {
         if (currentUser) {
-            navigator.sendBeacon(
-                `${SUPABASE_URL}/rest/v1/users?username=eq.${currentUser.username}`,
-                JSON.stringify({ is_online: false, last_seen: new Date().toISOString() })
-            );
+            setOnline(false);
         }
     });
 })();
