@@ -97,12 +97,14 @@
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'none';
         elements.loginUsername.value = '';
+        elements.loginUsername.focus();
     }
 
     function showChats() {
         elements.loginScreen.style.display = 'none';
         elements.chatsScreen.style.display = 'flex';
         elements.chatScreen.style.display = 'none';
+        elements.chatsTitle.textContent = `Чаты`;
     }
 
     async function showChat(username) {
@@ -129,85 +131,85 @@
     }
 
     function setupEventListeners() {
-        elements.loginButton.onclick = login;
-        elements.loginUsername.onkeypress = e => e.key === 'Enter' && login();
+        elements.loginButton.addEventListener('click', login);
+        elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
 
-        elements.chatsMenuBtn.onclick = () => {
+        elements.chatsMenuBtn.addEventListener('click', () => {
             elements.sideMenu.style.display = 'block';
             setTimeout(() => elements.sideMenu.classList.add('show'), 10);
-        };
+        });
 
-        elements.closeMenu.onclick = () => {
+        elements.closeMenu.addEventListener('click', () => {
             elements.sideMenu.classList.remove('show');
             setTimeout(() => elements.sideMenu.style.display = 'none', 300);
-        };
+        });
 
-        document.onclick = e => {
+        document.addEventListener('click', e => {
             if (!elements.sideMenu.contains(e.target) && 
                 !elements.chatsMenuBtn.contains(e.target) &&
                 elements.sideMenu.classList.contains('show')) {
                 elements.sideMenu.classList.remove('show');
                 setTimeout(() => elements.sideMenu.style.display = 'none', 300);
             }
-        };
+        });
 
-        elements.newChatBtn.onclick = () => {
+        elements.newChatBtn.addEventListener('click', () => {
             elements.newChatUsername.value = '';
             showModal('newChatModal');
-        };
+        });
 
-        elements.backToChats.onclick = () => {
+        elements.backToChats.addEventListener('click', () => {
             currentChatWith = null;
             showChats();
-        };
+        });
 
-        elements.editProfileBtn.onclick = () => {
+        elements.editProfileBtn.addEventListener('click', () => {
             elements.editUsername.value = currentUser.username;
             showModal('editProfileModal');
-        };
+        });
 
-        elements.saveProfileBtn.onclick = editProfile;
+        elements.saveProfileBtn.addEventListener('click', editProfile);
 
-        elements.findFriendsBtn.onclick = () => {
+        elements.findFriendsBtn.addEventListener('click', () => {
             elements.searchUsername.value = '';
             showModal('findFriendsModal');
             setTimeout(() => searchUsers(), 100);
-        };
+        });
 
-        elements.searchBtn.onclick = searchUsers;
-        elements.searchUsername.oninput = searchUsers;
+        elements.searchBtn.addEventListener('click', searchUsers);
+        elements.searchUsername.addEventListener('input', searchUsers);
 
-        elements.contactsBtn.onclick = () => {
+        elements.contactsBtn.addEventListener('click', () => {
             loadContacts();
             showModal('contactsModal');
-        };
+        });
 
-        elements.logoutBtn.onclick = logout;
+        elements.logoutBtn.addEventListener('click', logout);
 
-        elements.sendMessageBtn.onclick = sendMessage;
-        elements.messageInput.onkeypress = e => {
+        elements.sendMessageBtn.addEventListener('click', sendMessage);
+        elements.messageInput.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
             }
-        };
+        });
 
-        elements.startChatBtn.onclick = startChat;
+        elements.startChatBtn.addEventListener('click', startChat);
 
         document.querySelectorAll('.close-modal').forEach(btn => {
-            btn.onclick = e => {
+            btn.addEventListener('click', e => {
                 const modal = e.target.closest('.modal');
                 if (modal) hideModal(modal.id);
-            };
+            });
         });
 
         document.querySelectorAll('.modal').forEach(modal => {
-            modal.onclick = e => {
+            modal.addEventListener('click', e => {
                 if (e.target === modal) hideModal(modal.id);
-            };
+            });
         });
 
-        document.onkeydown = e => {
+        document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
                 if (elements.sideMenu.classList.contains('show')) {
@@ -215,9 +217,9 @@
                     setTimeout(() => elements.sideMenu.style.display = 'none', 300);
                 }
             }
-        };
+        });
 
-        elements.searchChats.oninput = e => filterChats(e.target.value);
+        elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
     }
 
     function setupRealtime() {
@@ -235,10 +237,10 @@
         userChannel = supabase
             .channel('users')
             .on('postgres_changes', 
-                { event: 'UPDATE', schema: 'public', table: 'users' }, 
+                { event: '*', schema: 'public', table: 'users' }, 
                 payload => {
                     const user = payload.new;
-                    if (user.username !== currentUser.username) {
+                    if (user && user.username !== currentUser.username) {
                         onlineUsers[user.username] = user.is_online;
                         if (currentChatWith === user.username) updateStatus();
                         updateChatsList();
@@ -263,13 +265,15 @@
 
     async function setOnline(status) {
         if (!currentUser) return;
-        await supabase
-            .from('users')
-            .upsert({ 
-                username: currentUser.username, 
-                is_online: status, 
-                last_seen: new Date().toISOString() 
-            }, { onConflict: 'username' });
+        try {
+            await supabase
+                .from('users')
+                .upsert({ 
+                    username: currentUser.username, 
+                    is_online: status, 
+                    last_seen: new Date().toISOString() 
+                }, { onConflict: 'username' });
+        } catch (e) {}
     }
 
     function handleNewMessage(msg) {
@@ -290,7 +294,8 @@
 
     function updateStatus() {
         if (!currentChatWith) return;
-        elements.chatStatus.textContent = onlineUsers[currentChatWith] ? 'на связи' : 'без связи';
+        const online = onlineUsers[currentChatWith] === true;
+        elements.chatStatus.textContent = online ? 'на связи' : 'без связи';
     }
 
     async function loadChats() {
@@ -345,7 +350,7 @@
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
             
-            const online = onlineUsers[chat.username] || false;
+            const online = onlineUsers[chat.username] === true;
             const unread = unreadCounts[chat.username] || 0;
             const time = formatTime(new Date(chat.lastTime));
             const prefix = chat.isMyMessage ? 'Вы: ' : '';
@@ -377,7 +382,7 @@
             const username = nameEl.childNodes[0]?.textContent?.trim() || '';
             if (!username) return;
             
-            const online = onlineUsers[username] || false;
+            const online = onlineUsers[username] === true;
             const avatar = item.querySelector('.chat-avatar');
             const status = item.querySelector('.chat-status-text');
             
@@ -509,6 +514,11 @@
             return;
         }
 
+        if (!/^[A-Za-z0-9_]+$/.test(username)) {
+            showError(elements.loginError, 'Только буквы, цифры и _');
+            return;
+        }
+
         currentUser = { username };
         localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
         
@@ -531,6 +541,11 @@
         const newUsername = elements.editUsername.value.trim();
         if (!newUsername || newUsername.length < 3) {
             showError(elements.editUsernameError, 'Минимум 3 символа');
+            return;
+        }
+        
+        if (!/^[A-Za-z0-9_]+$/.test(newUsername)) {
+            showError(elements.editUsernameError, 'Только буквы, цифры и _');
             return;
         }
         
@@ -572,8 +587,7 @@
         
         let query = supabase
             .from('users')
-            .select('username, is_online')
-            .neq('username', currentUser.username);
+            .select('username, is_online');
         
         if (term) {
             query = query.ilike('username', `%${term}%`);
@@ -588,7 +602,14 @@
             return;
         }
 
-        data.forEach(user => {
+        const filtered = data.filter(user => user.username !== currentUser.username);
+
+        if (filtered.length === 0) {
+            elements.searchResults.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center;">Никого нет</p>';
+            return;
+        }
+
+        filtered.forEach(user => {
             const div = document.createElement('div');
             div.className = 'user-result';
             div.onclick = () => {
@@ -627,7 +648,7 @@
                 showChat(contact.username);
             };
             
-            const online = onlineUsers[contact.username] || false;
+            const online = onlineUsers[contact.username] === true;
             
             div.innerHTML = `
                 <div class="contact-info">
@@ -684,7 +705,7 @@
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
             
-            const online = onlineUsers[chat.username] || false;
+            const online = onlineUsers[chat.username] === true;
             const unread = unreadCounts[chat.username] || 0;
             const time = formatTime(new Date(chat.lastTime));
             const prefix = chat.isMyMessage ? 'Вы: ' : '';
@@ -742,6 +763,7 @@
     }
 
     function escapeHtml(text) {
+        if (!text) return '';
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
