@@ -24,6 +24,9 @@
         sideMenu: document.getElementById('sideMenu'),
         closeMenu: document.getElementById('closeMenu'),
         currentUsernameDisplay: document.getElementById('currentUsernameDisplay'),
+        userAvatar: document.getElementById('userAvatar'),
+        userStatusDisplay: document.getElementById('userStatusDisplay'),
+        loadingOverlay: document.getElementById('loadingOverlay'),
         editProfileBtn: document.getElementById('editProfileBtn'),
         findFriendsBtn: document.getElementById('findFriendsBtn'),
         contactsBtn: document.getElementById('contactsBtn'),
@@ -42,10 +45,7 @@
         newChatUsername: document.getElementById('newChatUsername'),
         startChatBtn: document.getElementById('startChatBtn'),
         newChatError: document.getElementById('newChatError'),
-        chatsTitle: document.getElementById('chatsTitle'),
-        userAvatar: document.getElementById('userAvatar'),
-        userStatusDisplay: document.getElementById('userStatusDisplay'),
-        loadingOverlay: document.getElementById('loadingOverlay')
+        chatsTitle: document.getElementById('chatsTitle')
     };
 
     let currentUser = null;
@@ -53,9 +53,9 @@
     let chats = [];
     let unreadCounts = {};
     let onlineUsers = {};
-    let messageChannel = null;
-    let userChannel = null;
-    let heartbeatTimer = null;
+    let messageSubscription = null;
+    let userSubscription = null;
+    let heartbeatInterval = null;
 
     init();
 
@@ -80,7 +80,7 @@
                     await setOnline(true);
                     showChats();
                     updateUI();
-                    setupRealtime();
+                    setupRealtimeSubscriptions();
                     loadChats();
                     startHeartbeat();
                 } else {
@@ -123,8 +123,8 @@
             elements.messageInput.value = '';
             
             await loadMessages(username);
-            await markRead(username);
-            updateStatus();
+            await markMessagesAsRead(username);
+            updateChatStatus();
             scrollToBottom();
             elements.messageInput.focus();
         } catch (e) {
@@ -150,23 +150,19 @@
             setTimeout(() => elements.sideMenu.classList.add('show'), 10);
         });
 
-        elements.closeMenu.addEventListener('click', () => {
-            elements.sideMenu.classList.remove('show');
-            setTimeout(() => elements.sideMenu.style.display = 'none', 300);
-        });
+        elements.closeMenu.addEventListener('click', closeMenu);
 
         document.addEventListener('click', e => {
             if (!elements.sideMenu.contains(e.target) && 
                 !elements.chatsMenuBtn.contains(e.target) &&
                 elements.sideMenu.classList.contains('show')) {
-                elements.sideMenu.classList.remove('show');
-                setTimeout(() => elements.sideMenu.style.display = 'none', 300);
+                closeMenu();
             }
         });
 
         elements.newChatBtn.addEventListener('click', () => {
             elements.newChatUsername.value = '';
-            elements.newChatError.style.display = 'none';
+            hideError(elements.newChatError);
             showModal('newChatModal');
         });
 
@@ -177,7 +173,7 @@
 
         elements.editProfileBtn.addEventListener('click', () => {
             elements.editUsername.value = currentUser?.username || '';
-            elements.editUsernameError.style.display = 'none';
+            hideError(elements.editUsernameError);
             showModal('editProfileModal');
         });
 
@@ -191,7 +187,7 @@
         });
 
         elements.searchBtn.addEventListener('click', searchUsers);
-        elements.searchUsername.addEventListener('input', searchUsers);
+        elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
 
         elements.contactsBtn.addEventListener('click', () => {
             loadContacts();
@@ -208,7 +204,7 @@
             }
         });
 
-        elements.startChatBtn.addEventListener('click', startChat);
+        elements.startChatBtn.addEventListener('click', startNewChat);
 
         document.querySelectorAll('.close-modal').forEach(btn => {
             btn.addEventListener('click', e => {
@@ -227,8 +223,7 @@
             if (e.key === 'Escape') {
                 document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
                 if (elements.sideMenu.classList.contains('show')) {
-                    elements.sideMenu.classList.remove('show');
-                    setTimeout(() => elements.sideMenu.style.display = 'none', 300);
+                    closeMenu();
                 }
             }
         });
@@ -236,55 +231,97 @@
         elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
     }
 
+    function closeMenu() {
+        elements.sideMenu.classList.remove('show');
+        setTimeout(() => elements.sideMenu.style.display = 'none', 300);
+    }
+
     function showLoading(show) {
         elements.loadingOverlay.style.display = show ? 'flex' : 'none';
     }
 
-    function cleanupSubscriptions() {
-        if (messageChannel) supabase.removeChannel(messageChannel);
-        if (userChannel) supabase.removeChannel(userChannel);
-        messageChannel = null;
-        userChannel = null;
+    function showModal(id) {
+        document.getElementById(id).style.display = 'flex';
     }
 
-    function setupRealtime() {
+    function hideModal(id) {
+        document.getElementById(id).style.display = 'none';
+    }
+
+    function showError(element, message) {
+        element.textContent = message;
+        element.style.display = 'block';
+    }
+
+    function hideError(element) {
+        element.style.display = 'none';
+    }
+
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    function cleanupSubscriptions() {
+        if (messageSubscription) {
+            messageSubscription.unsubscribe();
+            messageSubscription = null;
+        }
+        if (userSubscription) {
+            userSubscription.unsubscribe();
+            userSubscription = null;
+        }
+    }
+
+    function setupRealtimeSubscriptions() {
         cleanupSubscriptions();
 
-        messageChannel = supabase
-            .channel('messages')
+        messageSubscription = supabase
+            .channel('messages-channel')
             .on('postgres_changes', 
                 { event: 'INSERT', schema: 'public', table: 'private_messages' }, 
                 payload => handleNewMessage(payload.new)
             )
             .subscribe();
 
-        userChannel = supabase
-            .channel('users')
+        userSubscription = supabase
+            .channel('users-channel')
             .on('postgres_changes', 
                 { event: 'UPDATE', schema: 'public', table: 'users' }, 
-                payload => {
-                    const user = payload.new;
-                    if (user && user.username !== currentUser?.username) {
-                        onlineUsers[user.username] = user.is_online;
-                        if (currentChatWith === user.username) updateStatus();
-                        updateChatsList();
-                        updateSearchResults();
-                    }
-                }
+                payload => handleUserUpdate(payload.new)
             )
             .subscribe();
+    }
+
+    function handleUserUpdate(user) {
+        if (user && user.username !== currentUser?.username) {
+            onlineUsers[user.username] = user.is_online;
+            if (currentChatWith === user.username) {
+                updateChatStatus();
+            }
+            updateChatsList();
+            updateSearchResults();
+            updateContactsStatus();
+        }
     }
 
     function startHeartbeat() {
         stopHeartbeat();
         setOnline(true);
-        heartbeatTimer = setInterval(() => setOnline(true), 25000);
+        heartbeatInterval = setInterval(() => setOnline(true), 25000);
     }
 
     function stopHeartbeat() {
-        if (heartbeatTimer) {
-            clearInterval(heartbeatTimer);
-            heartbeatTimer = null;
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
         }
     }
 
@@ -304,23 +341,27 @@
     function handleNewMessage(msg) {
         if (!currentUser) return;
         
-        if (currentChatWith === msg.sender) {
-            if (!document.querySelector(`[data-message-id="${msg.id}"]`)) {
-                showMessage(msg, false);
-                scrollToBottom();
-                markRead(msg.sender);
+        if (msg.receiver === currentUser.username || msg.sender === currentUser.username) {
+            if (currentChatWith === (msg.sender === currentUser.username ? msg.receiver : msg.sender)) {
+                if (!document.querySelector(`[data-message-id="${msg.id}"]`)) {
+                    displayMessage(msg, msg.sender === currentUser.username);
+                    scrollToBottom();
+                    if (msg.receiver === currentUser.username) {
+                        markMessagesAsRead(msg.sender);
+                    }
+                }
+            } else if (msg.receiver === currentUser.username) {
+                unreadCounts[msg.sender] = (unreadCounts[msg.sender] || 0) + 1;
+                updateTitle();
             }
-        } else if (msg.receiver === currentUser.username) {
-            unreadCounts[msg.sender] = (unreadCounts[msg.sender] || 0) + 1;
-            updateTitle();
             loadChats();
         }
     }
 
-    function updateStatus() {
+    function updateChatStatus() {
         if (!currentChatWith || !elements.chatStatus) return;
-        const online = onlineUsers[currentChatWith] === true;
-        elements.chatStatus.textContent = online ? 'на связи' : 'без связи';
+        const isOnline = onlineUsers[currentChatWith] === true;
+        elements.chatStatus.textContent = isOnline ? 'на связи' : 'без связи';
     }
 
     async function loadChats() {
@@ -332,106 +373,130 @@
             .or(`sender.eq.${currentUser.username},receiver.eq.${currentUser.username}`)
             .order('created_at', { ascending: false });
 
-        const chatsMap = {};
-        unreadCounts = {};
+        const chatsMap = new Map();
+        const newUnreadCounts = {};
 
         if (data) {
             for (const msg of data) {
-                const other = msg.sender === currentUser.username ? msg.receiver : msg.sender;
+                const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
                 
-                if (!chatsMap[other] || new Date(msg.created_at) > new Date(chatsMap[other].lastTime)) {
-                    chatsMap[other] = {
-                        username: other,
+                if (!chatsMap.has(otherUser) || new Date(msg.created_at) > new Date(chatsMap.get(otherUser).lastTime)) {
+                    chatsMap.set(otherUser, {
+                        username: otherUser,
                         lastMessage: msg.message,
                         lastTime: msg.created_at,
                         isMyMessage: msg.sender === currentUser.username
-                    };
+                    });
                 }
                 
                 if (msg.receiver === currentUser.username && !msg.read) {
-                    unreadCounts[other] = (unreadCounts[other] || 0) + 1;
+                    newUnreadCounts[otherUser] = (newUnreadCounts[otherUser] || 0) + 1;
                 }
             }
         }
 
-        chats = Object.values(chatsMap);
+        chats = Array.from(chatsMap.values());
+        unreadCounts = newUnreadCounts;
         displayChats();
         updateTitle();
         loadOnlineStatuses();
     }
 
-    function displayChats(filtered = chats) {
+    function displayChats(chatsToDisplay = chats) {
         if (!elements.chatsList) return;
         elements.chatsList.innerHTML = '';
         
-        if (filtered.length === 0) {
+        if (chatsToDisplay.length === 0) {
             elements.chatsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px 20px;">Нет чатов</div>';
             return;
         }
 
-        const sorted = [...filtered].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+        const sortedChats = [...chatsToDisplay].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
 
-        sorted.forEach(chat => {
-            const div = document.createElement('div');
-            div.className = 'chat-item';
-            div.onclick = () => showChat(chat.username);
-            
-            const online = onlineUsers[chat.username] === true;
-            const unread = unreadCounts[chat.username] || 0;
-            const time = formatTime(new Date(chat.lastTime));
-            const prefix = chat.isMyMessage ? 'Вы: ' : '';
-            const lastMsg = chat.lastMessage.length > 25 ? chat.lastMessage.substring(0, 25) + '...' : chat.lastMessage;
-            
-            div.innerHTML = `
-                <div class="chat-avatar ${online ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
-                <div class="chat-info">
-                    <div class="chat-name">
-                        ${escapeHtml(chat.username)}
-                        <span class="chat-status-text ${online ? 'online' : ''}">${online ? 'на связи' : 'без связи'}</span>
-                    </div>
-                    <div class="chat-last-message">${escapeHtml(prefix + lastMsg)}</div>
-                    <div class="chat-time">${time}</div>
-                </div>
-                ${unread ? `<div class="unread-badge">${unread}</div>` : ''}
-            `;
-            
-            elements.chatsList.appendChild(div);
+        sortedChats.forEach(chat => {
+            const chatElement = createChatElement(chat);
+            elements.chatsList.appendChild(chatElement);
         });
     }
 
+    function createChatElement(chat) {
+        const div = document.createElement('div');
+        div.className = 'chat-item';
+        div.onclick = () => showChat(chat.username);
+        
+        const isOnline = onlineUsers[chat.username] === true;
+        const unreadCount = unreadCounts[chat.username] || 0;
+        const timeString = formatMessageTime(chat.lastTime);
+        const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
+        const displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
+        
+        div.innerHTML = `
+            <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
+            <div class="chat-info">
+                <div class="chat-name">
+                    ${escapeHtml(chat.username)}
+                    <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>
+                </div>
+                <div class="chat-last-message">${escapeHtml(messagePrefix + displayMessage)}</div>
+                <div class="chat-time">${timeString}</div>
+            </div>
+            ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
+        `;
+        
+        return div;
+    }
+
     function updateChatsList() {
-        const items = elements.chatsList.querySelectorAll('.chat-item');
-        items.forEach(item => {
-            const nameEl = item.querySelector('.chat-name');
-            if (!nameEl) return;
+        const chatItems = elements.chatsList.querySelectorAll('.chat-item');
+        chatItems.forEach(item => {
+            const nameElement = item.querySelector('.chat-name');
+            if (!nameElement) return;
             
-            const username = nameEl.childNodes[0]?.textContent?.trim() || '';
+            const username = nameElement.childNodes[0]?.textContent?.trim() || '';
             if (!username) return;
             
-            const online = onlineUsers[username] === true;
-            const avatar = item.querySelector('.chat-avatar');
-            const status = item.querySelector('.chat-status-text');
+            const isOnline = onlineUsers[username] === true;
+            const avatarElement = item.querySelector('.chat-avatar');
+            const statusElement = item.querySelector('.chat-status-text');
             
-            if (avatar) avatar.className = `chat-avatar ${online ? 'online' : ''}`;
-            if (status) {
-                status.textContent = online ? 'на связи' : 'без связи';
-                status.className = `chat-status-text ${online ? 'online' : ''}`;
+            if (avatarElement) {
+                avatarElement.className = `chat-avatar ${isOnline ? 'online' : ''}`;
+            }
+            if (statusElement) {
+                statusElement.textContent = isOnline ? 'на связи' : 'без связи';
+                statusElement.className = `chat-status-text ${isOnline ? 'online' : ''}`;
             }
         });
     }
 
     function updateSearchResults() {
-        const items = elements.searchResults.querySelectorAll('.user-result');
-        items.forEach(item => {
-            const nameEl = item.querySelector('.user-result-name');
-            if (!nameEl) return;
+        const resultItems = elements.searchResults.querySelectorAll('.user-result');
+        resultItems.forEach(item => {
+            const nameElement = item.querySelector('.user-result-name');
+            if (!nameElement) return;
             
-            const username = nameEl.textContent;
-            const online = onlineUsers[username] === true;
-            const avatar = item.querySelector('.user-result-avatar');
+            const username = nameElement.textContent;
+            const isOnline = onlineUsers[username] === true;
+            const avatarElement = item.querySelector('.user-result-avatar');
             
-            if (avatar) {
-                avatar.className = `user-result-avatar ${online ? 'online' : ''}`;
+            if (avatarElement) {
+                avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
+            }
+        });
+    }
+
+    function updateContactsStatus() {
+        const contactItems = elements.contactsList.querySelectorAll('.contact-item');
+        contactItems.forEach(item => {
+            const nameElement = item.querySelector('.contact-name');
+            if (!nameElement) return;
+            
+            const username = nameElement.textContent;
+            const isOnline = onlineUsers[username] === true;
+            const avatarElement = item.querySelector('.contact-avatar');
+            
+            if (avatarElement) {
+                avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
             }
         });
     }
@@ -448,27 +513,29 @@
 
         if (data) {
             elements.privateMessages.innerHTML = '';
-            data.forEach(msg => showMessage(msg, msg.sender === currentUser.username));
+            data.forEach(msg => {
+                displayMessage(msg, msg.sender === currentUser.username);
+            });
         }
     }
 
-    function showMessage(msg, isMyMessage) {
-        const div = document.createElement('div');
-        div.className = `message ${isMyMessage ? 'me' : 'other'}`;
-        div.dataset.messageId = msg.id;
+    function displayMessage(msg, isMyMessage) {
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
+        messageElement.dataset.messageId = msg.id;
         
-        const date = new Date(msg.created_at);
-        const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-        const status = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
+        const messageTime = new Date(msg.created_at);
+        const timeString = messageTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
         
-        div.innerHTML = `
+        messageElement.innerHTML = `
             <div class="message-content">
                 <div class="text">${escapeHtml(msg.message)}</div>
-                <div class="time">${time} ${status}</div>
+                <div class="time">${timeString} ${statusSymbol}</div>
             </div>
         `;
         
-        elements.privateMessages.appendChild(div);
+        elements.privateMessages.appendChild(messageElement);
     }
 
     function scrollToBottom() {
@@ -482,7 +549,7 @@
     async function sendMessage() {
         if (!currentChatWith || !currentUser || !elements.messageInput.value.trim()) return;
         
-        const message = elements.messageInput.value.trim();
+        const messageText = elements.messageInput.value.trim();
         elements.messageInput.value = '';
         
         const chatId = [currentUser.username, currentChatWith].sort().join('_');
@@ -492,20 +559,20 @@
                 chat_id: chatId,
                 sender: currentUser.username,
                 receiver: currentChatWith,
-                message: message,
+                message: messageText,
                 read: false,
                 created_at: new Date().toISOString()
             })
             .select();
 
         if (data && data[0]) {
-            showMessage(data[0], true);
+            displayMessage(data[0], true);
             scrollToBottom();
             loadChats();
         }
     }
 
-    async function markRead(username) {
+    async function markMessagesAsRead(username) {
         if (!username || !currentUser) return;
         
         await supabase
@@ -517,22 +584,23 @@
         
         delete unreadCounts[username];
         updateTitle();
+        loadChats();
     }
 
     function updateTitle() {
-        const total = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
-        document.title = total ? `(${total}) SpeedNexus` : 'SpeedNexus';
+        const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+        document.title = totalUnread ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
     }
 
-    async function startChat() {
+    async function startNewChat() {
         const username = elements.newChatUsername.value.trim();
         if (!username) {
-            showError(elements.newChatError, 'Введите имя');
+            showError(elements.newChatError, 'Введите имя пользователя');
             return;
         }
         
         if (username === currentUser.username) {
-            showError(elements.newChatError, 'Нельзя с собой');
+            showError(elements.newChatError, 'Нельзя начать чат с самим собой');
             return;
         }
 
@@ -552,7 +620,7 @@
             hideModal('newChatModal');
             await showChat(username);
         } catch (e) {
-            showError(elements.newChatError, 'Ошибка');
+            showError(elements.newChatError, 'Ошибка при поиске пользователя');
         } finally {
             showLoading(false);
         }
@@ -585,11 +653,11 @@
 
             showChats();
             updateUI();
-            setupRealtime();
+            setupRealtimeSubscriptions();
             loadChats();
             startHeartbeat();
         } catch (e) {
-            showError(elements.loginError, 'Ошибка');
+            showError(elements.loginError, 'Ошибка при входе');
             localStorage.removeItem('speednexus_user');
             currentUser = null;
         } finally {
@@ -623,11 +691,12 @@
                 .maybeSingle();
 
             if (data) {
-                showError(elements.editUsernameError, 'Имя занято');
+                showError(elements.editUsernameError, 'Имя пользователя уже занято');
                 return;
             }
 
             await setOnline(false);
+            
             await supabase
                 .from('users')
                 .upsert({ 
@@ -642,23 +711,24 @@
             updateUI();
             hideModal('editProfileModal');
             loadChats();
+            elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
         } catch (e) {
-            showError(elements.editUsernameError, 'Ошибка');
+            showError(elements.editUsernameError, 'Ошибка при изменении профиля');
         } finally {
             showLoading(false);
         }
     }
 
     async function searchUsers() {
-        const term = elements.searchUsername.value.trim();
+        const searchTerm = elements.searchUsername.value.trim();
         
         try {
             let query = supabase
                 .from('users')
                 .select('username, is_online');
             
-            if (term) {
-                query = query.ilike('username', `%${term}%`);
+            if (searchTerm) {
+                query = query.ilike('username', `%${searchTerm}%`);
             }
             
             const { data } = await query.limit(50);
@@ -666,39 +736,41 @@
             elements.searchResults.innerHTML = '';
             
             if (!data || data.length === 0) {
-                elements.searchResults.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Никого нет</p>';
+                elements.searchResults.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Пользователи не найдены</div>';
                 return;
             }
 
-            const filtered = data.filter(user => user.username !== currentUser?.username);
+            const filteredUsers = data.filter(user => user.username !== currentUser?.username);
 
-            if (filtered.length === 0) {
-                elements.searchResults.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Никого нет</p>';
+            if (filteredUsers.length === 0) {
+                elements.searchResults.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Пользователи не найдены</div>';
                 return;
             }
 
-            filtered.forEach(user => {
-                const div = document.createElement('div');
-                div.className = 'user-result';
-                div.onclick = () => {
+            filteredUsers.forEach(user => {
+                const userElement = document.createElement('div');
+                userElement.className = 'user-result';
+                userElement.onclick = () => {
                     hideModal('findFriendsModal');
                     showChat(user.username);
                 };
                 
-                div.innerHTML = `
+                const isOnline = user.is_online === true;
+                
+                userElement.innerHTML = `
                     <div class="user-result-info">
-                        <div class="user-result-avatar ${user.is_online ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
+                        <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
                         <div>
                             <div class="user-result-name">${escapeHtml(user.username)}</div>
-                            <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${user.is_online ? 'на связи' : 'без связи'}</div>
+                            <div class="user-result-status">${isOnline ? 'на связи' : 'без связи'}</div>
                         </div>
                     </div>
                 `;
                 
-                elements.searchResults.appendChild(div);
+                elements.searchResults.appendChild(userElement);
             });
         } catch (e) {
-            elements.searchResults.innerHTML = '<p style="color: #ff7d7d; text-align: center;">Ошибка</p>';
+            elements.searchResults.innerHTML = '<div style="color: #ff7d7d; text-align: center;">Ошибка при поиске</div>';
         }
     }
 
@@ -707,37 +779,40 @@
         elements.contactsList.innerHTML = '';
         
         if (contacts.length === 0) {
-            elements.contactsList.innerHTML = '<p style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Нет контактов</p>';
+            elements.contactsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Нет контактов</div>';
             return;
         }
 
         contacts.forEach(contact => {
-            const div = document.createElement('div');
-            div.className = 'contact-item';
-            div.onclick = () => {
+            const contactElement = document.createElement('div');
+            contactElement.className = 'contact-item';
+            contactElement.onclick = () => {
                 hideModal('contactsModal');
                 showChat(contact.username);
             };
             
-            const online = onlineUsers[contact.username] === true;
+            const isOnline = onlineUsers[contact.username] === true;
             
-            div.innerHTML = `
+            contactElement.innerHTML = `
                 <div class="contact-info">
-                    <div class="contact-avatar ${online ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
+                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
                     <div>
                         <div class="contact-name">${escapeHtml(contact.username)}</div>
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${online ? 'на связи' : 'без связи'}</div>
+                        <div class="contact-status">${isOnline ? 'на связи' : 'без связи'}</div>
                     </div>
                 </div>
             `;
             
-            elements.contactsList.appendChild(div);
+            elements.contactsList.appendChild(contactElement);
         });
     }
 
     async function loadOnlineStatuses() {
-        const usernames = chats.map(c => c.username);
-        if (currentChatWith && !usernames.includes(currentChatWith)) usernames.push(currentChatWith);
+        const usernames = chats.map(chat => chat.username);
+        if (currentChatWith && !usernames.includes(currentChatWith)) {
+            usernames.push(currentChatWith);
+        }
+        
         if (usernames.length === 0) return;
 
         const { data } = await supabase
@@ -746,19 +821,24 @@
             .in('username', usernames);
 
         if (data) {
-            data.forEach(u => onlineUsers[u.username] = u.is_online);
-            updateStatus();
+            data.forEach(user => {
+                onlineUsers[user.username] = user.is_online;
+            });
+            updateChatStatus();
             updateChatsList();
         }
     }
 
-    function filterChats(term) {
-        if (!term) {
+    function filterChats(searchTerm) {
+        if (!searchTerm) {
             displayChats(chats);
             return;
         }
-        const filtered = chats.filter(c => c.username.toLowerCase().includes(term.toLowerCase()));
-        displayChats(filtered);
+        
+        const filteredChats = chats.filter(chat => 
+            chat.username.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        displayChats(filteredChats);
     }
 
     function logout() {
@@ -769,35 +849,27 @@
             cleanupSubscriptions();
             currentUser = null;
             currentChatWith = null;
+            onlineUsers = {};
             showLogin();
             showLoading(false);
         });
     }
 
-    function showModal(id) {
-        const modal = document.getElementById(id);
-        if (modal) modal.style.display = 'flex';
-    }
-
-    function hideModal(id) {
-        const modal = document.getElementById(id);
-        if (modal) modal.style.display = 'none';
-    }
-
-    function showError(el, msg) {
-        if (!el) return;
-        el.textContent = msg;
-        el.style.display = 'block';
-        setTimeout(() => el.style.display = 'none', 3000);
-    }
-
-    function formatTime(date) {
+    function formatMessageTime(timestamp) {
+        const messageDate = new Date(timestamp);
         const now = new Date();
-        const diff = now - date;
-        if (diff < 60000) return 'только что';
-        if (diff < 3600000) return Math.floor(diff / 60000) + ' мин';
-        if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч';
-        return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        const diffMs = now - messageDate;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'только что';
+        if (diffMins < 60) return `${diffMins} мин`;
+        if (diffHours < 24) return `${diffHours} ч`;
+        if (diffDays === 1) return 'вчера';
+        if (diffDays < 7) return `${diffDays} дн`;
+        
+        return messageDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     }
 
     function escapeHtml(text) {
