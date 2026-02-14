@@ -5,12 +5,14 @@
         projectId: "speednexusrus",
         storageBucket: "speednexusrus.firebasestorage.app",
         messagingSenderId: "524449944041",
-        appId: "1:524449944041:web:362f4343ed1507ec2d3b78",
-        measurementId: "G-YZ2JD6V0Y7"
+        appId: "1:524449944041:web:362f4343ed1507ec2d3b78"
     };
 
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
     const db = firebase.firestore();
+    db.settings({ experimentalForceLongPolling: true, merge: true });
 
     const elements = {
         loginScreen: document.getElementById('loginScreen'),
@@ -295,8 +297,7 @@
             .onSnapshot(snapshot => {
                 snapshot.docChanges().forEach(change => {
                     if (change.type === 'modified') {
-                        const user = change.doc.data();
-                        handleUserUpdate(user);
+                        handleUserUpdate(change.doc.data());
                     }
                 });
             });
@@ -333,7 +334,7 @@
                 username: currentUser.username,
                 is_online: status,
                 last_seen: new Date().toISOString()
-            });
+            }, { merge: true });
         } catch (e) {}
     }
 
