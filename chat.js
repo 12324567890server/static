@@ -101,7 +101,7 @@
         elements.loginScreen.style.display = 'none';
         elements.chatsScreen.style.display = 'flex';
         elements.chatScreen.style.display = 'none';
-        elements.chatsTitle.textContent = `Чаты`;
+        elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
     }
 
     async function showChat(username) {
@@ -139,17 +139,13 @@
             setTimeout(() => elements.sideMenu.classList.add('show'), 10);
         });
 
-        elements.closeMenu.addEventListener('click', () => {
-            elements.sideMenu.classList.remove('show');
-            setTimeout(() => elements.sideMenu.style.display = 'none', 300);
-        });
+        elements.closeMenu.addEventListener('click', hideSideMenu);
 
         document.addEventListener('click', e => {
             if (!elements.sideMenu.contains(e.target) && 
                 !elements.chatsMenuBtn.contains(e.target) &&
                 elements.sideMenu.classList.contains('show')) {
-                elements.sideMenu.classList.remove('show');
-                setTimeout(() => elements.sideMenu.style.display = 'none', 300);
+                hideSideMenu();
             }
         });
 
@@ -172,15 +168,12 @@
 
         elements.findFriendsBtn.addEventListener('click', () => {
             elements.searchUsername.value = '';
-            elements.searchResults.innerHTML = '';
             showModal('findFriendsModal');
             setTimeout(() => handleSearch(), 100);
         });
 
         elements.searchBtn.addEventListener('click', handleSearch);
-        
         elements.searchUsername.addEventListener('input', handleSearch);
-        
         elements.searchUsername.addEventListener('keypress', e => e.key === 'Enter' && handleSearch());
 
         elements.contactsBtn.addEventListener('click', () => {
@@ -191,7 +184,6 @@
         elements.logoutBtn.addEventListener('click', handleLogout);
 
         elements.sendMessageBtn.addEventListener('click', handleSendMessage);
-        
         elements.messageInput.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -217,14 +209,16 @@
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 closeAllModals();
-                if (elements.sideMenu.classList.contains('show')) {
-                    elements.sideMenu.classList.remove('show');
-                    setTimeout(() => elements.sideMenu.style.display = 'none', 300);
-                }
+                hideSideMenu();
             }
         });
 
         elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+    }
+
+    function hideSideMenu() {
+        elements.sideMenu.classList.remove('show');
+        setTimeout(() => elements.sideMenu.style.display = 'none', 300);
     }
 
     function setupRealtime() {
@@ -258,8 +252,6 @@
     function cleanupSubscriptions() {
         if (messageSubscription) supabase.removeChannel(messageSubscription);
         if (userSubscription) supabase.removeChannel(userSubscription);
-        messageSubscription = null;
-        userSubscription = null;
     }
 
     function startHeartbeat() {
