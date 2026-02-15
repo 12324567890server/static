@@ -334,6 +334,20 @@
                             }
                             updateChatsList();
                             updateSearchResults();
+                            
+                            if (currentChatWith === user.username && user.is_online) {
+                                markMessagesAsRead(currentChatWith);
+                            }
+                        }
+                    } else if (change.type === 'removed') {
+                        const user = change.doc.data();
+                        if (user.username !== currentUser?.username) {
+                            delete onlineUsers[user.username];
+                            if (currentChatWith === user.username) {
+                                updateChatStatus();
+                            }
+                            updateChatsList();
+                            updateSearchResults();
                         }
                     }
                 });
@@ -557,13 +571,17 @@
                 read: false,
                 created_at: new Date().toISOString()
             });
+            
+            if (onlineUsers[currentChatWith]) {
+                setTimeout(() => markMessagesAsRead(currentChatWith), 500);
+            }
         } catch (e) {
             console.error("Send message error:", e);
         }
     }
 
     async function markMessagesAsRead(username) {
-        if (!username || !currentUser) return;
+        if (!username || !currentUser || !currentChatWith) return;
         
         try {
             const snapshot = await db.collection('messages')
@@ -572,15 +590,25 @@
                 .where('read', '==', false)
                 .get();
 
-            const batch = db.batch();
-            snapshot.forEach(doc => {
-                batch.update(doc.ref, { read: true });
-            });
-            await batch.commit();
-            
-            delete unreadCounts[username];
-            updateTitle();
-            loadChats();
+            if (!snapshot.empty) {
+                const batch = db.batch();
+                snapshot.forEach(doc => {
+                    batch.update(doc.ref, { read: true });
+                });
+                await batch.commit();
+                
+                delete unreadCounts[username];
+                updateTitle();
+                loadChats();
+                
+                const messageElements = document.querySelectorAll(`.message.other[data-message-id]`);
+                messageElements.forEach(el => {
+                    const timeDiv = el.querySelector('.time');
+                    if (timeDiv && !timeDiv.textContent.includes('✓✓')) {
+                        timeDiv.textContent = timeDiv.textContent.replace('✓', '✓✓');
+                    }
+                });
+            }
         } catch (e) {
             console.error("Mark as read error:", e);
         }
