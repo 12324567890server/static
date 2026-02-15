@@ -310,6 +310,17 @@
                                     markMessagesAsRead(currentChatWith);
                                 }
                             }
+                        } else if (change.type === 'modified') {
+                            const msg = change.doc.data();
+                            const msgId = change.doc.id;
+                            const msgElement = document.querySelector(`[data-message-id="${msgId}"]`);
+                            
+                            if (msgElement && msg.read) {
+                                const timeDiv = msgElement.querySelector('.time');
+                                if (timeDiv && !timeDiv.textContent.includes('✓✓')) {
+                                    timeDiv.textContent = timeDiv.textContent.replace('✓', '✓✓');
+                                }
+                            }
                         }
                     });
                 });
@@ -328,26 +339,19 @@
                     if (change.type === 'modified' || change.type === 'added') {
                         const user = change.doc.data();
                         if (user.username !== currentUser?.username) {
+                            const wasOnline = onlineUsers[user.username];
                             onlineUsers[user.username] = user.is_online;
+                            
                             if (currentChatWith === user.username) {
                                 updateChatStatus();
                             }
+                            
                             updateChatsList();
                             updateSearchResults();
                             
-                            if (currentChatWith === user.username && user.is_online) {
+                            if (currentChatWith === user.username && user.is_online && !wasOnline) {
                                 markMessagesAsRead(currentChatWith);
                             }
-                        }
-                    } else if (change.type === 'removed') {
-                        const user = change.doc.data();
-                        if (user.username !== currentUser?.username) {
-                            delete onlineUsers[user.username];
-                            if (currentChatWith === user.username) {
-                                updateChatStatus();
-                            }
-                            updateChatsList();
-                            updateSearchResults();
                         }
                     }
                 });
@@ -373,7 +377,7 @@
             await db.collection('users').doc(currentUser.username).set({
                 username: currentUser.username,
                 is_online: status,
-                last_seen: new Date().toISOString()
+                last_seen: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
         } catch (e) {}
     }
@@ -531,7 +535,7 @@
         messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
         messageElement.dataset.messageId = msgId;
         
-        const messageTime = new Date(msg.created_at);
+        const messageTime = msg.created_at?.toDate ? msg.created_at.toDate() : new Date(msg.created_at);
         const timeString = messageTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
         
@@ -569,19 +573,15 @@
                 receiver: currentChatWith,
                 message: messageText,
                 read: false,
-                created_at: new Date().toISOString()
+                created_at: firebase.firestore.FieldValue.serverTimestamp()
             });
-            
-            if (onlineUsers[currentChatWith]) {
-                setTimeout(() => markMessagesAsRead(currentChatWith), 500);
-            }
         } catch (e) {
             console.error("Send message error:", e);
         }
     }
 
     async function markMessagesAsRead(username) {
-        if (!username || !currentUser || !currentChatWith) return;
+        if (!username || !currentUser) return;
         
         try {
             const snapshot = await db.collection('messages')
@@ -600,14 +600,6 @@
                 delete unreadCounts[username];
                 updateTitle();
                 loadChats();
-                
-                const messageElements = document.querySelectorAll(`.message.other[data-message-id]`);
-                messageElements.forEach(el => {
-                    const timeDiv = el.querySelector('.time');
-                    if (timeDiv && !timeDiv.textContent.includes('✓✓')) {
-                        timeDiv.textContent = timeDiv.textContent.replace('✓', '✓✓');
-                    }
-                });
             }
         } catch (e) {
             console.error("Mark as read error:", e);
@@ -666,7 +658,7 @@
             await db.collection('users').doc(username).set({
                 username: username,
                 is_online: true,
-                last_seen: new Date().toISOString()
+                last_seen: firebase.firestore.FieldValue.serverTimestamp()
             });
 
             currentUser = { username };
@@ -717,7 +709,7 @@
             await db.collection('users').doc(newUsername).set({
                 username: newUsername,
                 is_online: true,
-                last_seen: new Date().toISOString()
+                last_seen: firebase.firestore.FieldValue.serverTimestamp()
             });
 
             currentUser.username = newUsername;
@@ -866,7 +858,9 @@
     }
 
     function formatMessageTime(timestamp) {
-        const messageDate = new Date(timestamp);
+        if (!timestamp) return '';
+        
+        const messageDate = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
         const now = new Date();
         const diffMs = now - messageDate;
         const diffMins = Math.floor(diffMs / 60000);
