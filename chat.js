@@ -73,8 +73,9 @@
     let scrollPositions = {};
     let connectionId = null;
     let lastHeartbeat = Date.now();
-    const HEARTBEAT_INTERVAL = 15000;
-    const CONNECTION_TIMEOUT = 30000;
+    const HEARTBEAT_INTERVAL = 10000;
+    const CONNECTION_TIMEOUT = 20000;
+    let forceStatusCheckInterval = null;
 
     init();
 
@@ -87,7 +88,8 @@
         window.addEventListener('online', handleNetworkOnline);
         window.addEventListener('offline', handleNetworkOffline);
         
-        setInterval(cleanupStaleConnections, 30000);
+        setInterval(cleanupStaleConnections, 15000);
+        setInterval(forceStatusCheck, 5000);
 
         if (isMobile) {
             document.addEventListener('touchstart', (e) => {
@@ -101,7 +103,7 @@
     function handleVisibilityChange() {
         isPageVisible = !document.hidden;
         if (isPageVisible) {
-            updateOnlineStatus(true);
+            forceStatusUpdate();
             if (currentChatWith && isChatActive) {
                 setTimeout(() => markMessagesAsRead(currentChatUserId), 1000);
             }
@@ -112,13 +114,13 @@
 
     function handleBeforeUnload() {
         if (currentUser && connectionId) {
-            removeConnection();
+            forceRemoveConnection();
         }
     }
 
     function handleNetworkOnline() {
         if (currentUser) {
-            updateOnlineStatus(true);
+            forceStatusUpdate();
         }
     }
 
@@ -128,14 +130,82 @@
         }
     }
 
+    async function forceStatusCheck() {
+        if (!currentUser || !connectionId) return;
+        
+        try {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            const connectionDoc = await userRef.collection('connections').doc(connectionId).get();
+            
+            if (connectionDoc.exists) {
+                const connData = connectionDoc.data();
+                const lastSeen = new Date(connData.last_seen || connData.created_at).getTime();
+                const now = Date.now();
+                
+                if (now - lastSeen > CONNECTION_TIMEOUT) {
+                    await updateOnlineStatus(false);
+                } else if (isPageVisible && navigator.onLine) {
+                    await updateOnlineStatus(true);
+                }
+            } else {
+                await createConnection();
+                await updateOnlineStatus(true);
+            }
+        } catch (e) {}
+    }
+
+    async function forceStatusUpdate() {
+        if (!currentUser || !connectionId) return;
+        await updateOnlineStatus(true);
+    }
+
     async function cleanupStaleConnections() {
         if (!currentUser) return;
         
         try {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            const connectionsSnapshot = await userRef.collection('connections').get();
             const now = Date.now();
-            if (now - lastHeartbeat > CONNECTION_TIMEOUT) {
-                await updateOnlineStatus(false);
+            let changed = false;
+            
+            connectionsSnapshot.forEach(doc => {
+                const conn = doc.data();
+                const lastSeen = new Date(conn.last_seen || conn.created_at).getTime();
+                
+                if (now - lastSeen > CONNECTION_TIMEOUT) {
+                    doc.ref.delete();
+                    changed = true;
+                }
+            });
+            
+            if (changed) {
+                await updateOverallUserStatus();
             }
+        } catch (e) {}
+    }
+
+    async function forceRemoveConnection() {
+        if (!currentUser || !connectionId) return;
+        
+        try {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            await userRef.collection('connections').doc(connectionId).delete();
+            
+            const connectionsSnapshot = await userRef.collection('connections').get();
+            let isAnyOnline = false;
+            
+            connectionsSnapshot.forEach(doc => {
+                if (doc.data().is_online === true) {
+                    isAnyOnline = true;
+                }
+            });
+            
+            await userRef.set({
+                uid: currentUser.uid,
+                username: currentUser.username,
+                is_online: isAnyOnline,
+                last_seen: new Date().toISOString()
+            }, { merge: true });
         } catch (e) {}
     }
 
@@ -605,8 +675,6 @@
             if (currentUser && connectionId) {
                 if (isPageVisible && navigator.onLine) {
                     updateOnlineStatus(true);
-                } else {
-                    updateOnlineStatus(false);
                 }
             }
         }, HEARTBEAT_INTERVAL);
@@ -1174,7 +1242,7 @@
     function logout() {
         showLoading(true);
         
-        removeConnection().finally(() => {
+        forceRemoveConnection().finally(() => {
             localStorage.removeItem('speednexus_user');
             stopHeartbeat();
             cleanupSubscriptions();
