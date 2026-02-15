@@ -59,145 +59,32 @@
     let currentChatWith = null;
     let currentChatUserId = null;
     let isChatActive = false;
-    let isPageVisible = true;
     let chats = [];
     let unreadCounts = {};
-    let onlineUsers = new Map();
+    let onlineUsers = {};
     let messagesUnsubscribe = null;
-    let chatsUnsubscribe = null;
-    let usersUnsubscribe = null;
-    let heartbeatInterval = null;
-    let lastReadTime = {};
-    let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let messageListener = null;
-    let scrollPositions = {};
-    let connectionId = null;
-    let cleanupInterval = null;
+    let currentConnectionId = null;
 
     init();
 
     function init() {
         checkUser();
         setupEventListeners();
-        startGlobalCleanup();
-        
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        window.addEventListener('online', handleNetworkOnline);
-        window.addEventListener('offline', handleNetworkOffline);
+        setInterval(cleanupStaleConnections, 10000);
     }
 
-    function startGlobalCleanup() {
-        if (cleanupInterval) clearInterval(cleanupInterval);
-        cleanupInterval = setInterval(() => {
-            cleanupOldConnections();
-        }, 30000);
-    }
-
-    async function cleanupOldConnections() {
+    async function cleanupStaleConnections() {
         try {
-            const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
-            const connectionsSnapshot = await db.collectionGroup('connections')
-                .where('last_seen', '<', thirtySecondsAgo)
-                .where('is_online', '==', true)
+            const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
+            const snapshot = await db.collection('connections')
+                .where('last_seen', '<', tenSecondsAgo)
+                .where('online', '==', true)
                 .get();
-
-            for (const doc of connectionsSnapshot.docs) {
-                await doc.ref.update({
-                    is_online: false,
-                    auto_offline: true,
-                    offline_time: new Date().toISOString()
-                });
-                
-                const userRef = doc.ref.parent.parent;
-                if (userRef) {
-                    await updateUserOverallStatus(userRef.id);
-                }
-            }
-        } catch (e) {}
-    }
-
-    async function updateUserOverallStatus(userId) {
-        try {
-            const connectionsSnapshot = await db.collection('users')
-                .doc(userId)
-                .collection('connections')
-                .where('is_online', '==', true)
-                .get();
-
-            const isOnline = !connectionsSnapshot.empty;
             
-            await db.collection('users').doc(userId).update({
-                is_online: isOnline,
-                last_status_update: new Date().toISOString()
+            snapshot.forEach(doc => {
+                doc.ref.update({ online: false });
             });
-        } catch (e) {}
-    }
-
-    function handleVisibilityChange() {
-        isPageVisible = !document.hidden;
-        if (currentUser && connectionId) {
-            updateOnlineStatus(!document.hidden);
-        }
-    }
-
-    function handleBeforeUnload() {
-        if (currentUser && connectionId) {
-            removeConnection();
-        }
-    }
-
-    function handleNetworkOnline() {
-        if (currentUser && connectionId) {
-            updateOnlineStatus(true);
-        }
-    }
-
-    function handleNetworkOffline() {
-        if (currentUser && connectionId) {
-            updateOnlineStatus(false);
-        }
-    }
-
-    async function updateOnlineStatus(isOnline) {
-        if (!currentUser || !connectionId) return;
-        
-        try {
-            const connectionRef = db.collection('users')
-                .doc(currentUser.uid)
-                .collection('connections')
-                .doc(connectionId);
-            
-            await connectionRef.set({
-                connection_id: connectionId,
-                is_online: isOnline,
-                last_seen: new Date().toISOString(),
-                device: isMobile ? 'mobile' : 'desktop',
-                user_agent: navigator.userAgent
-            }, { merge: true });
-            
-            await updateUserOverallStatus(currentUser.uid);
-            
-        } catch (e) {}
-    }
-
-    async function removeConnection() {
-        if (!currentUser || !connectionId) return;
-        
-        try {
-            const connectionRef = db.collection('users')
-                .doc(currentUser.uid)
-                .collection('connections')
-                .doc(connectionId);
-            
-            await connectionRef.update({
-                is_online: false,
-                last_seen: new Date().toISOString(),
-                disconnected: true
-            });
-            
-            await updateUserOverallStatus(currentUser.uid);
-            
         } catch (e) {}
     }
 
@@ -215,16 +102,11 @@
                         username: userDoc.data().username
                     };
                     
-                    connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                    
-                    await createConnection();
-                    await updateOnlineStatus(true);
-                    
+                    await goOnline();
                     showChats();
                     updateUI();
-                    setupRealtimeSubscriptions();
                     loadChats();
-                    startHeartbeat();
+                    listenUsers();
                 } else {
                     localStorage.removeItem('speednexus_user');
                     showLogin();
@@ -239,27 +121,112 @@
         }
     }
 
-    async function createConnection() {
+    async function goOnline() {
         if (!currentUser) return;
         
-        const connectionRef = db.collection('users')
-            .doc(currentUser.uid)
-            .collection('connections')
-            .doc(connectionId);
+        currentConnectionId = 'conn_' + Date.now();
         
-        await connectionRef.set({
-            connection_id: connectionId,
-            created_at: new Date().toISOString(),
+        await db.collection('connections').doc(currentConnectionId).set({
+            userId: currentUser.uid,
+            username: currentUser.username,
+            online: true,
             last_seen: new Date().toISOString(),
-            is_online: true,
-            device: isMobile ? 'mobile' : 'desktop',
-            user_agent: navigator.userAgent
+            device: /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
+        });
+        
+        await db.collection('users').doc(currentUser.uid).update({
+            online: true,
+            last_seen: new Date().toISOString()
+        });
+        
+        startHeartbeat();
+    }
+
+    async function goOffline() {
+        if (!currentUser || !currentConnectionId) return;
+        
+        try {
+            await db.collection('connections').doc(currentConnectionId).update({
+                online: false,
+                last_seen: new Date().toISOString()
+            });
+            
+            const snapshot = await db.collection('connections')
+                .where('userId', '==', currentUser.uid)
+                .where('online', '==', true)
+                .get();
+            
+            if (snapshot.empty) {
+                await db.collection('users').doc(currentUser.uid).update({
+                    online: false,
+                    last_seen: new Date().toISOString()
+                });
+            }
+        } catch (e) {}
+    }
+
+    function startHeartbeat() {
+        setInterval(async () => {
+            if (currentUser && currentConnectionId) {
+                try {
+                    await db.collection('connections').doc(currentConnectionId).update({
+                        last_seen: new Date().toISOString(),
+                        online: true
+                    });
+                    
+                    await db.collection('users').doc(currentUser.uid).update({
+                        online: true,
+                        last_seen: new Date().toISOString()
+                    });
+                } catch (e) {}
+            }
+        }, 5000);
+    }
+
+    window.addEventListener('beforeunload', function() {
+        if (currentConnectionId) {
+            db.collection('connections').doc(currentConnectionId).update({
+                online: false
+            });
+        }
+    });
+
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            if (currentConnectionId) {
+                db.collection('connections').doc(currentConnectionId).update({
+                    online: false
+                });
+            }
+        } else {
+            if (currentConnectionId) {
+                db.collection('connections').doc(currentConnectionId).update({
+                    online: true,
+                    last_seen: new Date().toISOString()
+                });
+            }
+        }
+    });
+
+    function listenUsers() {
+        db.collection('users').onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added' || change.type === 'modified') {
+                    const user = change.doc.data();
+                    onlineUsers[change.doc.id] = {
+                        username: user.username,
+                        online: user.online || false
+                    };
+                }
+            });
+            displayChats();
+            if (currentChatUserId) {
+                updateChatStatus();
+            }
         });
     }
 
     function showLogin() {
-        stopHeartbeat();
-        cleanupSubscriptions();
         elements.loginScreen.style.display = 'flex';
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'none';
@@ -276,9 +243,7 @@
         showLoading(true);
         try {
             const user = await findUserByUsername(username);
-            if (!user) {
-                return;
-            }
+            if (!user) return;
 
             currentChatWith = username;
             currentChatUserId = user.uid;
@@ -291,28 +256,18 @@
             elements.messageInput.value = '';
             
             await loadMessages(user.uid);
-            
-            setTimeout(() => {
-                if (isChatActive && isPageVisible) {
-                    markMessagesAsRead(user.uid);
-                }
-            }, 1500);
-            
             updateChatStatus();
             scrollToBottom();
-            setupMessageListener(user.uid);
+            listenMessages(user.uid);
             
-        } catch (e) {
-        } finally {
+        } catch (e) {} finally {
             showLoading(false);
         }
     }
 
-    function setupMessageListener(userId) {
-        if (messageListener) {
-            messageListener();
-        }
-
+    function listenMessages(userId) {
+        if (messageListener) messageListener();
+        
         messageListener = db.collection('messages')
             .where('chat_id', '==', [currentUser.uid, userId].sort().join('_'))
             .orderBy('created_at')
@@ -320,242 +275,98 @@
                 snapshot.docChanges().forEach(change => {
                     if (change.type === 'added') {
                         const msg = change.doc.data();
-                        const msgId = change.doc.id;
+                        const isMyMessage = msg.sender === currentUser.uid;
+                        displayMessage(msg, isMyMessage);
+                        scrollToBottom();
                         
-                        if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
-                            const isMyMessage = (msg.sender === currentUser.uid);
-                            displayMessage(msg, isMyMessage, msgId);
-                            
-                            if (isChatActive && currentChatUserId === userId) {
-                                scrollToBottom();
-                                
-                                if (!isMyMessage && !msg.read) {
-                                    markMessagesAsRead(userId);
-                                }
-                            }
+                        if (!isMyMessage && !msg.read) {
+                            markAsRead(userId, change.doc.id);
                         }
                     }
                 });
             });
     }
 
+    async function markAsRead(userId, msgId) {
+        await db.collection('messages').doc(msgId).update({ read: true });
+    }
+
     function updateUI() {
         if (currentUser) {
             elements.currentUsernameDisplay.textContent = currentUser.username;
             elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
-            elements.userStatusDisplay.textContent = 'на связи';
         }
     }
 
     function setupEventListeners() {
         elements.loginButton.addEventListener('click', login);
         elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
-
         elements.chatsMenuBtn.addEventListener('click', () => {
             elements.sideMenu.style.display = 'block';
             setTimeout(() => elements.sideMenu.classList.add('show'), 10);
         });
-
-        elements.closeMenu.addEventListener('click', closeMenu);
-
-        document.addEventListener('click', e => {
-            if (!elements.sideMenu.contains(e.target) && 
-                !elements.chatsMenuBtn.contains(e.target) &&
-                elements.sideMenu.classList.contains('show')) {
-                closeMenu();
-            }
+        elements.closeMenu.addEventListener('click', () => {
+            elements.sideMenu.classList.remove('show');
+            setTimeout(() => elements.sideMenu.style.display = 'none', 300);
         });
-
         elements.newChatBtn.addEventListener('click', () => {
             elements.newChatUsername.value = '';
             elements.newChatError.style.display = 'none';
-            showModal('newChatModal');
+            document.getElementById('newChatModal').style.display = 'flex';
         });
-
         elements.backToChats.addEventListener('click', () => {
             if (messageListener) {
                 messageListener();
                 messageListener = null;
             }
-            
             currentChatWith = null;
             currentChatUserId = null;
             isChatActive = false;
             showChats();
         });
-
         elements.editProfileBtn.addEventListener('click', () => {
             elements.editUsername.value = currentUser?.username || '';
             elements.editUsernameError.style.display = 'none';
-            showModal('editProfileModal');
+            document.getElementById('editProfileModal').style.display = 'flex';
         });
-
         elements.saveProfileBtn.addEventListener('click', editProfile);
-
         elements.findFriendsBtn.addEventListener('click', () => {
             elements.searchUsername.value = '';
             elements.searchResults.innerHTML = '';
-            showModal('findFriendsModal');
+            document.getElementById('findFriendsModal').style.display = 'flex';
             setTimeout(() => searchUsers(), 100);
         });
-
         elements.searchBtn.addEventListener('click', searchUsers);
-        elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
-
-        elements.contactsBtn.addEventListener('click', () => {
-            loadContacts();
-            showModal('contactsModal');
-        });
-
+        elements.contactsBtn.addEventListener('click', loadContacts);
         elements.logoutBtn.addEventListener('click', logout);
-
         elements.sendMessageBtn.addEventListener('click', sendMessage);
-        
         elements.messageInput.addEventListener('keypress', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
             }
         });
-
         elements.startChatBtn.addEventListener('click', startNewChat);
-
+        
         document.querySelectorAll('.close-modal').forEach(btn => {
             btn.addEventListener('click', e => {
                 const modal = e.target.closest('.modal');
-                if (modal) hideModal(modal.id);
+                if (modal) modal.style.display = 'none';
             });
         });
-
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.addEventListener('click', e => {
-                if (e.target === modal) hideModal(modal.id);
-            });
-        });
-
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') {
-                document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
-                if (elements.sideMenu.classList.contains('show')) {
-                    closeMenu();
-                }
-            }
-        });
-
-        elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
-    }
-
-    function closeMenu() {
-        elements.sideMenu.classList.remove('show');
-        setTimeout(() => elements.sideMenu.style.display = 'none', 300);
+        
+        elements.searchChats.addEventListener('input', () => displayChats());
     }
 
     function showLoading(show) {
         elements.loadingOverlay.style.display = show ? 'flex' : 'none';
     }
 
-    function showModal(id) {
-        document.getElementById(id).style.display = 'flex';
-    }
-
-    function hideModal(id) {
-        document.getElementById(id).style.display = 'none';
-    }
-
-    function showError(element, message) {
-        element.textContent = message;
-        element.style.display = 'block';
-    }
-
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
-
-    function cleanupSubscriptions() {
-        if (messagesUnsubscribe) {
-            messagesUnsubscribe();
-            messagesUnsubscribe = null;
-        }
-        if (chatsUnsubscribe) {
-            chatsUnsubscribe();
-            chatsUnsubscribe = null;
-        }
-        if (usersUnsubscribe) {
-            usersUnsubscribe();
-            usersUnsubscribe = null;
-        }
-        if (messageListener) {
-            messageListener();
-            messageListener = null;
-        }
-    }
-
-    function setupRealtimeSubscriptions() {
-        cleanupSubscriptions();
-
-        if (!currentUser) return;
-
-        usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
-            snapshot.docChanges().forEach(change => {
-                if (change.type === 'modified' || change.type === 'added') {
-                    const userData = change.doc.data();
-                    onlineUsers.set(change.doc.id, {
-                        username: userData.username,
-                        is_online: userData.is_online === true,
-                        last_seen: userData.last_seen
-                    });
-                } else if (change.type === 'removed') {
-                    onlineUsers.delete(change.doc.id);
-                }
-            });
-            
-            if (currentChatWith) {
-                updateChatStatus();
-            }
-            displayChats();
-            updateSearchResultsWithStatus();
-            updateContactsWithStatus();
-        });
-
-        chatsUnsubscribe = db.collection('messages')
-            .where('participants', 'array-contains', currentUser.uid)
-            .orderBy('created_at', 'desc')
-            .onSnapshot(() => {
-                loadChats();
-            });
-    }
-
-    function startHeartbeat() {
-        stopHeartbeat();
-        
-        heartbeatInterval = setInterval(() => {
-            if (currentUser && connectionId && navigator.onLine) {
-                updateOnlineStatus(true);
-            }
-        }, 10000);
-    }
-
-    function stopHeartbeat() {
-        if (heartbeatInterval) {
-            clearInterval(heartbeatInterval);
-            heartbeatInterval = null;
-        }
-    }
-
     function updateChatStatus() {
         if (!currentChatUserId || !elements.chatStatus) return;
-        const user = onlineUsers.get(currentChatUserId);
-        const isOnline = user?.is_online === true;
+        const user = onlineUsers[currentChatUserId];
         
-        if (isOnline) {
+        if (user?.online) {
             elements.chatStatus.textContent = 'на связи';
             elements.chatStatus.style.color = '#4CAF50';
         } else {
@@ -568,10 +379,7 @@
         const snapshot = await db.collection('users').where('username', '==', username).get();
         if (!snapshot.empty) {
             const doc = snapshot.docs[0];
-            return {
-                uid: doc.id,
-                username: doc.data().username
-            };
+            return { uid: doc.id, username: doc.data().username };
         }
         return null;
     }
@@ -588,26 +396,16 @@
             const chatsMap = new Map();
             const newUnreadCounts = {};
 
-            const promises = snapshot.docs.map(async (doc) => {
+            for (const doc of snapshot.docs) {
                 const msg = doc.data();
                 const otherUserId = msg.sender === currentUser.uid ? msg.receiver : msg.sender;
                 
-                let otherUsername = onlineUsers.get(otherUserId)?.username;
+                let otherUsername = onlineUsers[otherUserId]?.username;
                 if (!otherUsername) {
                     const userDoc = await db.collection('users').doc(otherUserId).get();
-                    if (userDoc.exists) {
-                        otherUsername = userDoc.data().username;
-                    } else {
-                        otherUsername = otherUserId;
-                    }
+                    otherUsername = userDoc.exists ? userDoc.data().username : otherUserId;
                 }
                 
-                return { msg, otherUserId, otherUsername };
-            });
-
-            const results = await Promise.all(promises);
-            
-            results.forEach(({ msg, otherUserId, otherUsername }) => {
                 if (!chatsMap.has(otherUserId) || new Date(msg.created_at) > new Date(chatsMap.get(otherUserId).lastTime)) {
                     chatsMap.set(otherUserId, {
                         userId: otherUserId,
@@ -621,12 +419,11 @@
                 if (msg.receiver === currentUser.uid && !msg.read) {
                     newUnreadCounts[otherUserId] = (newUnreadCounts[otherUserId] || 0) + 1;
                 }
-            });
+            }
 
             chats = Array.from(chatsMap.values());
             unreadCounts = newUnreadCounts;
             displayChats();
-            updateTitle();
         } catch (e) {}
     }
 
@@ -656,10 +453,9 @@
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
             
-            const userStatus = onlineUsers.get(chat.userId);
-            const isOnline = userStatus?.is_online === true;
+            const isOnline = onlineUsers[chat.userId]?.online || false;
             const unreadCount = unreadCounts[chat.userId] || 0;
-            const timeString = formatMessageTime(chat.lastTime);
+            const timeString = formatTime(chat.lastTime);
             const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
             const displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
             
@@ -680,10 +476,6 @@
         });
     }
 
-    function filterChats(searchTerm) {
-        displayChats();
-    }
-
     async function loadMessages(userId) {
         if (!userId || !currentUser) return;
         
@@ -697,32 +489,21 @@
             snapshot.forEach(doc => {
                 const msg = doc.data();
                 const isMyMessage = (msg.sender === currentUser.uid);
-                displayMessage(msg, isMyMessage, doc.id);
+                displayMessage(msg, isMyMessage);
             });
             
             scrollToBottom();
         } catch (e) {}
     }
 
-    function displayMessage(msg, isMyMessage, msgId) {
+    function displayMessage(msg, isMyMessage) {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
-        messageElement.dataset.messageId = msgId;
         
         let timeString = '';
         if (msg.created_at) {
-            try {
-                const messageDate = new Date(msg.created_at);
-                if (!isNaN(messageDate.getTime())) {
-                    timeString = messageDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                } else {
-                    timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                }
-            } catch (e) {
-                timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            }
-        } else {
-            timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            const d = new Date(msg.created_at);
+            timeString = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         }
         
         const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
@@ -738,9 +519,7 @@
     }
 
     function scrollToBottom() {
-        if (elements.privateMessages) {
-            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-        }
+        elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
     }
 
     async function sendMessage() {
@@ -761,66 +540,37 @@
                 read: false,
                 created_at: new Date().toISOString()
             });
-            
         } catch (e) {}
-    }
-
-    async function markMessagesAsRead(userId) {
-        if (!userId || !currentUser || !isChatActive || !isPageVisible) return;
-        
-        try {
-            const snapshot = await db.collection('messages')
-                .where('receiver', '==', currentUser.uid)
-                .where('sender', '==', userId)
-                .where('read', '==', false)
-                .get();
-
-            if (!snapshot.empty) {
-                const batch = db.batch();
-                snapshot.forEach(doc => {
-                    batch.update(doc.ref, { read: true });
-                });
-                await batch.commit();
-                
-                if (unreadCounts[userId]) {
-                    delete unreadCounts[userId];
-                    updateTitle();
-                    displayChats();
-                }
-            }
-        } catch (e) {}
-    }
-
-    function updateTitle() {
-        const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
-        document.title = totalUnread ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
     }
 
     async function startNewChat() {
         const username = elements.newChatUsername.value.trim();
         if (!username) {
-            showError(elements.newChatError, 'Введите имя пользователя');
+            elements.newChatError.textContent = 'Введите имя пользователя';
+            elements.newChatError.style.display = 'block';
             return;
         }
         
         if (username === currentUser.username) {
-            showError(elements.newChatError, 'Нельзя начать чат с самим собой');
+            elements.newChatError.textContent = 'Нельзя начать чат с самим собой';
+            elements.newChatError.style.display = 'block';
             return;
         }
 
         showLoading(true);
         try {
             const user = await findUserByUsername(username);
-
             if (!user) {
-                showError(elements.newChatError, 'Пользователь не найден');
+                elements.newChatError.textContent = 'Пользователь не найден';
+                elements.newChatError.style.display = 'block';
                 return;
             }
 
-            hideModal('newChatModal');
+            document.getElementById('newChatModal').style.display = 'none';
             await showChat(username);
         } catch (e) {
-            showError(elements.newChatError, 'Ошибка при поиске пользователя');
+            elements.newChatError.textContent = 'Ошибка при поиске';
+            elements.newChatError.style.display = 'block';
         } finally {
             showLoading(false);
         }
@@ -829,12 +579,14 @@
     async function login() {
         const username = elements.loginUsername.value.trim();
         if (!username || username.length < 3) {
-            showError(elements.loginError, 'Минимум 3 символа');
+            elements.loginError.textContent = 'Минимум 3 символа';
+            elements.loginError.style.display = 'block';
             return;
         }
 
         if (!/^[A-Za-z0-9_]+$/.test(username)) {
-            showError(elements.loginError, 'Только буквы, цифры и _');
+            elements.loginError.textContent = 'Только буквы, цифры и _';
+            elements.loginError.style.display = 'block';
             return;
         }
 
@@ -843,42 +595,28 @@
             const existingUser = await findUserByUsername(username);
             
             if (existingUser) {
-                currentUser = {
-                    uid: existingUser.uid,
-                    username: existingUser.username
-                };
+                currentUser = existingUser;
             } else {
-                const uid = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                
+                const uid = 'user_' + Date.now();
                 await db.collection('users').doc(uid).set({
                     uid: uid,
                     username: username,
-                    is_online: false,
+                    online: false,
                     created_at: new Date().toISOString()
                 });
-
                 currentUser = { uid, username };
             }
 
-            connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            
-            await createConnection();
-            
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            
-            await updateOnlineStatus(true);
-            await updateUserOverallStatus(currentUser.uid);
-
+            await goOnline();
             showChats();
             updateUI();
-            setupRealtimeSubscriptions();
             loadChats();
-            startHeartbeat();
+            listenUsers();
             
         } catch (e) {
-            showError(elements.loginError, 'Ошибка при входе');
-            localStorage.removeItem('speednexus_user');
-            currentUser = null;
+            elements.loginError.textContent = 'Ошибка при входе';
+            elements.loginError.style.display = 'block';
         } finally {
             showLoading(false);
         }
@@ -887,26 +625,23 @@
     async function editProfile() {
         const newUsername = elements.editUsername.value.trim();
         if (!newUsername || newUsername.length < 3) {
-            showError(elements.editUsernameError, 'Минимум 3 символа');
+            elements.editUsernameError.textContent = 'Минимум 3 символа';
+            elements.editUsernameError.style.display = 'block';
             return;
         }
         
         if (!/^[A-Za-z0-9_]+$/.test(newUsername)) {
-            showError(elements.editUsernameError, 'Только буквы, цифры и _');
-            return;
-        }
-        
-        if (newUsername === currentUser.username) {
-            hideModal('editProfileModal');
+            elements.editUsernameError.textContent = 'Только буквы, цифры и _';
+            elements.editUsernameError.style.display = 'block';
             return;
         }
 
         showLoading(true);
         try {
             const existingUser = await findUserByUsername(newUsername);
-
             if (existingUser) {
-                showError(elements.editUsernameError, 'Имя пользователя уже занято');
+                elements.editUsernameError.textContent = 'Имя уже занято';
+                elements.editUsernameError.style.display = 'block';
                 return;
             }
 
@@ -918,24 +653,19 @@
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
             
             updateUI();
-            hideModal('editProfileModal');
-            
-            if (currentChatWith) {
-                currentChatWith = newUsername;
-                elements.chatWithUser.textContent = newUsername;
-            }
-            
-            loadChats();
+            document.getElementById('editProfileModal').style.display = 'none';
             elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
+            
         } catch (e) {
-            showError(elements.editUsernameError, 'Ошибка при изменении профиля');
+            elements.editUsernameError.textContent = 'Ошибка';
+            elements.editUsernameError.style.display = 'block';
         } finally {
             showLoading(false);
         }
     }
 
     async function searchUsers() {
-        const searchTerm = elements.searchUsername.value.trim();
+        const searchTerm = elements.searchUsername.value.trim().toLowerCase();
         
         try {
             const snapshot = await db.collection('users').get();
@@ -943,7 +673,7 @@
             
             snapshot.forEach(doc => {
                 const user = doc.data();
-                if (!searchTerm || user.username.toLowerCase().includes(searchTerm.toLowerCase())) {
+                if (!searchTerm || user.username.toLowerCase().includes(searchTerm)) {
                     if (user.username !== currentUser?.username) {
                         users.push(user);
                     }
@@ -953,21 +683,21 @@
             elements.searchResults.innerHTML = '';
             
             if (users.length === 0) {
-                elements.searchResults.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Пользователи не найдены</div>';
+                elements.searchResults.innerHTML = '<div style="color: rgba(255,255,255,0.5); padding: 20px;">Ничего не найдено</div>';
                 return;
             }
 
             users.forEach(user => {
-                const userElement = document.createElement('div');
-                userElement.className = 'user-result';
-                userElement.onclick = () => {
-                    hideModal('findFriendsModal');
+                const div = document.createElement('div');
+                div.className = 'user-result';
+                div.onclick = () => {
+                    document.getElementById('findFriendsModal').style.display = 'none';
                     showChat(user.username);
                 };
                 
-                const isOnline = onlineUsers.get(user.uid)?.is_online === true;
+                const isOnline = onlineUsers[user.uid]?.online || false;
                 
-                userElement.innerHTML = `
+                div.innerHTML = `
                     <div class="user-result-info">
                         <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
                         <div>
@@ -977,59 +707,9 @@
                     </div>
                 `;
                 
-                elements.searchResults.appendChild(userElement);
+                elements.searchResults.appendChild(div);
             });
-        } catch (e) {
-            elements.searchResults.innerHTML = '<div style="color: #ff7d7d; text-align: center;">Ошибка при поиске</div>';
-        }
-    }
-
-    function updateSearchResultsWithStatus() {
-        const searchResults = document.querySelectorAll('.user-result');
-        searchResults.forEach(result => {
-            const nameElement = result.querySelector('.user-result-name');
-            if (nameElement) {
-                const username = nameElement.textContent;
-                findUserByUsername(username).then(user => {
-                    if (user) {
-                        const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-                        const avatarElement = result.querySelector('.user-result-avatar');
-                        const statusElement = result.querySelector('div[style*="font-size: 12px"]');
-                        
-                        if (avatarElement) {
-                            avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
-                        }
-                        if (statusElement) {
-                            statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    function updateContactsWithStatus() {
-        const contactsItems = document.querySelectorAll('.contact-item');
-        contactsItems.forEach(item => {
-            const nameElement = item.querySelector('.contact-name');
-            if (nameElement) {
-                const username = nameElement.textContent;
-                findUserByUsername(username).then(user => {
-                    if (user) {
-                        const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-                        const avatarElement = item.querySelector('.contact-avatar');
-                        const statusElement = item.querySelector('div[style*="font-size: 12px"]');
-                        
-                        if (avatarElement) {
-                            avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
-                        }
-                        if (statusElement) {
-                            statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                        }
-                    }
-                });
-            }
-        });
+        } catch (e) {}
     }
 
     function loadContacts() {
@@ -1037,22 +717,23 @@
         elements.contactsList.innerHTML = '';
         
         if (contacts.length === 0) {
-            elements.contactsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Нет контактов</div>';
+            elements.contactsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); padding: 20px;">Нет контактов</div>';
+            document.getElementById('contactsModal').style.display = 'flex';
             return;
         }
 
         contacts.forEach(contact => {
-            const contactElement = document.createElement('div');
-            contactElement.className = 'contact-item';
-            contactElement.onclick = () => {
-                hideModal('contactsModal');
+            const div = document.createElement('div');
+            div.className = 'contact-item';
+            div.onclick = () => {
+                document.getElementById('contactsModal').style.display = 'none';
                 showChat(contact.username);
             };
             
             findUserByUsername(contact.username).then(user => {
-                const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
+                const isOnline = user ? onlineUsers[user.uid]?.online || false : false;
                 
-                contactElement.innerHTML = `
+                div.innerHTML = `
                     <div class="contact-info">
                         <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
                         <div>
@@ -1063,58 +744,34 @@
                 `;
             });
             
-            elements.contactsList.appendChild(contactElement);
+            elements.contactsList.appendChild(div);
         });
+        
+        document.getElementById('contactsModal').style.display = 'flex';
     }
 
     async function logout() {
         showLoading(true);
-        
-        try {
-            await removeConnection();
-            if (cleanupInterval) {
-                clearInterval(cleanupInterval);
-                cleanupInterval = null;
-            }
-        } catch (e) {}
-        
+        await goOffline();
         localStorage.removeItem('speednexus_user');
-        stopHeartbeat();
-        cleanupSubscriptions();
         currentUser = null;
         currentChatWith = null;
         currentChatUserId = null;
-        isChatActive = false;
-        onlineUsers.clear();
-        unreadCounts = {};
-        scrollPositions = {};
+        onlineUsers = {};
         showLogin();
         showLoading(false);
     }
 
-    function formatMessageTime(timestamp) {
+    function formatTime(timestamp) {
         if (!timestamp) return '';
+        const d = new Date(timestamp);
+        const now = new Date();
+        const diff = Math.floor((now - d) / 60000);
         
-        try {
-            const messageDate = new Date(timestamp);
-            if (isNaN(messageDate.getTime())) return '';
-            
-            const now = new Date();
-            const diffMs = now - messageDate;
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-
-            if (diffMins < 1) return 'только что';
-            if (diffMins < 60) return `${diffMins} мин`;
-            if (diffHours < 24) return `${diffHours} ч`;
-            if (diffDays === 1) return 'вчера';
-            if (diffDays < 7) return `${diffDays} дн`;
-            
-            return messageDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
-        } catch (e) {
-            return '';
-        }
+        if (diff < 1) return 'сейчас';
+        if (diff < 60) return diff + ' мин';
+        if (diff < 1440) return Math.floor(diff / 60) + ' ч';
+        return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     }
 
     function escapeHtml(text) {
