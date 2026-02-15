@@ -318,17 +318,58 @@
         if (!currentUser) return;
 
         usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
-            let needsUpdate = false;
-            
             snapshot.docChanges().forEach(change => {
-                if (change.type === 'modified' || change.type === 'added' || change.type === 'removed') {
-                    needsUpdate = true;
+                const user = change.doc.data();
+                
+                if (change.type === 'modified' || change.type === 'added') {
+                    if (user.username !== currentUser?.username) {
+                        onlineUsers[user.username] = user.is_online;
+                    }
+                } else if (change.type === 'removed') {
+                    delete onlineUsers[user.username];
                 }
             });
-
-            if (needsUpdate) {
-                loadOnlineStatuses();
+            
+            if (currentChatWith) {
+                updateChatStatus();
             }
+            displayChats();
+            
+            const searchResults = document.querySelectorAll('.user-result');
+            searchResults.forEach(result => {
+                const nameElement = result.querySelector('.user-result-name');
+                if (nameElement) {
+                    const username = nameElement.textContent;
+                    const isOnline = onlineUsers[username] === true;
+                    const avatarElement = result.querySelector('.user-result-avatar');
+                    const statusElement = result.querySelector('div[style*="font-size: 12px"]');
+                    
+                    if (avatarElement) {
+                        avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
+                    }
+                    if (statusElement) {
+                        statusElement.textContent = isOnline ? 'на связи' : 'без связи';
+                    }
+                }
+            });
+            
+            const contactsItems = document.querySelectorAll('.contact-item');
+            contactsItems.forEach(item => {
+                const nameElement = item.querySelector('.contact-name');
+                if (nameElement) {
+                    const username = nameElement.textContent;
+                    const isOnline = onlineUsers[username] === true;
+                    const avatarElement = item.querySelector('.contact-avatar');
+                    const statusElement = item.querySelector('div[style*="font-size: 12px"]');
+                    
+                    if (avatarElement) {
+                        avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
+                    }
+                    if (statusElement) {
+                        statusElement.textContent = isOnline ? 'на связи' : 'без связи';
+                    }
+                }
+            });
         });
 
         if (currentChatWith) {
@@ -756,7 +797,7 @@
                     showChat(user.username);
                 };
                 
-                const isOnline = user.is_online === true;
+                const isOnline = onlineUsers[user.username] === true;
                 
                 userElement.innerHTML = `
                     <div class="user-result-info">
@@ -806,64 +847,6 @@
             
             elements.contactsList.appendChild(contactElement);
         });
-    }
-
-    async function loadOnlineStatuses() {
-        try {
-            const snapshot = await db.collection('users').get();
-            const newOnlineUsers = {};
-            
-            snapshot.forEach(doc => {
-                const user = doc.data();
-                if (user.username !== currentUser?.username) {
-                    newOnlineUsers[user.username] = user.is_online === true;
-                }
-            });
-            
-            onlineUsers = newOnlineUsers;
-            
-            if (currentChatWith) {
-                updateChatStatus();
-            }
-            
-            displayChats();
-            
-            const searchResults = document.querySelectorAll('.user-result');
-            searchResults.forEach(result => {
-                const nameElement = result.querySelector('.user-result-name');
-                if (nameElement) {
-                    const username = nameElement.textContent;
-                    const isOnline = onlineUsers[username] === true;
-                    const avatarElement = result.querySelector('.user-result-avatar');
-                    const statusElement = result.querySelector('div[style*="font-size: 12px"]');
-                    
-                    if (avatarElement) {
-                        avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
-                    }
-                    if (statusElement) {
-                        statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                    }
-                }
-            });
-            
-            const contactsItems = document.querySelectorAll('.contact-item');
-            contactsItems.forEach(item => {
-                const nameElement = item.querySelector('.contact-name');
-                if (nameElement) {
-                    const username = nameElement.textContent;
-                    const isOnline = onlineUsers[username] === true;
-                    const avatarElement = item.querySelector('.contact-avatar');
-                    const statusElement = item.querySelector('div[style*="font-size: 12px"]');
-                    
-                    if (avatarElement) {
-                        avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
-                    }
-                    if (statusElement) {
-                        statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                    }
-                }
-            });
-        } catch (e) {}
     }
 
     function logout() {
