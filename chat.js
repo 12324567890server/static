@@ -68,7 +68,6 @@
     let heartbeatInterval = null;
     let lastReadTime = {};
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    let readCheckTimeout = null;
 
     init();
 
@@ -318,6 +317,28 @@
 
         if (!currentUser) return;
 
+        usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'modified' || change.type === 'added') {
+                    const user = change.doc.data();
+                    if (user.username !== currentUser?.username) {
+                        onlineUsers[user.username] = user.is_online;
+                        if (currentChatWith === user.username) {
+                            updateChatStatus();
+                        }
+                        displayChats();
+                    }
+                } else if (change.type === 'removed') {
+                    const user = change.doc.data();
+                    delete onlineUsers[user.username];
+                    if (currentChatWith === user.username) {
+                        updateChatStatus();
+                    }
+                    displayChats();
+                }
+            });
+        });
+
         if (currentChatWith) {
             messagesUnsubscribe = db.collection('messages')
                 .where('chat_id', '==', [currentUser.username, currentChatWith].sort().join('_'))
@@ -333,22 +354,7 @@
                                 scrollToBottom();
                                 
                                 if (msg.sender === currentChatWith && !msg.read && isChatActive && isPageVisible) {
-                                    if (isMobile) {
-                                        setTimeout(() => {
-                                            if (isChatActive && currentChatWith === msg.sender) {
-                                                const msgElement = document.querySelector(`[data-message-id="${msgId}"]`);
-                                                if (msgElement) {
-                                                    const rect = msgElement.getBoundingClientRect();
-                                                    const isVisible = rect.top < window.innerHeight - 100 && rect.bottom > 100;
-                                                    if (isVisible) {
-                                                        markMessagesAsRead(currentChatWith);
-                                                    }
-                                                }
-                                            }
-                                        }, 2000);
-                                    } else {
-                                        markMessagesAsRead(currentChatWith);
-                                    }
+                                    markMessagesAsRead(currentChatWith);
                                 }
                             }
                         } else if (change.type === 'modified') {
@@ -364,6 +370,7 @@
                             }
                         }
                     });
+                    loadChats();
                 });
         }
 
@@ -372,33 +379,13 @@
             .orderBy('created_at', 'desc')
             .onSnapshot(() => {
                 loadChats();
-                if (isChatActive && currentChatWith && isPageVisible) {
-                    markMessagesAsRead(currentChatWith);
-                }
-            });
-
-        usersUnsubscribe = db.collection('users')
-            .onSnapshot(snapshot => {
-                snapshot.docChanges().forEach(change => {
-                    if (change.type === 'modified' || change.type === 'added') {
-                        const user = change.doc.data();
-                        if (user.username !== currentUser?.username) {
-                            onlineUsers[user.username] = user.is_online;
-                            if (currentChatWith === user.username) {
-                                updateChatStatus();
-                            }
-                            updateChatsList();
-                            updateSearchResults();
-                        }
-                    }
-                });
             });
     }
 
     function startHeartbeat() {
         stopHeartbeat();
         setOnline(true);
-        heartbeatInterval = setInterval(() => setOnline(true), 30000);
+        heartbeatInterval = setInterval(() => setOnline(true), 25000);
     }
 
     function stopHeartbeat() {
@@ -416,14 +403,6 @@
                 is_online: status,
                 last_seen: new Date().toISOString()
             }, { merge: true });
-            
-            if (!status) {
-                onlineUsers = {};
-                updateChatsList();
-                if (currentChatWith) {
-                    updateChatStatus();
-                }
-            }
         } catch (e) {}
     }
 
@@ -467,93 +446,60 @@
             unreadCounts = newUnreadCounts;
             displayChats();
             updateTitle();
-            loadOnlineStatuses();
-        } catch (e) {
-            console.error("Load chats error:", e);
-        }
+        } catch (e) {}
     }
 
-    function displayChats(chatsToDisplay = chats) {
+    function displayChats() {
         if (!elements.chatsList) return;
+        
+        const searchTerm = elements.searchChats.value.toLowerCase();
+        let filteredChats = chats;
+        
+        if (searchTerm) {
+            filteredChats = chats.filter(chat => 
+                chat.username.toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        const sortedChats = [...filteredChats].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+        
         elements.chatsList.innerHTML = '';
         
-        if (chatsToDisplay.length === 0) {
+        if (sortedChats.length === 0) {
             elements.chatsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px 20px;">Нет чатов</div>';
             return;
         }
 
-        const sortedChats = [...chatsToDisplay].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
-
         sortedChats.forEach(chat => {
-            const chatElement = createChatElement(chat);
-            elements.chatsList.appendChild(chatElement);
-        });
-    }
-
-    function createChatElement(chat) {
-        const div = document.createElement('div');
-        div.className = 'chat-item';
-        div.onclick = () => showChat(chat.username);
-        
-        const isOnline = onlineUsers[chat.username] === true;
-        const unreadCount = unreadCounts[chat.username] || 0;
-        const timeString = formatMessageTime(chat.lastTime);
-        const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
-        const displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
-        
-        div.innerHTML = `
-            <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
-            <div class="chat-info">
-                <div class="chat-name">
-                    ${escapeHtml(chat.username)}
-                    <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>
+            const div = document.createElement('div');
+            div.className = 'chat-item';
+            div.onclick = () => showChat(chat.username);
+            
+            const isOnline = onlineUsers[chat.username] === true;
+            const unreadCount = unreadCounts[chat.username] || 0;
+            const timeString = formatMessageTime(chat.lastTime);
+            const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
+            const displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
+            
+            div.innerHTML = `
+                <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
+                <div class="chat-info">
+                    <div class="chat-name">
+                        ${escapeHtml(chat.username)}
+                        <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>
+                    </div>
+                    <div class="chat-last-message">${escapeHtml(messagePrefix + displayMessage)}</div>
+                    <div class="chat-time">${timeString}</div>
                 </div>
-                <div class="chat-last-message">${escapeHtml(messagePrefix + displayMessage)}</div>
-                <div class="chat-time">${timeString}</div>
-            </div>
-            ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
-        `;
-        
-        return div;
-    }
-
-    function updateChatsList() {
-        const chatItems = elements.chatsList.querySelectorAll('.chat-item');
-        chatItems.forEach(item => {
-            const nameElement = item.querySelector('.chat-name');
-            if (!nameElement) return;
+                ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
+            `;
             
-            const username = nameElement.childNodes[0]?.textContent?.trim() || '';
-            if (!username) return;
-            
-            const isOnline = onlineUsers[username] === true;
-            const avatarElement = item.querySelector('.chat-avatar');
-            const statusElement = item.querySelector('.chat-status-text');
-            
-            if (avatarElement) {
-                avatarElement.className = `chat-avatar ${isOnline ? 'online' : ''}`;
-            }
-            if (statusElement) {
-                statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                statusElement.className = `chat-status-text ${isOnline ? 'online' : ''}`;
-            }
+            elements.chatsList.appendChild(div);
         });
     }
 
-    function updateSearchResults() {
-        const resultItems = elements.searchResults.querySelectorAll('.user-result');
-        resultItems.forEach(item => {
-            const nameElement = item.querySelector('.user-result-name');
-            if (!nameElement) return;
-            
-            const username = nameElement.textContent;
-            const isOnline = onlineUsers[username] === true;
-            const avatarElement = item.querySelector('.user-result-avatar');
-            
-            if (avatarElement) {
-                avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
-            }
-        });
+    function filterChats(searchTerm) {
+        displayChats();
     }
 
     async function loadMessages(username) {
@@ -572,9 +518,7 @@
             });
             
             setTimeout(() => scrollToBottom(), 100);
-        } catch (e) {
-            console.error("Load messages error:", e);
-        }
+        } catch (e) {}
     }
 
     function displayMessage(msg, isMyMessage, msgId) {
@@ -636,16 +580,14 @@
             });
             
             setTimeout(() => scrollToBottom(), 100);
-        } catch (e) {
-            console.error("Send message error:", e);
-        }
+        } catch (e) {}
     }
 
     async function markMessagesAsRead(username) {
         if (!username || !currentUser || !isChatActive || !isPageVisible) return;
         
         const now = Date.now();
-        if (lastReadTime[username] && now - lastReadTime[username] < 3000) return;
+        if (lastReadTime[username] && now - lastReadTime[username] < 2000) return;
         lastReadTime[username] = now;
         
         try {
@@ -665,12 +607,10 @@
                 if (unreadCounts[username]) {
                     delete unreadCounts[username];
                     updateTitle();
-                    loadChats();
+                    displayChats();
                 }
             }
-        } catch (e) {
-            console.error("Mark as read error:", e);
-        }
+        } catch (e) {}
     }
 
     function updateTitle() {
@@ -874,40 +814,6 @@
             
             elements.contactsList.appendChild(contactElement);
         });
-    }
-
-    async function loadOnlineStatuses() {
-        const usernames = chats.map(chat => chat.username);
-        if (currentChatWith && !usernames.includes(currentChatWith)) {
-            usernames.push(currentChatWith);
-        }
-        
-        if (usernames.length === 0) return;
-
-        for (const username of usernames) {
-            try {
-                const userDoc = await db.collection('users').doc(username).get();
-                if (userDoc.exists) {
-                    const user = userDoc.data();
-                    onlineUsers[user.username] = user.is_online;
-                }
-            } catch (e) {}
-        }
-        
-        updateChatStatus();
-        updateChatsList();
-    }
-
-    function filterChats(searchTerm) {
-        if (!searchTerm) {
-            displayChats(chats);
-            return;
-        }
-        
-        const filteredChats = chats.filter(chat => 
-            chat.username.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        displayChats(filteredChats);
     }
 
     function logout() {
