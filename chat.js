@@ -533,8 +533,22 @@
         messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
         messageElement.dataset.messageId = msgId;
         
-        const messageTime = new Date(msg.created_at);
-        const timeString = messageTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        let timeString = '';
+        if (msg.created_at) {
+            try {
+                const messageDate = new Date(msg.created_at);
+                if (!isNaN(messageDate.getTime())) {
+                    timeString = messageDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                } else {
+                    timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                }
+            } catch (e) {
+                timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            }
+        } else {
+            timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        }
+        
         const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
         
         messageElement.innerHTML = `
@@ -864,20 +878,26 @@
     function formatMessageTime(timestamp) {
         if (!timestamp) return '';
         
-        const messageDate = new Date(timestamp);
-        const now = new Date();
-        const diffMs = now - messageDate;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
+        try {
+            const messageDate = new Date(timestamp);
+            if (isNaN(messageDate.getTime())) return '';
+            
+            const now = new Date();
+            const diffMs = now - messageDate;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
 
-        if (diffMins < 1) return 'только что';
-        if (diffMins < 60) return `${diffMins} мин`;
-        if (diffHours < 24) return `${diffHours} ч`;
-        if (diffDays === 1) return 'вчера';
-        if (diffDays < 7) return `${diffDays} дн`;
-        
-        return messageDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+            if (diffMins < 1) return 'только что';
+            if (diffMins < 60) return `${diffMins} мин`;
+            if (diffHours < 24) return `${diffHours} ч`;
+            if (diffDays === 1) return 'вчера';
+            if (diffDays < 7) return `${diffDays} дн`;
+            
+            return messageDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        } catch (e) {
+            return '';
+        }
     }
 
     function escapeHtml(text) {
