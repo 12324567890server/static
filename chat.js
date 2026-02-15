@@ -8,11 +8,8 @@
         appId: "1:524449944041:web:362f4343ed1507ec2d3b78"
     };
 
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
+    firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    db.settings({ experimentalForceLongPolling: true, merge: true });
 
     const elements = {
         loginScreen: document.getElementById('loginScreen'),
@@ -63,9 +60,11 @@
     let chats = [];
     let unreadCounts = {};
     let onlineUsers = {};
-    let unsubscribeMessages = null;
-    let unsubscribeUsers = null;
+    let messagesUnsubscribe = null;
+    let usersUnsubscribe = null;
     let heartbeatInterval = null;
+
+    init();
 
     function init() {
         checkUser();
@@ -270,20 +269,23 @@
     }
 
     function cleanupSubscriptions() {
-        if (unsubscribeMessages) {
-            unsubscribeMessages();
-            unsubscribeMessages = null;
+        if (messagesUnsubscribe) {
+            messagesUnsubscribe();
+            messagesUnsubscribe = null;
         }
-        if (unsubscribeUsers) {
-            unsubscribeUsers();
-            unsubscribeUsers = null;
+        if (usersUnsubscribe) {
+            usersUnsubscribe();
+            usersUnsubscribe = null;
         }
     }
 
     function setupRealtimeSubscriptions() {
         cleanupSubscriptions();
 
-        unsubscribeMessages = db.collection('messages')
+        if (!currentUser) return;
+
+        messagesUnsubscribe = db.collection('messages')
+            .where('participants', 'array-contains', currentUser.username)
             .orderBy('created_at', 'asc')
             .onSnapshot(snapshot => {
                 snapshot.docChanges().forEach(change => {
@@ -291,37 +293,33 @@
                         const msg = change.doc.data();
                         const msgId = change.doc.id;
                         
-                        if (currentChatWith && 
-                            ((msg.sender === currentUser.username && msg.receiver === currentChatWith) ||
-                             (msg.sender === currentChatWith && msg.receiver === currentUser.username))) {
-                            
+                        if (currentChatWith === msg.sender || currentChatWith === msg.receiver) {
                             if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
                                 
-                                if (msg.sender === currentChatWith) {
-                                    markMessagesAsRead(currentChatWith);
+                                if (msg.sender !== currentUser.username) {
+                                    markMessagesAsRead(msg.sender);
                                 }
                             }
-                        } else if (msg.receiver === currentUser.username) {
+                        }
+                        
+                        if (msg.receiver === currentUser.username) {
                             unreadCounts[msg.sender] = (unreadCounts[msg.sender] || 0) + 1;
                             updateTitle();
-                            loadChats();
-                        } else if (msg.sender === currentUser.username) {
-                            loadChats();
                         }
+                        
+                        loadChats();
                     }
                 });
-            }, error => {
-                console.error("Ошибка подписки на сообщения:", error);
             });
 
-        unsubscribeUsers = db.collection('users')
+        usersUnsubscribe = db.collection('users')
             .onSnapshot(snapshot => {
                 snapshot.docChanges().forEach(change => {
-                    if (change.type === 'modified') {
+                    if (change.type === 'modified' || change.type === 'added') {
                         const user = change.doc.data();
-                        if (user && user.username !== currentUser?.username) {
+                        if (user.username !== currentUser?.username) {
                             onlineUsers[user.username] = user.is_online;
                             if (currentChatWith === user.username) {
                                 updateChatStatus();
@@ -331,8 +329,6 @@
                         }
                     }
                 });
-            }, error => {
-                console.error("Ошибка подписки на пользователей:", error);
             });
     }
 
@@ -369,37 +365,41 @@
     async function loadChats() {
         if (!currentUser) return;
         
-        const snapshot = await db.collection('messages')
-            .where('participants', 'array-contains', currentUser.username)
-            .orderBy('created_at', 'desc')
-            .get();
+        try {
+            const snapshot = await db.collection('messages')
+                .where('participants', 'array-contains', currentUser.username)
+                .orderBy('created_at', 'desc')
+                .get();
 
-        const chatsMap = new Map();
-        const newUnreadCounts = {};
+            const chatsMap = new Map();
+            const newUnreadCounts = {};
 
-        snapshot.forEach(doc => {
-            const msg = doc.data();
-            const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
-            
-            if (!chatsMap.has(otherUser) || new Date(msg.created_at) > new Date(chatsMap.get(otherUser).lastTime)) {
-                chatsMap.set(otherUser, {
-                    username: otherUser,
-                    lastMessage: msg.message,
-                    lastTime: msg.created_at,
-                    isMyMessage: msg.sender === currentUser.username
-                });
-            }
-            
-            if (msg.receiver === currentUser.username && !msg.read) {
-                newUnreadCounts[otherUser] = (newUnreadCounts[otherUser] || 0) + 1;
-            }
-        });
+            snapshot.forEach(doc => {
+                const msg = doc.data();
+                const otherUser = msg.sender === currentUser.username ? msg.receiver : msg.sender;
+                
+                if (!chatsMap.has(otherUser) || new Date(msg.created_at) > new Date(chatsMap.get(otherUser).lastTime)) {
+                    chatsMap.set(otherUser, {
+                        username: otherUser,
+                        lastMessage: msg.message,
+                        lastTime: msg.created_at,
+                        isMyMessage: msg.sender === currentUser.username
+                    });
+                }
+                
+                if (msg.receiver === currentUser.username && !msg.read) {
+                    newUnreadCounts[otherUser] = (newUnreadCounts[otherUser] || 0) + 1;
+                }
+            });
 
-        chats = Array.from(chatsMap.values());
-        unreadCounts = newUnreadCounts;
-        displayChats();
-        updateTitle();
-        loadOnlineStatuses();
+            chats = Array.from(chatsMap.values());
+            unreadCounts = newUnreadCounts;
+            displayChats();
+            updateTitle();
+            loadOnlineStatuses();
+        } catch (e) {
+            console.error("Load chats error:", e);
+        }
     }
 
     function displayChats(chatsToDisplay = chats) {
@@ -488,16 +488,20 @@
     async function loadMessages(username) {
         if (!username || !currentUser) return;
         
-        const snapshot = await db.collection('messages')
-            .where('chat_id', '==', [currentUser.username, username].sort().join('_'))
-            .orderBy('created_at')
-            .get();
+        try {
+            const snapshot = await db.collection('messages')
+                .where('chat_id', '==', [currentUser.username, username].sort().join('_'))
+                .orderBy('created_at')
+                .get();
 
-        elements.privateMessages.innerHTML = '';
-        snapshot.forEach(doc => {
-            const msg = doc.data();
-            displayMessage(msg, msg.sender === currentUser.username, doc.id);
-        });
+            elements.privateMessages.innerHTML = '';
+            snapshot.forEach(doc => {
+                const msg = doc.data();
+                displayMessage(msg, msg.sender === currentUser.username, doc.id);
+            });
+        } catch (e) {
+            console.error("Load messages error:", e);
+        }
     }
 
     function displayMessage(msg, isMyMessage, msgId) {
@@ -535,34 +539,42 @@
         
         const chatId = [currentUser.username, currentChatWith].sort().join('_');
         
-        await db.collection('messages').add({
-            chat_id: chatId,
-            participants: [currentUser.username, currentChatWith],
-            sender: currentUser.username,
-            receiver: currentChatWith,
-            message: messageText,
-            read: false,
-            created_at: new Date().toISOString()
-        });
+        try {
+            await db.collection('messages').add({
+                chat_id: chatId,
+                participants: [currentUser.username, currentChatWith],
+                sender: currentUser.username,
+                receiver: currentChatWith,
+                message: messageText,
+                read: false,
+                created_at: new Date().toISOString()
+            });
+        } catch (e) {
+            console.error("Send message error:", e);
+        }
     }
 
     async function markMessagesAsRead(username) {
         if (!username || !currentUser) return;
         
-        const snapshot = await db.collection('messages')
-            .where('receiver', '==', currentUser.username)
-            .where('sender', '==', username)
-            .where('read', '==', false)
-            .get();
+        try {
+            const snapshot = await db.collection('messages')
+                .where('receiver', '==', currentUser.username)
+                .where('sender', '==', username)
+                .where('read', '==', false)
+                .get();
 
-        const batch = db.batch();
-        snapshot.forEach(doc => {
-            batch.update(doc.ref, { read: true });
-        });
-        await batch.commit();
-        
-        delete unreadCounts[username];
-        updateTitle();
+            const batch = db.batch();
+            snapshot.forEach(doc => {
+                batch.update(doc.ref, { read: true });
+            });
+            await batch.commit();
+            
+            delete unreadCounts[username];
+            updateTitle();
+        } catch (e) {
+            console.error("Mark as read error:", e);
+        }
     }
 
     function updateTitle() {
@@ -777,11 +789,13 @@
         if (usernames.length === 0) return;
 
         for (const username of usernames) {
-            const userDoc = await db.collection('users').doc(username).get();
-            if (userDoc.exists) {
-                const user = userDoc.data();
-                onlineUsers[user.username] = user.is_online;
-            }
+            try {
+                const userDoc = await db.collection('users').doc(username).get();
+                if (userDoc.exists) {
+                    const user = userDoc.data();
+                    onlineUsers[user.username] = user.is_online;
+                }
+            } catch (e) {}
         }
         
         updateChatStatus();
@@ -843,6 +857,4 @@
             setOnline(false);
         }
     });
-
-    init();
 })();
