@@ -284,34 +284,56 @@
         cleanupSubscriptions();
 
         unsubscribeMessages = db.collection('messages')
-            .orderBy('created_at')
+            .orderBy('created_at', 'asc')
             .onSnapshot(snapshot => {
                 snapshot.docChanges().forEach(change => {
                     if (change.type === 'added') {
-                        handleNewMessage(change.doc.data(), change.doc.id);
+                        const msg = change.doc.data();
+                        const msgId = change.doc.id;
+                        
+                        if (currentChatWith && 
+                            ((msg.sender === currentUser.username && msg.receiver === currentChatWith) ||
+                             (msg.sender === currentChatWith && msg.receiver === currentUser.username))) {
+                            
+                            if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
+                                displayMessage(msg, msg.sender === currentUser.username, msgId);
+                                scrollToBottom();
+                                
+                                if (msg.sender === currentChatWith) {
+                                    markMessagesAsRead(currentChatWith);
+                                }
+                            }
+                        } else if (msg.receiver === currentUser.username) {
+                            unreadCounts[msg.sender] = (unreadCounts[msg.sender] || 0) + 1;
+                            updateTitle();
+                            loadChats();
+                        } else if (msg.sender === currentUser.username) {
+                            loadChats();
+                        }
                     }
                 });
+            }, error => {
+                console.error("Ошибка подписки на сообщения:", error);
             });
 
         unsubscribeUsers = db.collection('users')
             .onSnapshot(snapshot => {
                 snapshot.docChanges().forEach(change => {
                     if (change.type === 'modified') {
-                        handleUserUpdate(change.doc.data());
+                        const user = change.doc.data();
+                        if (user && user.username !== currentUser?.username) {
+                            onlineUsers[user.username] = user.is_online;
+                            if (currentChatWith === user.username) {
+                                updateChatStatus();
+                            }
+                            updateChatsList();
+                            updateSearchResults();
+                        }
                     }
                 });
+            }, error => {
+                console.error("Ошибка подписки на пользователей:", error);
             });
-    }
-
-    function handleUserUpdate(user) {
-        if (user && user.username !== currentUser?.username) {
-            onlineUsers[user.username] = user.is_online;
-            if (currentChatWith === user.username) {
-                updateChatStatus();
-            }
-            updateChatsList();
-            updateSearchResults();
-        }
     }
 
     function startHeartbeat() {
@@ -336,26 +358,6 @@
                 last_seen: new Date().toISOString()
             }, { merge: true });
         } catch (e) {}
-    }
-
-    function handleNewMessage(msg, msgId) {
-        if (!currentUser) return;
-        
-        if (msg.receiver === currentUser.username || msg.sender === currentUser.username) {
-            if (currentChatWith === (msg.sender === currentUser.username ? msg.receiver : msg.sender)) {
-                if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
-                    displayMessage(msg, msg.sender === currentUser.username, msgId);
-                    scrollToBottom();
-                    if (msg.receiver === currentUser.username) {
-                        markMessagesAsRead(msg.sender);
-                    }
-                }
-            } else if (msg.receiver === currentUser.username) {
-                unreadCounts[msg.sender] = (unreadCounts[msg.sender] || 0) + 1;
-                updateTitle();
-            }
-            loadChats();
-        }
     }
 
     function updateChatStatus() {
@@ -542,8 +544,6 @@
             read: false,
             created_at: new Date().toISOString()
         });
-
-        loadChats();
     }
 
     async function markMessagesAsRead(username) {
