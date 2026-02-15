@@ -73,9 +73,8 @@
     let scrollPositions = {};
     let connectionId = null;
     let lastHeartbeat = Date.now();
-    const HEARTBEAT_INTERVAL = 10000;
-    const CONNECTION_TIMEOUT = 20000;
-    let forceStatusCheckInterval = null;
+    const HEARTBEAT_INTERVAL = 5000; // 5 секунд
+    const STALE_CONNECTION_TIMEOUT = 10000; // 10 секунд - убиваем все, что старше
 
     init();
 
@@ -88,8 +87,8 @@
         window.addEventListener('online', handleNetworkOnline);
         window.addEventListener('offline', handleNetworkOffline);
         
-        setInterval(cleanupStaleConnections, 15000);
-        setInterval(forceStatusCheck, 5000);
+        // Запускаем убийцу мертвых подключений каждые 3 секунды
+        setInterval(killAllStaleConnections, 3000);
 
         if (isMobile) {
             document.addEventListener('touchstart', (e) => {
@@ -100,10 +99,52 @@
         }
     }
 
+    // Агрессивная очистка всех мертвых подключений
+    async function killAllStaleConnections() {
+        if (!currentUser) return;
+        
+        try {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            const connectionsSnapshot = await userRef.collection('connections').get();
+            const now = Date.now();
+            let killed = false;
+            
+            // Проходим по ВСЕМ подключениям
+            connectionsSnapshot.forEach(doc => {
+                const conn = doc.data();
+                const lastSeen = new Date(conn.last_seen || conn.created_at || conn.last_heartbeat || 0).getTime();
+                
+                // Если подключение не обновлялось больше 10 секунд - это МЕРТВОЕ подключение
+                if (now - lastSeen > STALE_CONNECTION_TIMEOUT) {
+                    // Удаляем нафиг
+                    doc.ref.delete();
+                    killed = true;
+                    console.log('💀 Убито мертвое подключение:', doc.id, 'возраст:', Math.round((now - lastSeen)/1000) + 'сек');
+                }
+            });
+            
+            if (killed) {
+                // Пересчитываем реальный статус
+                const remainingSnapshot = await userRef.collection('connections').get();
+                const isAnyOnline = remainingSnapshot.docs.some(doc => doc.data().is_online === true);
+                
+                // Принудительно обновляем статус пользователя
+                await userRef.set({
+                    uid: currentUser.uid,
+                    username: currentUser.username,
+                    is_online: isAnyOnline,
+                    last_seen: new Date().toISOString()
+                }, { merge: true });
+                
+                console.log('✅ Статус обновлен. Онлайн:', isAnyOnline);
+            }
+        } catch (e) {}
+    }
+
     function handleVisibilityChange() {
         isPageVisible = !document.hidden;
         if (isPageVisible) {
-            forceStatusUpdate();
+            updateOnlineStatus(true);
             if (currentChatWith && isChatActive) {
                 setTimeout(() => markMessagesAsRead(currentChatUserId), 1000);
             }
@@ -120,7 +161,7 @@
 
     function handleNetworkOnline() {
         if (currentUser) {
-            forceStatusUpdate();
+            updateOnlineStatus(true);
         }
     }
 
@@ -128,85 +169,6 @@
         if (currentUser) {
             updateOnlineStatus(false);
         }
-    }
-
-    async function forceStatusCheck() {
-        if (!currentUser || !connectionId) return;
-        
-        try {
-            const userRef = db.collection('users').doc(currentUser.uid);
-            const connectionDoc = await userRef.collection('connections').doc(connectionId).get();
-            
-            if (connectionDoc.exists) {
-                const connData = connectionDoc.data();
-                const lastSeen = new Date(connData.last_seen || connData.created_at).getTime();
-                const now = Date.now();
-                
-                if (now - lastSeen > CONNECTION_TIMEOUT) {
-                    await updateOnlineStatus(false);
-                } else if (isPageVisible && navigator.onLine) {
-                    await updateOnlineStatus(true);
-                }
-            } else {
-                await createConnection();
-                await updateOnlineStatus(true);
-            }
-        } catch (e) {}
-    }
-
-    async function forceStatusUpdate() {
-        if (!currentUser || !connectionId) return;
-        await updateOnlineStatus(true);
-    }
-
-    async function cleanupStaleConnections() {
-        if (!currentUser) return;
-        
-        try {
-            const userRef = db.collection('users').doc(currentUser.uid);
-            const connectionsSnapshot = await userRef.collection('connections').get();
-            const now = Date.now();
-            let changed = false;
-            
-            connectionsSnapshot.forEach(doc => {
-                const conn = doc.data();
-                const lastSeen = new Date(conn.last_seen || conn.created_at).getTime();
-                
-                if (now - lastSeen > CONNECTION_TIMEOUT) {
-                    doc.ref.delete();
-                    changed = true;
-                }
-            });
-            
-            if (changed) {
-                await updateOverallUserStatus();
-            }
-        } catch (e) {}
-    }
-
-    async function forceRemoveConnection() {
-        if (!currentUser || !connectionId) return;
-        
-        try {
-            const userRef = db.collection('users').doc(currentUser.uid);
-            await userRef.collection('connections').doc(connectionId).delete();
-            
-            const connectionsSnapshot = await userRef.collection('connections').get();
-            let isAnyOnline = false;
-            
-            connectionsSnapshot.forEach(doc => {
-                if (doc.data().is_online === true) {
-                    isAnyOnline = true;
-                }
-            });
-            
-            await userRef.set({
-                uid: currentUser.uid,
-                username: currentUser.username,
-                is_online: isAnyOnline,
-                last_seen: new Date().toISOString()
-            }, { merge: true });
-        } catch (e) {}
     }
 
     async function updateOnlineStatus(isOnline) {
@@ -261,13 +223,23 @@
         } catch (e) {}
     }
 
-    async function removeConnection() {
+    async function forceRemoveConnection() {
         if (!currentUser || !connectionId) return;
         
         try {
             const userRef = db.collection('users').doc(currentUser.uid);
             await userRef.collection('connections').doc(connectionId).delete();
-            await updateOverallUserStatus();
+            
+            // Сразу пересчитываем статус
+            const connectionsSnapshot = await userRef.collection('connections').get();
+            const isAnyOnline = connectionsSnapshot.docs.some(doc => doc.data().is_online === true);
+            
+            await userRef.set({
+                uid: currentUser.uid,
+                username: currentUser.username,
+                is_online: isAnyOnline,
+                last_seen: new Date().toISOString()
+            }, { merge: true });
         } catch (e) {}
     }
 
