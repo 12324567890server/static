@@ -58,7 +58,6 @@
     let currentUser = null;
     let currentChatWith = null;
     let isChatActive = false;
-    let isPageVisible = true;
     let chats = [];
     let unreadCounts = {};
     let onlineUsers = {};
@@ -66,7 +65,6 @@
     let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
     let heartbeatInterval = null;
-    let lastReadTime = {};
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     init();
@@ -74,13 +72,6 @@
     function init() {
         checkUser();
         setupEventListeners();
-        
-        document.addEventListener('visibilitychange', () => {
-            isPageVisible = !document.hidden;
-            if (isPageVisible && currentChatWith && isChatActive) {
-                setTimeout(() => markMessagesAsRead(currentChatWith), 1000);
-            }
-        });
     }
 
     async function checkUser() {
@@ -140,11 +131,9 @@
             
             await loadMessages(username);
             
-            setTimeout(() => {
-                if (isChatActive && isPageVisible) {
-                    markMessagesAsRead(username);
-                }
-            }, 1500);
+            if (!isMobile) {
+                await markMessagesAsRead(username);
+            }
             
             updateChatStatus();
             scrollToBottom();
@@ -325,23 +314,8 @@
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
                                 
-                                if (msg.sender === currentChatWith && !msg.read && isChatActive && isPageVisible) {
-                                    if (isMobile) {
-                                        setTimeout(() => {
-                                            if (isChatActive && currentChatWith === msg.sender) {
-                                                const msgElement = document.querySelector(`[data-message-id="${msgId}"]`);
-                                                if (msgElement) {
-                                                    const rect = msgElement.getBoundingClientRect();
-                                                    const isVisible = rect.top < window.innerHeight - 100 && rect.bottom > 100;
-                                                    if (isVisible) {
-                                                        markMessagesAsRead(currentChatWith);
-                                                    }
-                                                }
-                                            }
-                                        }, 2000);
-                                    } else {
-                                        markMessagesAsRead(currentChatWith);
-                                    }
+                                if (msg.sender === currentChatWith && !isMobile && isChatActive && !msg.read) {
+                                    markMessagesAsRead(currentChatWith);
                                 }
                             }
                         } else if (change.type === 'modified') {
@@ -624,11 +598,7 @@
     }
 
     async function markMessagesAsRead(username) {
-        if (!username || !currentUser || !isChatActive || !isPageVisible) return;
-        
-        const now = Date.now();
-        if (lastReadTime[username] && now - lastReadTime[username] < 3000) return;
-        lastReadTime[username] = now;
+        if (!username || !currentUser || !isChatActive) return;
         
         try {
             const snapshot = await db.collection('messages')
@@ -647,6 +617,12 @@
                 delete unreadCounts[username];
                 updateTitle();
                 loadChats();
+                
+                document.querySelectorAll(`.message.other .time`).forEach(el => {
+                    if (el.textContent.includes('✓') && !el.textContent.includes('✓✓')) {
+                        el.textContent = el.textContent.replace('✓', '✓✓');
+                    }
+                });
             }
         } catch (e) {
             console.error("Mark as read error:", e);
