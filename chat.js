@@ -70,7 +70,6 @@
     let lastReadTime = {};
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let messageListener = null;
-    let typingTimeout = null;
     let scrollPositions = {};
 
     init();
@@ -81,8 +80,13 @@
         
         document.addEventListener('visibilitychange', () => {
             isPageVisible = !document.hidden;
-            if (isPageVisible && currentChatWith && isChatActive) {
-                setTimeout(() => markMessagesAsRead(currentChatWith), 1000);
+            if (isPageVisible) {
+                setOnline(true);
+                if (currentChatWith && isChatActive) {
+                    setTimeout(() => markMessagesAsRead(currentChatUserId), 1000);
+                }
+            } else {
+                setOnline(false);
             }
         });
 
@@ -93,13 +97,11 @@
         });
 
         if (isMobile) {
-            document.addEventListener('touchstart', handleTouchStart);
-        }
-    }
-
-    function handleTouchStart(e) {
-        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-            elements.messageInput.blur();
+            document.addEventListener('touchstart', (e) => {
+                if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                    elements.messageInput.blur();
+                }
+            });
         }
     }
 
@@ -437,10 +439,15 @@
         if (!currentUser) return;
 
         usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
+            let needsUpdate = false;
+            
             snapshot.docChanges().forEach(change => {
                 const user = change.doc.data();
                 
                 if (change.type === 'modified' || change.type === 'added') {
+                    if (onlineUsers[change.doc.id]?.is_online !== (user.is_online === true)) {
+                        needsUpdate = true;
+                    }
                     onlineUsers[change.doc.id] = {
                         username: user.username,
                         is_online: user.is_online === true,
@@ -448,15 +455,18 @@
                     };
                 } else if (change.type === 'removed') {
                     delete onlineUsers[change.doc.id];
+                    needsUpdate = true;
                 }
             });
             
-            if (currentChatWith) {
-                updateChatStatus();
+            if (needsUpdate) {
+                if (currentChatWith) {
+                    updateChatStatus();
+                }
+                displayChats();
+                updateSearchResultsWithStatus();
+                updateContactsWithStatus();
             }
-            displayChats();
-            updateSearchResultsWithStatus();
-            updateContactsWithStatus();
         });
 
         chatsUnsubscribe = db.collection('messages')
@@ -470,7 +480,11 @@
     function startHeartbeat() {
         stopHeartbeat();
         setOnline(true);
-        heartbeatInterval = setInterval(() => setOnline(true), 25000);
+        heartbeatInterval = setInterval(() => {
+            if (isPageVisible) {
+                setOnline(true);
+            }
+        }, 20000);
     }
 
     function stopHeartbeat() {
@@ -494,8 +508,14 @@
 
     function updateChatStatus() {
         if (!currentChatUserId || !elements.chatStatus) return;
-        const isOnline = onlineUsers[currentChatUserId]?.is_online === true;
-        elements.chatStatus.textContent = isOnline ? 'на связи' : 'был(а) ' + formatLastSeen(onlineUsers[currentChatUserId]?.last_seen);
+        const user = onlineUsers[currentChatUserId];
+        const isOnline = user?.is_online === true;
+        
+        if (isOnline) {
+            elements.chatStatus.textContent = 'на связи';
+        } else {
+            elements.chatStatus.textContent = 'был(а) ' + formatLastSeen(user?.last_seen);
+        }
     }
 
     function formatLastSeen(timestamp) {
@@ -545,7 +565,7 @@
             const chatsMap = new Map();
             const newUnreadCounts = {};
 
-            for (const doc of snapshot.docs) {
+            const promises = snapshot.docs.map(async (doc) => {
                 const msg = doc.data();
                 const otherUserId = msg.sender === currentUser.uid ? msg.receiver : msg.sender;
                 
@@ -559,6 +579,12 @@
                     }
                 }
                 
+                return { msg, otherUserId, otherUsername };
+            });
+
+            const results = await Promise.all(promises);
+            
+            results.forEach(({ msg, otherUserId, otherUsername }) => {
                 if (!chatsMap.has(otherUserId) || new Date(msg.created_at) > new Date(chatsMap.get(otherUserId).lastTime)) {
                     chatsMap.set(otherUserId, {
                         userId: otherUserId,
@@ -572,7 +598,7 @@
                 if (msg.receiver === currentUser.uid && !msg.read) {
                     newUnreadCounts[otherUserId] = (newUnreadCounts[otherUserId] || 0) + 1;
                 }
-            }
+            });
 
             chats = Array.from(chatsMap.values());
             unreadCounts = newUnreadCounts;
@@ -607,7 +633,8 @@
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
             
-            const isOnline = onlineUsers[chat.userId]?.is_online === true;
+            const userStatus = onlineUsers[chat.userId];
+            const isOnline = userStatus?.is_online === true;
             const unreadCount = unreadCounts[chat.userId] || 0;
             const timeString = formatMessageTime(chat.lastTime);
             const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
