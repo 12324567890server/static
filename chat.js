@@ -58,6 +58,8 @@
     let currentUser = null;
     let currentChatWith = null;
     let isChatActive = false;
+    let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    let lastMessageTimestamp = 0;
     let chats = [];
     let unreadCounts = {};
     let onlineUsers = {};
@@ -71,14 +73,44 @@
     function init() {
         checkUser();
         setupEventListeners();
-        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+        if (isMobile) {
+            document.addEventListener('visibilitychange', handleMobileVisibilityChange);
+            window.addEventListener('pagehide', handleMobilePageHide);
+            window.addEventListener('blur', handleMobileBlur);
+        } else {
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+        }
+    }
+
+    function handleMobileVisibilityChange() {
+        if (document.visibilityState === 'visible') {
+            setTimeout(() => {
+                if (currentChatWith && isChatActive) {
+                    markMessagesAsRead(currentChatWith);
+                }
+                setOnline(true);
+            }, 300);
+        } else {
+            isChatActive = false;
+            setOnline(false);
+        }
+    }
+
+    function handleMobilePageHide() {
+        setOnline(false);
+    }
+
+    function handleMobileBlur() {
+        if (isMobile) {
+            isChatActive = false;
+            setOnline(false);
+        }
     }
 
     function handleVisibilityChange() {
         if (document.visibilityState === 'visible' && currentChatWith && isChatActive) {
             markMessagesAsRead(currentChatWith);
-        } else if (document.visibilityState === 'hidden') {
-            isChatActive = false;
         }
     }
 
@@ -139,9 +171,11 @@
             
             await loadMessages(username);
             
-            if (isChatActive && document.visibilityState === 'visible') {
-                await markMessagesAsRead(username);
-            }
+            setTimeout(() => {
+                if (isChatActive) {
+                    markMessagesAsRead(username);
+                }
+            }, 500);
             
             updateChatStatus();
             scrollToBottom();
@@ -313,6 +347,7 @@
                 .where('chat_id', '==', [currentUser.username, currentChatWith].sort().join('_'))
                 .orderBy('created_at')
                 .onSnapshot(snapshot => {
+                    const now = Date.now();
                     snapshot.docChanges().forEach(change => {
                         if (change.type === 'added') {
                             const msg = change.doc.data();
@@ -322,8 +357,15 @@
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
                                 
-                                if (msg.sender === currentChatWith && isChatActive && document.visibilityState === 'visible' && !msg.read) {
-                                    markMessagesAsRead(currentChatWith);
+                                if (msg.sender === currentChatWith && isChatActive && !msg.read) {
+                                    if (now - lastMessageTimestamp > 1000) {
+                                        lastMessageTimestamp = now;
+                                        setTimeout(() => {
+                                            if (isChatActive) {
+                                                markMessagesAsRead(currentChatWith);
+                                            }
+                                        }, 300);
+                                    }
                                 }
                             }
                         } else if (change.type === 'modified') {
@@ -370,7 +412,11 @@
     function startHeartbeat() {
         stopHeartbeat();
         setOnline(true);
-        heartbeatInterval = setInterval(() => setOnline(true), 25000);
+        heartbeatInterval = setInterval(() => {
+            if (!isMobile || document.visibilityState === 'visible') {
+                setOnline(true);
+            }
+        }, 25000);
     }
 
     function stopHeartbeat() {
@@ -606,7 +652,7 @@
     }
 
     async function markMessagesAsRead(username) {
-        if (!username || !currentUser || !isChatActive || document.visibilityState !== 'visible') return;
+        if (!username || !currentUser || !isChatActive) return;
         
         try {
             const snapshot = await db.collection('messages')
