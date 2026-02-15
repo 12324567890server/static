@@ -64,6 +64,7 @@
     let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
     let heartbeatInterval = null;
+    let lastReadTime = {};
 
     init();
 
@@ -306,19 +307,8 @@
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
                                 
-                                if (msg.sender === currentChatWith) {
-                                    markMessagesAsRead(currentChatWith);
-                                }
-                            }
-                        } else if (change.type === 'modified') {
-                            const msg = change.doc.data();
-                            const msgId = change.doc.id;
-                            const msgElement = document.querySelector(`[data-message-id="${msgId}"]`);
-                            
-                            if (msgElement && msg.read) {
-                                const timeDiv = msgElement.querySelector('.time');
-                                if (timeDiv && !timeDiv.textContent.includes('✓✓')) {
-                                    timeDiv.textContent = timeDiv.textContent.replace('✓', '✓✓');
+                                if (msg.sender === currentChatWith && currentChatWith) {
+                                    setTimeout(() => markMessagesAsRead(currentChatWith), 500);
                                 }
                             }
                         }
@@ -342,9 +332,6 @@
                             onlineUsers[user.username] = user.is_online;
                             if (currentChatWith === user.username) {
                                 updateChatStatus();
-                                if (user.is_online) {
-                                    markMessagesAsRead(currentChatWith);
-                                }
                             }
                             updateChatsList();
                             updateSearchResults();
@@ -593,7 +580,13 @@
     }
 
     async function markMessagesAsRead(username) {
-        if (!username || !currentUser) return;
+        if (!username || !currentUser || !currentChatWith) return;
+        
+        const now = Date.now();
+        if (lastReadTime[username] && now - lastReadTime[username] < 2000) {
+            return;
+        }
+        lastReadTime[username] = now;
         
         try {
             const snapshot = await db.collection('messages')
@@ -612,12 +605,6 @@
                 delete unreadCounts[username];
                 updateTitle();
                 loadChats();
-                
-                document.querySelectorAll(`.message.other .time`).forEach(el => {
-                    if (el.textContent.includes('✓') && !el.textContent.includes('✓✓')) {
-                        el.textContent = el.textContent.replace('✓', '✓✓');
-                    }
-                });
             }
         } catch (e) {
             console.error("Mark as read error:", e);
