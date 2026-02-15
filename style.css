@@ -154,6 +154,31 @@ body {
     background: rgba(45, 27, 105, 0.5);
 }
 
+.chats-list::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.chats-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.chats-list::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.chats-list::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #7c3aed, #8b5cf6);
+}
+
+.chats-list {
+    scrollbar-width: thin;
+    scrollbar-color: #8b5cf6 rgba(255, 255, 255, 0.05);
+}
+
 .chat-item {
     display: flex;
     align-items: center;
@@ -340,6 +365,48 @@ body {
     flex-direction: column;
     gap: 10px;
     -webkit-overflow-scrolling: touch;
+}
+
+.private-messages::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.private-messages::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.private-messages::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.private-messages::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #7c3aed, #8b5cf6);
+}
+
+/* Для Firefox */
+.private-messages {
+    scrollbar-width: thin;
+    scrollbar-color: #8b5cf6 rgba(255, 255, 255, 0.05);
+}
+
+@media (max-width: 768px) {
+    .private-messages {
+        -webkit-overflow-scrolling: touch;
+        scroll-behavior: smooth;
+    }
+    
+    .private-messages::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .private-messages::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+        border-radius: 10px;
+    }
 }
 
 .message {
@@ -651,6 +718,25 @@ body {
     background: transparent;
 }
 
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+    border-radius: 10px;
+}
+
+.modal-body {
+    scrollbar-width: thin;
+    scrollbar-color: #8b5cf6 rgba(255, 255, 255, 0.05);
+}
+
 .modal-input {
     width: 100%;
     padding: 14px 16px;
@@ -759,6 +845,25 @@ body {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     background: transparent;
+}
+
+.contacts-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.contacts-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.contacts-list::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+    border-radius: 10px;
+}
+
+.contacts-list {
+    scrollbar-width: thin;
+    scrollbar-color: #8b5cf6 rgba(255, 255, 255, 0.05);
 }
 
 .contact-item {
@@ -880,6 +985,14 @@ body {
     .side-menu {
         width: 85%;
         max-width: 280px;
+    }
+    
+    /* Увеличиваем скролл на мобильных */
+    .private-messages::-webkit-scrollbar,
+    .chats-list::-webkit-scrollbar,
+    .modal-body::-webkit-scrollbar,
+    .contacts-list::-webkit-scrollbar {
+        width: 8px;
     }
 }
 
