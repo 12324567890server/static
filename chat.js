@@ -58,6 +58,7 @@
     let currentUser = null;
     let currentChatWith = null;
     let isChatActive = false;
+    let isPageVisible = true;
     let chats = [];
     let unreadCounts = {};
     let onlineUsers = {};
@@ -65,13 +66,28 @@
     let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
     let heartbeatInterval = null;
+    let lastReadTime = {};
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    let readCheckTimeout = null;
 
     init();
 
     function init() {
         checkUser();
         setupEventListeners();
+        
+        document.addEventListener('visibilitychange', () => {
+            isPageVisible = !document.hidden;
+            if (isPageVisible && currentChatWith && isChatActive) {
+                setTimeout(() => markMessagesAsRead(currentChatWith), 1000);
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (currentUser) {
+                setOnline(false);
+            }
+        });
     }
 
     async function checkUser() {
@@ -131,9 +147,11 @@
             
             await loadMessages(username);
             
-            if (!isMobile) {
-                await markMessagesAsRead(username);
-            }
+            setTimeout(() => {
+                if (isChatActive && isPageVisible) {
+                    markMessagesAsRead(username);
+                }
+            }, 1500);
             
             updateChatStatus();
             scrollToBottom();
@@ -314,8 +332,23 @@
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
                                 
-                                if (msg.sender === currentChatWith && !isMobile && isChatActive && !msg.read) {
-                                    markMessagesAsRead(currentChatWith);
+                                if (msg.sender === currentChatWith && !msg.read && isChatActive && isPageVisible) {
+                                    if (isMobile) {
+                                        setTimeout(() => {
+                                            if (isChatActive && currentChatWith === msg.sender) {
+                                                const msgElement = document.querySelector(`[data-message-id="${msgId}"]`);
+                                                if (msgElement) {
+                                                    const rect = msgElement.getBoundingClientRect();
+                                                    const isVisible = rect.top < window.innerHeight - 100 && rect.bottom > 100;
+                                                    if (isVisible) {
+                                                        markMessagesAsRead(currentChatWith);
+                                                    }
+                                                }
+                                            }
+                                        }, 2000);
+                                    } else {
+                                        markMessagesAsRead(currentChatWith);
+                                    }
                                 }
                             }
                         } else if (change.type === 'modified') {
@@ -339,6 +372,9 @@
             .orderBy('created_at', 'desc')
             .onSnapshot(() => {
                 loadChats();
+                if (isChatActive && currentChatWith && isPageVisible) {
+                    markMessagesAsRead(currentChatWith);
+                }
             });
 
         usersUnsubscribe = db.collection('users')
@@ -380,6 +416,14 @@
                 is_online: status,
                 last_seen: new Date().toISOString()
             }, { merge: true });
+            
+            if (!status) {
+                onlineUsers = {};
+                updateChatsList();
+                if (currentChatWith) {
+                    updateChatStatus();
+                }
+            }
         } catch (e) {}
     }
 
@@ -598,7 +642,11 @@
     }
 
     async function markMessagesAsRead(username) {
-        if (!username || !currentUser || !isChatActive) return;
+        if (!username || !currentUser || !isChatActive || !isPageVisible) return;
+        
+        const now = Date.now();
+        if (lastReadTime[username] && now - lastReadTime[username] < 3000) return;
+        lastReadTime[username] = now;
         
         try {
             const snapshot = await db.collection('messages')
@@ -614,15 +662,11 @@
                 });
                 await batch.commit();
                 
-                delete unreadCounts[username];
-                updateTitle();
-                loadChats();
-                
-                document.querySelectorAll(`.message.other .time`).forEach(el => {
-                    if (el.textContent.includes('✓') && !el.textContent.includes('✓✓')) {
-                        el.textContent = el.textContent.replace('✓', '✓✓');
-                    }
-                });
+                if (unreadCounts[username]) {
+                    delete unreadCounts[username];
+                    updateTitle();
+                    loadChats();
+                }
             }
         } catch (e) {
             console.error("Mark as read error:", e);
@@ -876,6 +920,7 @@
             currentChatWith = null;
             isChatActive = false;
             onlineUsers = {};
+            unreadCounts = {};
             showLogin();
             showLoading(false);
         });
@@ -912,10 +957,4 @@
         div.textContent = text;
         return div.innerHTML;
     }
-
-    window.addEventListener('beforeunload', () => {
-        if (currentUser) {
-            setOnline(false);
-        }
-    });
 })();
