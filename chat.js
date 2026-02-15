@@ -61,6 +61,7 @@
     let unreadCounts = {};
     let onlineUsers = {};
     let messagesUnsubscribe = null;
+    let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
     let heartbeatInterval = null;
 
@@ -130,6 +131,8 @@
             updateChatStatus();
             scrollToBottom();
             elements.messageInput.focus();
+            
+            setupRealtimeSubscriptions();
         } catch (e) {
         } finally {
             showLoading(false);
@@ -172,6 +175,7 @@
         elements.backToChats.addEventListener('click', () => {
             currentChatWith = null;
             showChats();
+            setupRealtimeSubscriptions();
         });
 
         elements.editProfileBtn.addEventListener('click', () => {
@@ -273,6 +277,10 @@
             messagesUnsubscribe();
             messagesUnsubscribe = null;
         }
+        if (chatsUnsubscribe) {
+            chatsUnsubscribe();
+            chatsUnsubscribe = null;
+        }
         if (usersUnsubscribe) {
             usersUnsubscribe();
             usersUnsubscribe = null;
@@ -284,38 +292,34 @@
 
         if (!currentUser) return;
 
-        messagesUnsubscribe = db.collection('messages')
-            .where('participants', 'array-contains', currentUser.username)
-            .orderBy('created_at', 'desc')
-            .onSnapshot(snapshot => {
-                let needsChatsUpdate = false;
-                
-                snapshot.docChanges().forEach(change => {
-                    if (change.type === 'added') {
-                        needsChatsUpdate = true;
-                        const msg = change.doc.data();
-                        const msgId = change.doc.id;
-                        
-                        if (currentChatWith && 
-                            ((msg.sender === currentUser.username && msg.receiver === currentChatWith) ||
-                             (msg.sender === currentChatWith && msg.receiver === currentUser.username))) {
+        if (currentChatWith) {
+            messagesUnsubscribe = db.collection('messages')
+                .where('chat_id', '==', [currentUser.username, currentChatWith].sort().join('_'))
+                .orderBy('created_at')
+                .onSnapshot(snapshot => {
+                    snapshot.docChanges().forEach(change => {
+                        if (change.type === 'added') {
+                            const msg = change.doc.data();
+                            const msgId = change.doc.id;
                             
                             if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
+                                
+                                if (msg.sender === currentChatWith) {
+                                    markMessagesAsRead(currentChatWith);
+                                }
                             }
                         }
-                        
-                        if (msg.receiver === currentUser.username && !msg.read) {
-                            unreadCounts[msg.sender] = (unreadCounts[msg.sender] || 0) + 1;
-                            updateTitle();
-                        }
-                    }
+                    });
                 });
-                
-                if (needsChatsUpdate) {
-                    loadChats();
-                }
+        }
+
+        chatsUnsubscribe = db.collection('messages')
+            .where('participants', 'array-contains', currentUser.username)
+            .orderBy('created_at', 'desc')
+            .onSnapshot(() => {
+                loadChats();
             });
 
         usersUnsubscribe = db.collection('users')
@@ -553,8 +557,6 @@
                 read: false,
                 created_at: new Date().toISOString()
             });
-            
-            loadChats();
         } catch (e) {
             console.error("Send message error:", e);
         }
@@ -578,6 +580,7 @@
             
             delete unreadCounts[username];
             updateTitle();
+            loadChats();
         } catch (e) {
             console.error("Mark as read error:", e);
         }
