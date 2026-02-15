@@ -286,32 +286,36 @@
 
         messagesUnsubscribe = db.collection('messages')
             .where('participants', 'array-contains', currentUser.username)
-            .orderBy('created_at', 'asc')
+            .orderBy('created_at', 'desc')
             .onSnapshot(snapshot => {
+                let needsChatsUpdate = false;
+                
                 snapshot.docChanges().forEach(change => {
                     if (change.type === 'added') {
+                        needsChatsUpdate = true;
                         const msg = change.doc.data();
                         const msgId = change.doc.id;
                         
-                        if (currentChatWith === msg.sender || currentChatWith === msg.receiver) {
+                        if (currentChatWith && 
+                            ((msg.sender === currentUser.username && msg.receiver === currentChatWith) ||
+                             (msg.sender === currentChatWith && msg.receiver === currentUser.username))) {
+                            
                             if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
-                                
-                                if (msg.sender !== currentUser.username) {
-                                    markMessagesAsRead(msg.sender);
-                                }
                             }
                         }
                         
-                        if (msg.receiver === currentUser.username) {
+                        if (msg.receiver === currentUser.username && !msg.read) {
                             unreadCounts[msg.sender] = (unreadCounts[msg.sender] || 0) + 1;
                             updateTitle();
                         }
-                        
-                        loadChats();
                     }
                 });
+                
+                if (needsChatsUpdate) {
+                    loadChats();
+                }
             });
 
         usersUnsubscribe = db.collection('users')
@@ -549,6 +553,8 @@
                 read: false,
                 created_at: new Date().toISOString()
             });
+            
+            loadChats();
         } catch (e) {
             console.error("Send message error:", e);
         }
