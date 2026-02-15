@@ -339,24 +339,12 @@
                     if (change.type === 'modified' || change.type === 'added') {
                         const user = change.doc.data();
                         if (user.username !== currentUser?.username) {
-                            const wasOnline = onlineUsers[user.username];
                             onlineUsers[user.username] = user.is_online;
-                            
                             if (currentChatWith === user.username) {
                                 updateChatStatus();
-                                if (user.is_online && !wasOnline && currentChatWith) {
+                                if (user.is_online) {
                                     markMessagesAsRead(currentChatWith);
                                 }
-                            }
-                            updateChatsList();
-                            updateSearchResults();
-                        }
-                    } else if (change.type === 'removed') {
-                        const user = change.doc.data();
-                        if (user.username !== currentUser?.username) {
-                            delete onlineUsers[user.username];
-                            if (currentChatWith === user.username) {
-                                updateChatStatus();
                             }
                             updateChatsList();
                             updateSearchResults();
@@ -385,7 +373,7 @@
             await db.collection('users').doc(currentUser.username).set({
                 username: currentUser.username,
                 is_online: status,
-                last_seen: firebase.firestore.FieldValue.serverTimestamp()
+                last_seen: new Date().toISOString()
             }, { merge: true });
         } catch (e) {}
     }
@@ -543,7 +531,7 @@
         messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
         messageElement.dataset.messageId = msgId;
         
-        const messageTime = msg.created_at?.toDate ? msg.created_at.toDate() : new Date(msg.created_at);
+        const messageTime = new Date(msg.created_at);
         const timeString = messageTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
         
@@ -581,12 +569,8 @@
                 receiver: currentChatWith,
                 message: messageText,
                 read: false,
-                created_at: firebase.firestore.FieldValue.serverTimestamp()
+                created_at: new Date().toISOString()
             });
-            
-            if (onlineUsers[currentChatWith]) {
-                setTimeout(() => markMessagesAsRead(currentChatWith), 1000);
-            }
         } catch (e) {
             console.error("Send message error:", e);
         }
@@ -612,14 +596,6 @@
                 delete unreadCounts[username];
                 updateTitle();
                 loadChats();
-                
-                const messageElements = document.querySelectorAll(`.message.other[data-message-id]`);
-                messageElements.forEach(el => {
-                    const timeDiv = el.querySelector('.time');
-                    if (timeDiv && !timeDiv.textContent.includes('✓✓')) {
-                        timeDiv.textContent = timeDiv.textContent.replace('✓', '✓✓');
-                    }
-                });
             }
         } catch (e) {
             console.error("Mark as read error:", e);
@@ -678,7 +654,7 @@
             await db.collection('users').doc(username).set({
                 username: username,
                 is_online: true,
-                last_seen: firebase.firestore.FieldValue.serverTimestamp()
+                last_seen: new Date().toISOString()
             });
 
             currentUser = { username };
@@ -729,7 +705,7 @@
             await db.collection('users').doc(newUsername).set({
                 username: newUsername,
                 is_online: true,
-                last_seen: firebase.firestore.FieldValue.serverTimestamp()
+                last_seen: new Date().toISOString()
             });
 
             currentUser.username = newUsername;
@@ -880,7 +856,7 @@
     function formatMessageTime(timestamp) {
         if (!timestamp) return '';
         
-        const messageDate = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+        const messageDate = new Date(timestamp);
         const now = new Date();
         const diffMs = now - messageDate;
         const diffMins = Math.floor(diffMs / 60000);
