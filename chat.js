@@ -344,14 +344,22 @@
                             
                             if (currentChatWith === user.username) {
                                 updateChatStatus();
+                                if (user.is_online && !wasOnline && currentChatWith) {
+                                    markMessagesAsRead(currentChatWith);
+                                }
                             }
-                            
                             updateChatsList();
                             updateSearchResults();
-                            
-                            if (currentChatWith === user.username && user.is_online && !wasOnline) {
-                                markMessagesAsRead(currentChatWith);
+                        }
+                    } else if (change.type === 'removed') {
+                        const user = change.doc.data();
+                        if (user.username !== currentUser?.username) {
+                            delete onlineUsers[user.username];
+                            if (currentChatWith === user.username) {
+                                updateChatStatus();
                             }
+                            updateChatsList();
+                            updateSearchResults();
                         }
                     }
                 });
@@ -575,6 +583,10 @@
                 read: false,
                 created_at: firebase.firestore.FieldValue.serverTimestamp()
             });
+            
+            if (onlineUsers[currentChatWith]) {
+                setTimeout(() => markMessagesAsRead(currentChatWith), 1000);
+            }
         } catch (e) {
             console.error("Send message error:", e);
         }
@@ -600,6 +612,14 @@
                 delete unreadCounts[username];
                 updateTitle();
                 loadChats();
+                
+                const messageElements = document.querySelectorAll(`.message.other[data-message-id]`);
+                messageElements.forEach(el => {
+                    const timeDiv = el.querySelector('.time');
+                    if (timeDiv && !timeDiv.textContent.includes('✓✓')) {
+                        timeDiv.textContent = timeDiv.textContent.replace('✓', '✓✓');
+                    }
+                });
             }
         } catch (e) {
             console.error("Mark as read error:", e);
