@@ -67,6 +67,7 @@
     let usersUnsubscribe = null;
     let heartbeatInterval = null;
     let lastReadTime = {};
+    let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     init();
 
@@ -77,7 +78,7 @@
         document.addEventListener('visibilitychange', () => {
             isPageVisible = !document.hidden;
             if (isPageVisible && currentChatWith && isChatActive) {
-                setTimeout(() => markMessagesAsRead(currentChatWith), 500);
+                setTimeout(() => markMessagesAsRead(currentChatWith), 1000);
             }
         });
     }
@@ -143,7 +144,7 @@
                 if (isChatActive && isPageVisible) {
                     markMessagesAsRead(username);
                 }
-            }, 1000);
+            }, 1500);
             
             updateChatStatus();
             scrollToBottom();
@@ -323,6 +324,25 @@
                             if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
+                                
+                                if (msg.sender === currentChatWith && !msg.read && isChatActive && isPageVisible) {
+                                    if (isMobile) {
+                                        setTimeout(() => {
+                                            if (isChatActive && currentChatWith === msg.sender) {
+                                                const msgElement = document.querySelector(`[data-message-id="${msgId}"]`);
+                                                if (msgElement) {
+                                                    const rect = msgElement.getBoundingClientRect();
+                                                    const isVisible = rect.top < window.innerHeight - 100 && rect.bottom > 100;
+                                                    if (isVisible) {
+                                                        markMessagesAsRead(currentChatWith);
+                                                    }
+                                                }
+                                            }
+                                        }, 2000);
+                                    } else {
+                                        markMessagesAsRead(currentChatWith);
+                                    }
+                                }
                             }
                         } else if (change.type === 'modified') {
                             const msg = change.doc.data();
@@ -627,12 +647,6 @@
                 delete unreadCounts[username];
                 updateTitle();
                 loadChats();
-                
-                document.querySelectorAll(`.message.other .time`).forEach(el => {
-                    if (el.textContent.includes('✓') && !el.textContent.includes('✓✓')) {
-                        el.textContent = el.textContent.replace('✓', '✓✓');
-                    }
-                });
             }
         } catch (e) {
             console.error("Mark as read error:", e);
