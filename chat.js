@@ -62,7 +62,7 @@
     let isPageVisible = true;
     let chats = [];
     let unreadCounts = {};
-    let onlineUsers = new Map(); // Используем Map для надежности
+    let onlineUsers = new Map();
     let messagesUnsubscribe = null;
     let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
@@ -71,7 +71,10 @@
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let messageListener = null;
     let scrollPositions = {};
-    let connectionId = null; // Уникальный ID для каждого подключения
+    let connectionId = null;
+    let lastHeartbeat = Date.now();
+    const HEARTBEAT_INTERVAL = 15000;
+    const OFFLINE_TIMEOUT = 30000;
 
     init();
 
@@ -83,6 +86,8 @@
         window.addEventListener('beforeunload', handleBeforeUnload);
         window.addEventListener('online', handleNetworkOnline);
         window.addEventListener('offline', handleNetworkOffline);
+        
+        setInterval(checkStaleConnections, 10000);
 
         if (isMobile) {
             document.addEventListener('touchstart', (e) => {
@@ -106,7 +111,7 @@
     }
 
     function handleBeforeUnload() {
-        if (currentUser) {
+        if (currentUser && connectionId) {
             removeConnection();
         }
     }
@@ -123,21 +128,35 @@
         }
     }
 
+    async function checkStaleConnections() {
+        if (!currentUser) return;
+        
+        const now = Date.now();
+        if (now - lastHeartbeat > OFFLINE_TIMEOUT) {
+            await removeConnection();
+            await createConnection();
+            await updateOnlineStatus(true);
+        }
+    }
+
     async function updateOnlineStatus(isOnline) {
         if (!currentUser || !connectionId) return;
         
         try {
+            lastHeartbeat = Date.now();
+            
             const userRef = db.collection('users').doc(currentUser.uid);
             const connectionsRef = userRef.collection('connections').doc(connectionId);
             
             await connectionsRef.set({
+                connection_id: connectionId,
                 is_online: isOnline,
                 last_seen: new Date().toISOString(),
+                last_heartbeat: new Date().toISOString(),
                 user_agent: navigator.userAgent,
                 device: isMobile ? 'mobile' : 'desktop'
             }, { merge: true });
             
-            // Обновляем общий статус пользователя
             await updateOverallUserStatus();
         } catch (e) {}
     }
@@ -150,9 +169,16 @@
             const connectionsSnapshot = await userRef.collection('connections').get();
             
             let isAnyOnline = false;
+            let latestSeen = null;
+            
             connectionsSnapshot.forEach(doc => {
-                if (doc.data().is_online === true) {
+                const conn = doc.data();
+                if (conn.is_online === true) {
                     isAnyOnline = true;
+                }
+                const lastSeen = new Date(conn.last_seen || conn.last_heartbeat);
+                if (!latestSeen || lastSeen > latestSeen) {
+                    latestSeen = lastSeen;
                 }
             });
             
@@ -160,7 +186,7 @@
                 uid: currentUser.uid,
                 username: currentUser.username,
                 is_online: isAnyOnline,
-                last_seen: new Date().toISOString()
+                last_seen: latestSeen ? latestSeen.toISOString() : new Date().toISOString()
             }, { merge: true });
         } catch (e) {}
     }
@@ -189,7 +215,6 @@
                         username: userDoc.data().username
                     };
                     
-                    // Создаем новое подключение
                     connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                     
                     await createConnection();
@@ -223,8 +248,10 @@
         await connectionsRef.set({
             connection_id: connectionId,
             created_at: new Date().toISOString(),
+            last_seen: new Date().toISOString(),
             user_agent: navigator.userAgent,
-            device: isMobile ? 'mobile' : 'desktop'
+            device: isMobile ? 'mobile' : 'desktop',
+            is_online: true
         });
     }
 
@@ -528,31 +555,41 @@
 
         if (!currentUser) return;
 
-        // Слушаем изменения пользователей
         usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
+            let needsUpdate = false;
+            
             snapshot.docChanges().forEach(change => {
+                const userData = change.doc.data();
+                
                 if (change.type === 'modified' || change.type === 'added') {
-                    const userData = change.doc.data();
+                    const oldStatus = onlineUsers.get(change.doc.id)?.is_online;
+                    const newStatus = userData.is_online === true;
+                    
+                    if (oldStatus !== newStatus) {
+                        needsUpdate = true;
+                    }
+                    
                     onlineUsers.set(change.doc.id, {
                         username: userData.username,
-                        is_online: userData.is_online === true,
+                        is_online: newStatus,
                         last_seen: userData.last_seen
                     });
                 } else if (change.type === 'removed') {
                     onlineUsers.delete(change.doc.id);
+                    needsUpdate = true;
                 }
             });
             
-            // Обновляем UI
-            if (currentChatWith) {
-                updateChatStatus();
+            if (needsUpdate) {
+                if (currentChatWith) {
+                    updateChatStatus();
+                }
+                displayChats();
+                updateSearchResultsWithStatus();
+                updateContactsWithStatus();
             }
-            displayChats();
-            updateSearchResultsWithStatus();
-            updateContactsWithStatus();
         });
 
-        // Слушаем изменения сообщений
         chatsUnsubscribe = db.collection('messages')
             .where('participants', 'array-contains', currentUser.uid)
             .orderBy('created_at', 'desc')
@@ -564,12 +601,15 @@
     function startHeartbeat() {
         stopHeartbeat();
         
-        // Обновляем статус каждые 20 секунд
         heartbeatInterval = setInterval(() => {
-            if (isPageVisible && navigator.onLine) {
-                updateOnlineStatus(true);
+            if (currentUser && connectionId) {
+                if (isPageVisible && navigator.onLine) {
+                    updateOnlineStatus(true);
+                } else {
+                    updateOnlineStatus(false);
+                }
             }
-        }, 20000);
+        }, HEARTBEAT_INTERVAL);
     }
 
     function stopHeartbeat() {
@@ -919,13 +959,14 @@
                 
                 await db.collection('users').doc(uid).set({
                     uid: uid,
-                    username: username
+                    username: username,
+                    is_online: false,
+                    last_seen: new Date().toISOString()
                 });
 
                 currentUser = { uid, username };
             }
 
-            // Создаем новое подключение
             connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             await createConnection();
             
@@ -1130,25 +1171,23 @@
         });
     }
 
-    async function logout() {
+    function logout() {
         showLoading(true);
         
-        try {
-            await removeConnection();
-        } catch (e) {}
-        
-        localStorage.removeItem('speednexus_user');
-        stopHeartbeat();
-        cleanupSubscriptions();
-        currentUser = null;
-        currentChatWith = null;
-        currentChatUserId = null;
-        isChatActive = false;
-        onlineUsers.clear();
-        unreadCounts = {};
-        scrollPositions = {};
-        showLogin();
-        showLoading(false);
+        removeConnection().finally(() => {
+            localStorage.removeItem('speednexus_user');
+            stopHeartbeat();
+            cleanupSubscriptions();
+            currentUser = null;
+            currentChatWith = null;
+            currentChatUserId = null;
+            isChatActive = false;
+            onlineUsers.clear();
+            unreadCounts = {};
+            scrollPositions = {};
+            showLogin();
+            showLoading(false);
+        });
     }
 
     function formatMessageTime(timestamp) {
