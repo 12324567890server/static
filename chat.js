@@ -62,7 +62,7 @@
     let isPageVisible = true;
     let chats = [];
     let unreadCounts = {};
-    let onlineUsers = new Map(); // Используем Map для надежности
+    let onlineUsers = new Map();
     let messagesUnsubscribe = null;
     let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
@@ -71,7 +71,7 @@
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let messageListener = null;
     let scrollPositions = {};
-    let connectionId = null; // Уникальный ID для каждого подключения
+    let connectionId = null;
 
     init();
 
@@ -136,9 +136,6 @@
                 user_agent: navigator.userAgent,
                 device: isMobile ? 'mobile' : 'desktop'
             }, { merge: true });
-            
-            // Обновляем общий статус пользователя
-            await updateOverallUserStatus();
         } catch (e) {}
     }
 
@@ -150,11 +147,24 @@
             const connectionsSnapshot = await userRef.collection('connections').get();
             
             let isAnyOnline = false;
+            const now = Date.now();
+            const ONLINE_TIMEOUT = 30000;
+            
+            const batch = db.batch();
+            
             connectionsSnapshot.forEach(doc => {
-                if (doc.data().is_online === true) {
-                    isAnyOnline = true;
+                const conn = doc.data();
+                if (conn.is_online === true) {
+                    const lastSeen = new Date(conn.last_seen || conn.created_at).getTime();
+                    if (now - lastSeen < ONLINE_TIMEOUT) {
+                        isAnyOnline = true;
+                    } else {
+                        batch.update(doc.ref, { is_online: false });
+                    }
                 }
             });
+            
+            await batch.commit();
             
             await userRef.set({
                 uid: currentUser.uid,
@@ -189,7 +199,6 @@
                         username: userDoc.data().username
                     };
                     
-                    // Создаем новое подключение
                     connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                     
                     await createConnection();
@@ -528,7 +537,6 @@
 
         if (!currentUser) return;
 
-        // Слушаем изменения пользователей
         usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'modified' || change.type === 'added') {
@@ -543,7 +551,6 @@
                 }
             });
             
-            // Обновляем UI
             if (currentChatWith) {
                 updateChatStatus();
             }
@@ -552,7 +559,6 @@
             updateContactsWithStatus();
         });
 
-        // Слушаем изменения сообщений
         chatsUnsubscribe = db.collection('messages')
             .where('participants', 'array-contains', currentUser.uid)
             .orderBy('created_at', 'desc')
@@ -564,7 +570,6 @@
     function startHeartbeat() {
         stopHeartbeat();
         
-        // Обновляем статус каждые 20 секунд
         heartbeatInterval = setInterval(() => {
             if (isPageVisible && navigator.onLine) {
                 updateOnlineStatus(true);
@@ -925,7 +930,6 @@
                 currentUser = { uid, username };
             }
 
-            // Создаем новое подключение
             connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             await createConnection();
             
@@ -937,6 +941,7 @@
             setupRealtimeSubscriptions();
             loadChats();
             startHeartbeat();
+            await updateOverallUserStatus();
         } catch (e) {
             showError(elements.loginError, 'Ошибка при входе');
             localStorage.removeItem('speednexus_user');
