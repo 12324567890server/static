@@ -62,7 +62,7 @@
     let isPageVisible = true;
     let chats = [];
     let unreadCounts = {};
-    let onlineUsers = {};
+    let onlineUsers = new Map(); // Используем Map для надежности
     let messagesUnsubscribe = null;
     let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
@@ -71,6 +71,7 @@
     let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let messageListener = null;
     let scrollPositions = {};
+    let connectionId = null; // Уникальный ID для каждого подключения
 
     init();
 
@@ -78,23 +79,10 @@
         checkUser();
         setupEventListeners();
         
-        document.addEventListener('visibilitychange', () => {
-            isPageVisible = !document.hidden;
-            if (isPageVisible) {
-                setOnline(true);
-                if (currentChatWith && isChatActive) {
-                    setTimeout(() => markMessagesAsRead(currentChatUserId), 1000);
-                }
-            } else {
-                setOnline(false);
-            }
-        });
-
-        window.addEventListener('beforeunload', () => {
-            if (currentUser) {
-                setOnline(false);
-            }
-        });
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('online', handleNetworkOnline);
+        window.addEventListener('offline', handleNetworkOffline);
 
         if (isMobile) {
             document.addEventListener('touchstart', (e) => {
@@ -103,6 +91,88 @@
                 }
             });
         }
+    }
+
+    function handleVisibilityChange() {
+        isPageVisible = !document.hidden;
+        if (isPageVisible) {
+            updateOnlineStatus(true);
+            if (currentChatWith && isChatActive) {
+                setTimeout(() => markMessagesAsRead(currentChatUserId), 1000);
+            }
+        } else {
+            updateOnlineStatus(false);
+        }
+    }
+
+    function handleBeforeUnload() {
+        if (currentUser) {
+            removeConnection();
+        }
+    }
+
+    function handleNetworkOnline() {
+        if (currentUser) {
+            updateOnlineStatus(true);
+        }
+    }
+
+    function handleNetworkOffline() {
+        if (currentUser) {
+            updateOnlineStatus(false);
+        }
+    }
+
+    async function updateOnlineStatus(isOnline) {
+        if (!currentUser || !connectionId) return;
+        
+        try {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            const connectionsRef = userRef.collection('connections').doc(connectionId);
+            
+            await connectionsRef.set({
+                is_online: isOnline,
+                last_seen: new Date().toISOString(),
+                user_agent: navigator.userAgent,
+                device: isMobile ? 'mobile' : 'desktop'
+            }, { merge: true });
+            
+            // Обновляем общий статус пользователя
+            await updateOverallUserStatus();
+        } catch (e) {}
+    }
+
+    async function updateOverallUserStatus() {
+        if (!currentUser) return;
+        
+        try {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            const connectionsSnapshot = await userRef.collection('connections').get();
+            
+            let isAnyOnline = false;
+            connectionsSnapshot.forEach(doc => {
+                if (doc.data().is_online === true) {
+                    isAnyOnline = true;
+                }
+            });
+            
+            await userRef.set({
+                uid: currentUser.uid,
+                username: currentUser.username,
+                is_online: isAnyOnline,
+                last_seen: new Date().toISOString()
+            }, { merge: true });
+        } catch (e) {}
+    }
+
+    async function removeConnection() {
+        if (!currentUser || !connectionId) return;
+        
+        try {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            await userRef.collection('connections').doc(connectionId).delete();
+            await updateOverallUserStatus();
+        } catch (e) {}
     }
 
     async function checkUser() {
@@ -118,7 +188,13 @@
                         uid: userDoc.id,
                         username: userDoc.data().username
                     };
-                    await setOnline(true);
+                    
+                    // Создаем новое подключение
+                    connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    
+                    await createConnection();
+                    await updateOnlineStatus(true);
+                    
                     showChats();
                     updateUI();
                     setupRealtimeSubscriptions();
@@ -136,6 +212,20 @@
         } finally {
             showLoading(false);
         }
+    }
+
+    async function createConnection() {
+        if (!currentUser) return;
+        
+        const userRef = db.collection('users').doc(currentUser.uid);
+        const connectionsRef = userRef.collection('connections').doc(connectionId);
+        
+        await connectionsRef.set({
+            connection_id: connectionId,
+            created_at: new Date().toISOString(),
+            user_agent: navigator.userAgent,
+            device: isMobile ? 'mobile' : 'desktop'
+        });
     }
 
     function showLogin() {
@@ -438,37 +528,31 @@
 
         if (!currentUser) return;
 
+        // Слушаем изменения пользователей
         usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
-            let needsUpdate = false;
-            
             snapshot.docChanges().forEach(change => {
-                const user = change.doc.data();
-                
                 if (change.type === 'modified' || change.type === 'added') {
-                    if (onlineUsers[change.doc.id]?.is_online !== (user.is_online === true)) {
-                        needsUpdate = true;
-                    }
-                    onlineUsers[change.doc.id] = {
-                        username: user.username,
-                        is_online: user.is_online === true,
-                        last_seen: user.last_seen
-                    };
+                    const userData = change.doc.data();
+                    onlineUsers.set(change.doc.id, {
+                        username: userData.username,
+                        is_online: userData.is_online === true,
+                        last_seen: userData.last_seen
+                    });
                 } else if (change.type === 'removed') {
-                    delete onlineUsers[change.doc.id];
-                    needsUpdate = true;
+                    onlineUsers.delete(change.doc.id);
                 }
             });
             
-            if (needsUpdate) {
-                if (currentChatWith) {
-                    updateChatStatus();
-                }
-                displayChats();
-                updateSearchResultsWithStatus();
-                updateContactsWithStatus();
+            // Обновляем UI
+            if (currentChatWith) {
+                updateChatStatus();
             }
+            displayChats();
+            updateSearchResultsWithStatus();
+            updateContactsWithStatus();
         });
 
+        // Слушаем изменения сообщений
         chatsUnsubscribe = db.collection('messages')
             .where('participants', 'array-contains', currentUser.uid)
             .orderBy('created_at', 'desc')
@@ -479,10 +563,11 @@
 
     function startHeartbeat() {
         stopHeartbeat();
-        setOnline(true);
+        
+        // Обновляем статус каждые 20 секунд
         heartbeatInterval = setInterval(() => {
-            if (isPageVisible) {
-                setOnline(true);
+            if (isPageVisible && navigator.onLine) {
+                updateOnlineStatus(true);
             }
         }, 20000);
     }
@@ -494,27 +579,17 @@
         }
     }
 
-    async function setOnline(status) {
-        if (!currentUser) return;
-        try {
-            await db.collection('users').doc(currentUser.uid).set({
-                uid: currentUser.uid,
-                username: currentUser.username,
-                is_online: status,
-                last_seen: new Date().toISOString()
-            }, { merge: true });
-        } catch (e) {}
-    }
-
     function updateChatStatus() {
         if (!currentChatUserId || !elements.chatStatus) return;
-        const user = onlineUsers[currentChatUserId];
+        const user = onlineUsers.get(currentChatUserId);
         const isOnline = user?.is_online === true;
         
         if (isOnline) {
             elements.chatStatus.textContent = 'на связи';
+            elements.chatStatus.style.color = '#4CAF50';
         } else {
             elements.chatStatus.textContent = 'был(а) ' + formatLastSeen(user?.last_seen);
+            elements.chatStatus.style.color = 'rgba(255,255,255,0.5)';
         }
     }
 
@@ -569,7 +644,7 @@
                 const msg = doc.data();
                 const otherUserId = msg.sender === currentUser.uid ? msg.receiver : msg.sender;
                 
-                let otherUsername = onlineUsers[otherUserId]?.username;
+                let otherUsername = onlineUsers.get(otherUserId)?.username;
                 if (!otherUsername) {
                     const userDoc = await db.collection('users').doc(otherUserId).get();
                     if (userDoc.exists) {
@@ -633,7 +708,7 @@
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
             
-            const userStatus = onlineUsers[chat.userId];
+            const userStatus = onlineUsers.get(chat.userId);
             const isOnline = userStatus?.is_online === true;
             const unreadCount = unreadCounts[chat.userId] || 0;
             const timeString = formatMessageTime(chat.lastTime);
@@ -702,7 +777,8 @@
             timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         }
         
-        const senderName = !isMyMessage ? onlineUsers[msg.sender]?.username || msg.sender : '';
+        const senderInfo = onlineUsers.get(msg.sender);
+        const senderName = !isMyMessage ? senderInfo?.username || msg.sender : '';
         const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
         
         messageElement.innerHTML = `
@@ -843,16 +919,18 @@
                 
                 await db.collection('users').doc(uid).set({
                     uid: uid,
-                    username: username,
-                    is_online: true,
-                    last_seen: new Date().toISOString()
+                    username: username
                 });
 
                 currentUser = { uid, username };
             }
 
+            // Создаем новое подключение
+            connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            await createConnection();
+            
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            await setOnline(true);
+            await updateOnlineStatus(true);
 
             showChats();
             updateUI();
@@ -950,7 +1028,7 @@
                     showChat(user.username);
                 };
                 
-                const isOnline = onlineUsers[user.uid]?.is_online === true;
+                const isOnline = onlineUsers.get(user.uid)?.is_online === true;
                 
                 userElement.innerHTML = `
                     <div class="user-result-info">
@@ -977,7 +1055,7 @@
                 const username = nameElement.textContent;
                 findUserByUsername(username).then(user => {
                     if (user) {
-                        const isOnline = onlineUsers[user.uid]?.is_online === true;
+                        const isOnline = onlineUsers.get(user.uid)?.is_online === true;
                         const avatarElement = result.querySelector('.user-result-avatar');
                         const statusElement = result.querySelector('div[style*="font-size: 12px"]');
                         
@@ -1001,7 +1079,7 @@
                 const username = nameElement.textContent;
                 findUserByUsername(username).then(user => {
                     if (user) {
-                        const isOnline = onlineUsers[user.uid]?.is_online === true;
+                        const isOnline = onlineUsers.get(user.uid)?.is_online === true;
                         const avatarElement = item.querySelector('.contact-avatar');
                         const statusElement = item.querySelector('div[style*="font-size: 12px"]');
                         
@@ -1035,7 +1113,7 @@
             };
             
             findUserByUsername(contact.username).then(user => {
-                const isOnline = user ? onlineUsers[user.uid]?.is_online === true : false;
+                const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
                 
                 contactElement.innerHTML = `
                     <div class="contact-info">
@@ -1052,22 +1130,25 @@
         });
     }
 
-    function logout() {
+    async function logout() {
         showLoading(true);
-        setOnline(false).finally(() => {
-            localStorage.removeItem('speednexus_user');
-            stopHeartbeat();
-            cleanupSubscriptions();
-            currentUser = null;
-            currentChatWith = null;
-            currentChatUserId = null;
-            isChatActive = false;
-            onlineUsers = {};
-            unreadCounts = {};
-            scrollPositions = {};
-            showLogin();
-            showLoading(false);
-        });
+        
+        try {
+            await removeConnection();
+        } catch (e) {}
+        
+        localStorage.removeItem('speednexus_user');
+        stopHeartbeat();
+        cleanupSubscriptions();
+        currentUser = null;
+        currentChatWith = null;
+        currentChatUserId = null;
+        isChatActive = false;
+        onlineUsers.clear();
+        unreadCounts = {};
+        scrollPositions = {};
+        showLogin();
+        showLoading(false);
     }
 
     function formatMessageTime(timestamp) {
