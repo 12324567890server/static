@@ -521,6 +521,8 @@
                 const msg = doc.data();
                 displayMessage(msg, msg.sender === currentUser.username, doc.id);
             });
+            
+            setTimeout(() => scrollToBottom(), 100);
         } catch (e) {
             console.error("Load messages error:", e);
         }
@@ -546,11 +548,9 @@
     }
 
     function scrollToBottom() {
-        setTimeout(() => {
-            if (elements.privateMessages) {
-                elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
-            }
-        }, 100);
+        if (elements.privateMessages) {
+            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+        }
     }
 
     async function sendMessage() {
@@ -571,6 +571,8 @@
                 read: false,
                 created_at: new Date().toISOString()
             });
+            
+            setTimeout(() => scrollToBottom(), 100);
         } catch (e) {
             console.error("Send message error:", e);
         }
@@ -596,6 +598,12 @@
                 delete unreadCounts[username];
                 updateTitle();
                 loadChats();
+                
+                document.querySelectorAll(`.message.other .time`).forEach(el => {
+                    if (el.textContent.includes('✓') && !el.textContent.includes('✓✓')) {
+                        el.textContent = el.textContent.replace('✓', '✓✓');
+                    }
+                });
             }
         } catch (e) {
             console.error("Mark as read error:", e);
