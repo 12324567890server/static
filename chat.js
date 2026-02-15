@@ -57,6 +57,7 @@
 
     let currentUser = null;
     let currentChatWith = null;
+    let isChatActive = false;
     let chats = [];
     let unreadCounts = {};
     let onlineUsers = {};
@@ -64,13 +65,21 @@
     let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
     let heartbeatInterval = null;
-    let lastReadTime = {};
 
     init();
 
     function init() {
         checkUser();
         setupEventListeners();
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    function handleVisibilityChange() {
+        if (document.visibilityState === 'visible' && currentChatWith && isChatActive) {
+            markMessagesAsRead(currentChatWith);
+        } else if (document.visibilityState === 'hidden') {
+            isChatActive = false;
+        }
     }
 
     async function checkUser() {
@@ -121,6 +130,7 @@
         showLoading(true);
         try {
             currentChatWith = username;
+            isChatActive = true;
             elements.chatWithUser.textContent = username;
             elements.chatsScreen.style.display = 'none';
             elements.chatScreen.style.display = 'flex';
@@ -128,7 +138,11 @@
             elements.messageInput.value = '';
             
             await loadMessages(username);
-            await markMessagesAsRead(username);
+            
+            if (isChatActive && document.visibilityState === 'visible') {
+                await markMessagesAsRead(username);
+            }
+            
             updateChatStatus();
             scrollToBottom();
             elements.messageInput.focus();
@@ -175,6 +189,7 @@
 
         elements.backToChats.addEventListener('click', () => {
             currentChatWith = null;
+            isChatActive = false;
             showChats();
             setupRealtimeSubscriptions();
         });
@@ -307,8 +322,19 @@
                                 displayMessage(msg, msg.sender === currentUser.username, msgId);
                                 scrollToBottom();
                                 
-                                if (msg.sender === currentChatWith && currentChatWith) {
-                                    setTimeout(() => markMessagesAsRead(currentChatWith), 500);
+                                if (msg.sender === currentChatWith && isChatActive && document.visibilityState === 'visible' && !msg.read) {
+                                    markMessagesAsRead(currentChatWith);
+                                }
+                            }
+                        } else if (change.type === 'modified') {
+                            const msg = change.doc.data();
+                            const msgId = change.doc.id;
+                            const msgElement = document.querySelector(`[data-message-id="${msgId}"]`);
+                            
+                            if (msgElement && msg.read) {
+                                const timeDiv = msgElement.querySelector('.time');
+                                if (timeDiv && !timeDiv.textContent.includes('✓✓')) {
+                                    timeDiv.textContent = timeDiv.textContent.replace('✓', '✓✓');
                                 }
                             }
                         }
@@ -580,13 +606,7 @@
     }
 
     async function markMessagesAsRead(username) {
-        if (!username || !currentUser || !currentChatWith) return;
-        
-        const now = Date.now();
-        if (lastReadTime[username] && now - lastReadTime[username] < 2000) {
-            return;
-        }
-        lastReadTime[username] = now;
+        if (!username || !currentUser || !isChatActive || document.visibilityState !== 'visible') return;
         
         try {
             const snapshot = await db.collection('messages')
@@ -605,6 +625,12 @@
                 delete unreadCounts[username];
                 updateTitle();
                 loadChats();
+                
+                document.querySelectorAll(`.message.other .time`).forEach(el => {
+                    if (el.textContent.includes('✓') && !el.textContent.includes('✓✓')) {
+                        el.textContent = el.textContent.replace('✓', '✓✓');
+                    }
+                });
             }
         } catch (e) {
             console.error("Mark as read error:", e);
@@ -856,6 +882,7 @@
             cleanupSubscriptions();
             currentUser = null;
             currentChatWith = null;
+            isChatActive = false;
             onlineUsers = {};
             showLogin();
             showLoading(false);
