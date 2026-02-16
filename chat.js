@@ -78,41 +78,45 @@ init();
 function init() {  
     checkUser();  
     setupEventListeners();  
-      
     document.addEventListener('visibilitychange', handleVisibilityChange);  
     window.addEventListener('beforeunload', handleBeforeUnload);  
-      
-    setInterval(cleanupOldConnections, 5000);  
-}  
+    setInterval(cleanupOldConnections, 3000);
+}
 
 async function cleanupOldConnections() {
     try {
-        const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
-        const connectionsSnapshot = await db.collectionGroup('connections')
-            .where('last_seen', '<', fiveSecondsAgo)
-            .where('is_online', '==', true)
-            .get();
-
-        for (const doc of connectionsSnapshot.docs) {
-            await doc.ref.update({
-                is_online: false,
-                last_seen: new Date().toISOString()
-            });
+        const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
+        const usersSnapshot = await db.collection('users').get();
+        
+        for (const userDoc of usersSnapshot.docs) {
+            const userId = userDoc.id;
             
-            const userId = doc.ref.parent.parent.id;
-            
-            const userConnections = await db.collection('users')
+            const activeConnections = await db.collection('users')
                 .doc(userId)
                 .collection('connections')
                 .where('is_online', '==', true)
-                .where('last_seen', '>', fiveSecondsAgo)
+                .where('last_seen', '>', threeSecondsAgo)
                 .get();
             
-            const isOnline = !userConnections.empty;
+            const shouldBeOnline = !activeConnections.empty;
+            const currentStatus = userDoc.data().is_online;
             
-            await db.collection('users').doc(userId).update({
-                is_online: isOnline,
-                last_check: new Date().toISOString()
+            if (currentStatus !== shouldBeOnline) {
+                await db.collection('users').doc(userId).update({
+                    is_online: shouldBeOnline,
+                    last_check: new Date().toISOString()
+                });
+            }
+            
+            const deadConnections = await db.collection('users')
+                .doc(userId)
+                .collection('connections')
+                .where('is_online', '==', true)
+                .where('last_seen', '<', threeSecondsAgo)
+                .get();
+            
+            deadConnections.forEach(doc => {
+                doc.ref.update({ is_online: false });
             });
         }
     } catch (e) {}
@@ -120,12 +124,12 @@ async function cleanupOldConnections() {
 
 async function updateUserStatus(userId) {
     try {
-        const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
+        const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
         const connectionsSnapshot = await db.collection('users')
             .doc(userId)
             .collection('connections')
             .where('is_online', '==', true)
-            .where('last_seen', '>', fiveSecondsAgo)
+            .where('last_seen', '>', threeSecondsAgo)
             .get();
 
         const isOnline = !connectionsSnapshot.empty;
