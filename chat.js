@@ -1,4 +1,4 @@
- (function() {
+(function() {
     const firebaseConfig = {
         apiKey: "AIzaSyCVdthLC_AX8EI5lKsL-6UOpP7B01dIjQ8",
         authDomain: "speednexusrus.firebaseapp.com",
