@@ -68,12 +68,8 @@
     let messagesUnsubscribe = null;
     let chatsUnsubscribe = null;
     let usersUnsubscribe = null;
-    let heartbeatInterval = null;
-    let lastReadTime = {};
-    let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let messageListener = null;
     let scrollPositions = {};
-    let connectionId = null;
     let statusListeners = new Map();
 
     init();
@@ -82,22 +78,31 @@
         checkUser();
         setupEventListeners();
         
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        window.addEventListener('online', handleNetworkOnline);
-        window.addEventListener('offline', handleNetworkOffline);
+        document.addEventListener('visibilitychange', () => {
+            isPageVisible = !document.hidden;
+        });
+        
+        window.addEventListener('beforeunload', () => {
+            if (currentUser) {
+                const statusRef = rtdb.ref('/status/' + currentUser.username);
+                statusRef.set({
+                    state: 'offline',
+                    last_changed: firebase.database.ServerValue.TIMESTAMP
+                });
+            }
+        });
     }
 
-    async function setupOnlineStatus() {
+    async function setupUserStatus() {
         if (!currentUser) return;
         const statusRef = rtdb.ref('/status/' + currentUser.username);
-        statusRef.onDisconnect().set({ 
-            state: 'offline', 
-            last_changed: firebase.database.ServerValue.TIMESTAMP 
+        statusRef.onDisconnect().set({
+            state: 'offline',
+            last_changed: firebase.database.ServerValue.TIMESTAMP
         });
-        statusRef.set({ 
-            state: 'online', 
-            last_changed: firebase.database.ServerValue.TIMESTAMP 
+        statusRef.set({
+            state: 'online',
+            last_changed: firebase.database.ServerValue.TIMESTAMP
         });
     }
 
@@ -118,84 +123,6 @@
         }
     }
 
-    function handleVisibilityChange() {
-        isPageVisible = !document.hidden;
-        if (isPageVisible) {
-            if (currentChatWith && isChatActive) {
-                setTimeout(() => markMessagesAsRead(currentChatUserId), 1000);
-            }
-        }
-    }
-
-    function handleBeforeUnload() {
-        if (currentUser) {
-            removeConnection();
-        }
-    }
-
-    function handleNetworkOnline() {
-        if (currentUser) {
-            updateOnlineStatus(true);
-        }
-    }
-
-    function handleNetworkOffline() {
-        if (currentUser) {
-            updateOnlineStatus(false);
-        }
-    }
-
-    async function updateOnlineStatus(isOnline) {
-        if (!currentUser || !connectionId) return;
-        
-        try {
-            const userRef = db.collection('users').doc(currentUser.uid);
-            const connectionsRef = userRef.collection('connections').doc(connectionId);
-            
-            await connectionsRef.set({
-                is_online: isOnline,
-                last_seen: new Date().toISOString(),
-                user_agent: navigator.userAgent,
-                device: isMobile ? 'mobile' : 'desktop'
-            }, { merge: true });
-            
-            await updateOverallUserStatus();
-        } catch (e) {}
-    }
-
-    async function updateOverallUserStatus() {
-        if (!currentUser) return;
-        
-        try {
-            const userRef = db.collection('users').doc(currentUser.uid);
-            const connectionsSnapshot = await userRef.collection('connections').get();
-            
-            let isAnyOnline = false;
-            connectionsSnapshot.forEach(doc => {
-                if (doc.data().is_online === true) {
-                    isAnyOnline = true;
-                }
-            });
-            
-            await userRef.set({
-                uid: currentUser.uid,
-                username: currentUser.username,
-                is_online: isAnyOnline,
-                last_seen: new Date().toISOString()
-            }, { merge: true });
-        } catch (e) {}
-    }
-
-    async function removeConnection() {
-        if (!currentUser || !connectionId) return;
-        
-        try {
-            const userRef = db.collection('users').doc(currentUser.uid);
-            await userRef.collection('connections').doc(connectionId).delete();
-            await updateOverallUserStatus();
-        } catch (e) {}
-    }
-
     async function checkUser() {
         showLoading(true);
         try {
@@ -210,17 +137,11 @@
                         username: userDoc.data().username
                     };
                     
-                    connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                    
-                    await createConnection();
-                    await updateOnlineStatus(true);
-                    await setupOnlineStatus();
-                    
+                    await setupUserStatus();
                     showChats();
                     updateUI();
                     setupRealtimeSubscriptions();
                     loadChats();
-                    startHeartbeat();
                 } else {
                     localStorage.removeItem('speednexus_user');
                     showLogin();
@@ -235,23 +156,7 @@
         }
     }
 
-    async function createConnection() {
-        if (!currentUser) return;
-        
-        const userRef = db.collection('users').doc(currentUser.uid);
-        const connectionsRef = userRef.collection('connections').doc(connectionId);
-        
-        await connectionsRef.set({
-            connection_id: connectionId,
-            created_at: new Date().toISOString(),
-            user_agent: navigator.userAgent,
-            device: isMobile ? 'mobile' : 'desktop'
-        });
-    }
-
     function showLogin() {
-        stopHeartbeat();
-        cleanupSubscriptions();
         elements.loginScreen.style.display = 'flex';
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'none';
@@ -262,21 +167,13 @@
         elements.chatsScreen.style.display = 'flex';
         elements.chatScreen.style.display = 'none';
         elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;
-        
-        if (currentChatWith && scrollPositions[currentChatWith]) {
-            setTimeout(() => {
-                elements.privateMessages.scrollTop = scrollPositions[currentChatWith];
-            }, 100);
-        }
     }
 
     async function showChat(username) {
         showLoading(true);
         try {
             const user = await findUserByUsername(username);
-            if (!user) {
-                return;
-            }
+            if (!user) return;
 
             currentChatWith = username;
             currentChatUserId = user.uid;
@@ -289,12 +186,7 @@
             elements.messageInput.value = '';
             
             await loadMessages(user.uid);
-            
-            setTimeout(() => {
-                if (isChatActive && isPageVisible) {
-                    markMessagesAsRead(user.uid);
-                }
-            }, 1500);
+            setupMessageListener(user.uid);
             
             listenToUserStatus(username, (status) => {
                 if (status && status.state === 'online') {
@@ -306,15 +198,8 @@
                 }
             });
             
-            if (scrollPositions[username]) {
-                elements.privateMessages.scrollTop = scrollPositions[username];
-            } else {
-                scrollToBottom();
-            }
+            scrollToBottom();
             
-            setTimeout(() => elements.messageInput.focus(), 300);
-            
-            setupMessageListener(user.uid);
         } catch (e) {
         } finally {
             showLoading(false);
@@ -340,43 +225,16 @@
                             displayMessage(msg, isMyMessage, msgId);
                             
                             if (isChatActive && currentChatUserId === userId) {
-                                if (isMyMessage) {
-                                    scrollToBottom();
-                                } else {
-                                    const shouldScroll = isUserNearBottom();
-                                    if (shouldScroll) {
-                                        scrollToBottom();
-                                    }
-                                }
+                                scrollToBottom();
                                 
                                 if (!isMyMessage && !msg.read) {
                                     markMessagesAsRead(userId);
                                 }
                             }
                         }
-                    } else if (change.type === 'modified') {
-                        const msg = change.doc.data();
-                        const msgId = change.doc.id;
-                        const msgElement = document.querySelector(`[data-message-id="${msgId}"]`);
-                        
-                        if (msgElement && msg.read) {
-                            const timeDiv = msgElement.querySelector('.time');
-                            if (timeDiv && !timeDiv.textContent.includes('✓✓')) {
-                                timeDiv.textContent = timeDiv.textContent.replace('✓', '✓✓');
-                            }
-                        }
                     }
                 });
             });
-    }
-
-    function isUserNearBottom() {
-        const container = elements.privateMessages;
-        if (!container) return true;
-        const threshold = 100;
-        const position = container.scrollTop + container.clientHeight;
-        const height = container.scrollHeight;
-        return position > height - threshold;
     }
 
     function updateUI() {
@@ -414,10 +272,8 @@
 
         elements.backToChats.addEventListener('click', () => {
             if (currentChatWith) {
-                scrollPositions[currentChatWith] = elements.privateMessages.scrollTop;
                 stopListeningToUserStatus(currentChatWith);
             }
-            
             if (messageListener) {
                 messageListener();
                 messageListener = null;
@@ -463,10 +319,6 @@
             }
         });
 
-        elements.messageInput.addEventListener('focus', () => {
-            setTimeout(() => scrollToBottom(), 300);
-        });
-
         elements.startChatBtn.addEventListener('click', startNewChat);
 
         document.querySelectorAll('.close-modal').forEach(btn => {
@@ -492,12 +344,6 @@
         });
 
         elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
-
-        elements.privateMessages.addEventListener('scroll', () => {
-            if (currentChatWith) {
-                scrollPositions[currentChatWith] = elements.privateMessages.scrollTop;
-            }
-        });
     }
 
     function closeMenu() {
@@ -566,21 +412,14 @@
                 if (change.type === 'modified' || change.type === 'added') {
                     const userData = change.doc.data();
                     onlineUsers.set(change.doc.id, {
-                        username: userData.username,
-                        is_online: userData.is_online === true,
-                        last_seen: userData.last_seen
+                        username: userData.username
                     });
                 } else if (change.type === 'removed') {
                     onlineUsers.delete(change.doc.id);
                 }
             });
             
-            if (currentChatWith) {
-                updateChatStatus();
-            }
             displayChats();
-            updateSearchResultsWithStatus();
-            updateContactsWithStatus();
         });
 
         chatsUnsubscribe = db.collection('messages')
@@ -589,60 +428,6 @@
             .onSnapshot(() => {
                 loadChats();
             });
-    }
-
-    function startHeartbeat() {
-        stopHeartbeat();
-        
-        heartbeatInterval = setInterval(() => {
-            if (isPageVisible && navigator.onLine) {
-                updateOnlineStatus(true);
-            }
-        }, 20000);
-    }
-
-    function stopHeartbeat() {
-        if (heartbeatInterval) {
-            clearInterval(heartbeatInterval);
-            heartbeatInterval = null;
-        }
-    }
-
-    function updateChatStatus() {
-        if (!currentChatUserId || !elements.chatStatus) return;
-        const user = onlineUsers.get(currentChatUserId);
-        const isOnline = user?.is_online === true;
-        
-        if (isOnline) {
-            elements.chatStatus.textContent = 'на связи';
-            elements.chatStatus.style.color = '#4CAF50';
-        } else {
-            elements.chatStatus.textContent = 'был(а) ' + formatLastSeen(user?.last_seen);
-            elements.chatStatus.style.color = 'rgba(255,255,255,0.5)';
-        }
-    }
-
-    function formatLastSeen(timestamp) {
-        if (!timestamp) return 'давно';
-        
-        try {
-            const lastSeen = new Date(timestamp);
-            const now = new Date();
-            const diffMs = now - lastSeen;
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-
-            if (diffMins < 1) return 'только что';
-            if (diffMins < 60) return `${diffMins} мин назад`;
-            if (diffHours < 24) return `${diffHours} ч назад`;
-            if (diffDays === 1) return 'вчера';
-            if (diffDays < 7) return `${diffDays} дн назад`;
-            
-            return lastSeen.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
-        } catch (e) {
-            return 'давно';
-        }
     }
 
     async function findUserByUsername(username) {
@@ -737,19 +522,17 @@
             div.className = 'chat-item';
             div.onclick = () => showChat(chat.username);
             
-            const userStatus = onlineUsers.get(chat.userId);
-            const isOnline = userStatus?.is_online === true;
             const unreadCount = unreadCounts[chat.userId] || 0;
             const timeString = formatMessageTime(chat.lastTime);
             const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
             const displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
             
             div.innerHTML = `
-                <div class="chat-avatar ${isOnline ? 'online' : ''}" id="avatar-${chat.username}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
+                <div class="chat-avatar" id="avatar-${chat.username}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
                 <div class="chat-info">
                     <div class="chat-name">
                         ${escapeHtml(chat.username)}
-                        <span class="chat-status-text ${isOnline ? 'online' : ''}" id="status-${chat.username}">${isOnline ? 'на связи' : 'без связи'}</span>
+                        <span class="chat-status-text" id="status-${chat.username}">загрузка...</span>
                     </div>
                     <div class="chat-last-message">${escapeHtml(messagePrefix + displayMessage)}</div>
                     <div class="chat-time">${timeString}</div>
@@ -797,7 +580,7 @@
                 displayMessage(msg, isMyMessage, doc.id);
             });
             
-            setTimeout(() => scrollToBottom(), 100);
+            scrollToBottom();
         } catch (e) {}
     }
 
@@ -822,13 +605,10 @@
             timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         }
         
-        const senderInfo = onlineUsers.get(msg.sender);
-        const senderName = !isMyMessage ? senderInfo?.username || msg.sender : '';
         const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
         
         messageElement.innerHTML = `
             <div class="message-content">
-                ${senderName ? `<div class="sender-name">${escapeHtml(senderName)}</div>` : ''}
                 <div class="text">${escapeHtml(msg.message)}</div>
                 <div class="time">${timeString} ${statusSymbol}</div>
             </div>
@@ -839,10 +619,7 @@
 
     function scrollToBottom() {
         if (elements.privateMessages) {
-            elements.privateMessages.scrollTo({
-                top: elements.privateMessages.scrollHeight,
-                behavior: 'smooth'
-            });
+            elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
         }
     }
 
@@ -865,20 +642,11 @@
                 created_at: new Date().toISOString()
             });
             
-            if (isMobile) {
-                setTimeout(() => {
-                    elements.messageInput.focus();
-                }, 100);
-            }
         } catch (e) {}
     }
 
     async function markMessagesAsRead(userId) {
-        if (!userId || !currentUser || !isChatActive || !isPageVisible) return;
-        
-        const now = Date.now();
-        if (lastReadTime[userId] && now - lastReadTime[userId] < 2000) return;
-        lastReadTime[userId] = now;
+        if (!userId || !currentUser || !isChatActive) return;
         
         try {
             const snapshot = await db.collection('messages')
@@ -964,24 +732,21 @@
                 
                 await db.collection('users').doc(uid).set({
                     uid: uid,
-                    username: username
+                    username: username,
+                    created_at: new Date().toISOString()
                 });
 
                 currentUser = { uid, username };
             }
 
-            connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            await createConnection();
-            
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            await updateOnlineStatus(true);
-            await setupOnlineStatus();
+            await setupUserStatus();
 
             showChats();
             updateUI();
             setupRealtimeSubscriptions();
             loadChats();
-            startHeartbeat();
+            
         } catch (e) {
             showError(elements.loginError, 'Ошибка при входе');
             localStorage.removeItem('speednexus_user');
@@ -1021,14 +786,13 @@
                 username: newUsername
             });
 
-            const oldUsername = currentUser.username;
             currentUser.username = newUsername;
             localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
             
             updateUI();
             hideModal('editProfileModal');
             
-            if (currentChatWith === oldUsername) {
+            if (currentChatWith) {
                 currentChatWith = newUsername;
                 elements.chatWithUser.textContent = newUsername;
             }
@@ -1073,14 +837,12 @@
                     showChat(user.username);
                 };
                 
-                const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-                
                 userElement.innerHTML = `
                     <div class="user-result-info">
-                        <div class="user-result-avatar ${isOnline ? 'online' : ''}" id="search-avatar-${user.username}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
+                        <div class="user-result-avatar" id="search-avatar-${user.username}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
                         <div>
                             <div class="user-result-name">${escapeHtml(user.username)}</div>
-                            <div style="color: rgba(255,255,255,0.7); font-size: 12px;" id="search-status-${user.username}">${isOnline ? 'на связи' : 'без связи'}</div>
+                            <div style="color: rgba(255,255,255,0.7); font-size: 12px;" id="search-status-${user.username}">загрузка...</div>
                         </div>
                     </div>
                 `;
@@ -1106,54 +868,6 @@
         }
     }
 
-    function updateSearchResultsWithStatus() {
-        const searchResults = document.querySelectorAll('.user-result');
-        searchResults.forEach(result => {
-            const nameElement = result.querySelector('.user-result-name');
-            if (nameElement) {
-                const username = nameElement.textContent;
-                findUserByUsername(username).then(user => {
-                    if (user) {
-                        const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-                        const avatarElement = result.querySelector('.user-result-avatar');
-                        const statusElement = result.querySelector('div[style*="font-size: 12px"]');
-                        
-                        if (avatarElement) {
-                            avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
-                        }
-                        if (statusElement) {
-                            statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                        }
-                    }
-                });
-            }
-        });
-    }
-
-    function updateContactsWithStatus() {
-        const contactsItems = document.querySelectorAll('.contact-item');
-        contactsItems.forEach(item => {
-            const nameElement = item.querySelector('.contact-name');
-            if (nameElement) {
-                const username = nameElement.textContent;
-                findUserByUsername(username).then(user => {
-                    if (user) {
-                        const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-                        const avatarElement = item.querySelector('.contact-avatar');
-                        const statusElement = item.querySelector('div[style*="font-size: 12px"]');
-                        
-                        if (avatarElement) {
-                            avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
-                        }
-                        if (statusElement) {
-                            statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                        }
-                    }
-                });
-            }
-        });
-    }
-
     function loadContacts() {
         const contacts = JSON.parse(localStorage.getItem('speednexus_contacts') || '[]');
         elements.contactsList.innerHTML = '';
@@ -1171,47 +885,50 @@
                 showChat(contact.username);
             };
             
-            findUserByUsername(contact.username).then(user => {
-                const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
-                
-                contactElement.innerHTML = `
-                    <div class="contact-info">
-                        <div class="contact-avatar ${isOnline ? 'online' : ''}" id="contact-avatar-${contact.username}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
-                        <div>
-                            <div class="contact-name">${escapeHtml(contact.username)}</div>
-                            <div style="color: rgba(255,255,255,0.7); font-size: 12px;" id="contact-status-${contact.username}">${isOnline ? 'на связи' : 'без связи'}</div>
-                        </div>
+            contactElement.innerHTML = `
+                <div class="contact-info">
+                    <div class="contact-avatar" id="contact-avatar-${contact.username}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
+                    <div>
+                        <div class="contact-name">${escapeHtml(contact.username)}</div>
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;" id="contact-status-${contact.username}">загрузка...</div>
                     </div>
-                `;
-                
-                listenToUserStatus(contact.username, (status) => {
-                    const statusDiv = document.getElementById(`contact-status-${contact.username}`);
-                    const avatarDiv = document.getElementById(`contact-avatar-${contact.username}`);
-                    if (statusDiv && avatarDiv) {
-                        if (status && status.state === 'online') {
-                            statusDiv.textContent = 'на связи';
-                            avatarDiv.classList.add('online');
-                        } else {
-                            statusDiv.textContent = 'без связи';
-                            avatarDiv.classList.remove('online');
-                        }
-                    }
-                });
-            });
+                </div>
+            `;
             
             elements.contactsList.appendChild(contactElement);
+            
+            listenToUserStatus(contact.username, (status) => {
+                const statusDiv = document.getElementById(`contact-status-${contact.username}`);
+                const avatarDiv = document.getElementById(`contact-avatar-${contact.username}`);
+                if (statusDiv && avatarDiv) {
+                    if (status && status.state === 'online') {
+                        statusDiv.textContent = 'на связи';
+                        avatarDiv.classList.add('online');
+                    } else {
+                        statusDiv.textContent = 'без связи';
+                        avatarDiv.classList.remove('online');
+                    }
+                }
+            });
         });
+        
+        showModal('contactsModal');
     }
 
     async function logout() {
         showLoading(true);
         
         try {
-            await removeConnection();
+            if (currentUser) {
+                const statusRef = rtdb.ref('/status/' + currentUser.username);
+                await statusRef.set({
+                    state: 'offline',
+                    last_changed: firebase.database.ServerValue.TIMESTAMP
+                });
+            }
         } catch (e) {}
         
         localStorage.removeItem('speednexus_user');
-        stopHeartbeat();
         cleanupSubscriptions();
         currentUser = null;
         currentChatWith = null;
