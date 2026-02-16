@@ -82,7 +82,7 @@ function init() {
     document.addEventListener('visibilitychange', handleVisibilityChange);  
     window.addEventListener('beforeunload', handleBeforeUnload);  
       
-    setInterval(cleanupOldConnections, 10000);  
+    setInterval(cleanupOldConnections, 5000);  
 }  
 
 async function cleanupOldConnections() {
