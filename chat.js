@@ -87,9 +87,9 @@ function init() {
 
 async function cleanupOldConnections() {
     try {
-        const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
+        const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
         const connectionsSnapshot = await db.collectionGroup('connections')
-            .where('last_seen', '<', tenSecondsAgo)
+            .where('last_seen', '<', fiveSecondsAgo)
             .where('is_online', '==', true)
             .get();
 
@@ -98,20 +98,34 @@ async function cleanupOldConnections() {
                 is_online: false,
                 last_seen: new Date().toISOString()
             });
-              
+            
             const userId = doc.ref.parent.parent.id;
-            await updateUserStatus(userId);
+            
+            const userConnections = await db.collection('users')
+                .doc(userId)
+                .collection('connections')
+                .where('is_online', '==', true)
+                .where('last_seen', '>', fiveSecondsAgo)
+                .get();
+            
+            const isOnline = !userConnections.empty;
+            
+            await db.collection('users').doc(userId).update({
+                is_online: isOnline,
+                last_check: new Date().toISOString()
+            });
         }
     } catch (e) {}
 }
 
 async function updateUserStatus(userId) {
     try {
+        const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
         const connectionsSnapshot = await db.collection('users')
             .doc(userId)
             .collection('connections')
             .where('is_online', '==', true)
-            .where('last_seen', '>', new Date(Date.now() - 10000).toISOString())
+            .where('last_seen', '>', fiveSecondsAgo)
             .get();
 
         const isOnline = !connectionsSnapshot.empty;
