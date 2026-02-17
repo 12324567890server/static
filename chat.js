@@ -821,8 +821,6 @@ async function markMessagesAsRead(userId) {
     if (!userId || !currentUser || !isChatActive || !isPageVisible) return;
     
     try {
-        console.log('Проверка непрочитанных сообщений...');
-        
         const snapshot = await db.collection('messages')
             .where('receiver', '==', currentUser.uid)
             .where('sender', '==', userId)
@@ -830,8 +828,6 @@ async function markMessagesAsRead(userId) {
             .get();
 
         if (!snapshot.empty) {
-            console.log(`Найдено ${snapshot.size} непрочитанных сообщений`);
-            
             const batch = db.batch();
             snapshot.forEach(doc => {
                 batch.update(doc.ref, { 
@@ -841,13 +837,20 @@ async function markMessagesAsRead(userId) {
             });
             
             await batch.commit();
-            console.log('Сообщения отмечены как прочитанные');
             
             if (unreadCounts[userId]) {
                 delete unreadCounts[userId];
                 updateTitle();
                 displayChats();
             }
+            
+            const messages = document.querySelectorAll('.message.me');
+            messages.forEach(msg => {
+                const timeElement = msg.querySelector('.time');
+                if (timeElement && !timeElement.textContent.includes('✓✓')) {
+                    timeElement.textContent = timeElement.textContent.replace('✓', '✓✓');
+                }
+            });
         }
     } catch (e) {
         console.error('Ошибка отметки прочтения:', e);
