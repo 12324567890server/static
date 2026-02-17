@@ -2,6 +2,18 @@ let onlineUsers = new Map();
 let heartbeatInterval = null;
 let usersUnsubscribe = null;
 
+const findUserByUsername = async (username) => {
+    const snapshot = await db.collection('users').where('username', '==', username).get();
+    if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        return {
+            uid: doc.id,
+            username: doc.data().username
+        };
+    }
+    return null;
+};
+
 function startHeartbeat() {
     stopHeartbeat();
     heartbeatInterval = setInterval(() => {
@@ -161,3 +173,23 @@ function updateContactsWithStatus() {
         }
     });
 }
+
+const originalDisplayChats = displayChats;
+displayChats = function() {
+    if (originalDisplayChats) originalDisplayChats();
+    document.querySelectorAll('.chat-item').forEach(item => {
+        const nameElement = item.querySelector('.chat-name');
+        if (nameElement) {
+            const username = nameElement.textContent.trim();
+            findUserByUsername(username).then(user => {
+                if (user) {
+                    const isOnline = onlineUsers.get(user.uid)?.is_online === true;
+                    const avatar = item.querySelector('.chat-avatar');
+                    if (avatar) {
+                        avatar.className = `chat-avatar ${isOnline ? 'online' : ''}`;
+                    }
+                }
+            });
+        }
+    });
+};
