@@ -637,6 +637,17 @@ async function findUserByUsername(username) {
     return null;
 }
 
+async function findUserById(userId) {
+    const doc = await db.collection('users').doc(userId).get();
+    if (doc.exists) {
+        return {
+            uid: doc.id,
+            username: doc.data().username
+        };
+    }
+    return null;
+}
+
 async function loadChats() {
     if (!currentUser) return;
       
@@ -655,9 +666,9 @@ async function loadChats() {
               
             let otherUsername = onlineUsers.get(otherUserId)?.username;
             if (!otherUsername) {
-                const userDoc = await db.collection('users').doc(otherUserId).get();
-                if (userDoc.exists) {
-                    otherUsername = userDoc.data().username;
+                const user = await findUserById(otherUserId);
+                if (user) {
+                    otherUsername = user.username;
                 } else {
                     otherUsername = otherUserId;
                 }
@@ -979,11 +990,13 @@ async function editProfile() {
     try {
         const existingUser = await findUserByUsername(newUsername);
 
-        if (existingUser) {
+        if (existingUser && existingUser.uid !== currentUser.uid) {
             showError(elements.editUsernameError, 'Имя пользователя уже занято');
             return;
         }
 
+        const oldUsername = currentUser.username;
+        
         await db.collection('users').doc(currentUser.uid).update({
             username: newUsername
         });
@@ -994,12 +1007,11 @@ async function editProfile() {
         updateUI();
         hideModal('editProfileModal');
           
-        if (currentChatWith) {
+        if (currentChatWith === oldUsername) {
             currentChatWith = newUsername;
             elements.chatWithUser.textContent = newUsername;
         }
           
-        loadChats();
         elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
     } catch (e) {
         showError(elements.editUsernameError, 'Ошибка при изменении профиля');
