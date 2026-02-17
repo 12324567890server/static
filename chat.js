@@ -22,6 +22,7 @@ const elements = {
     newChatBtn: document.getElementById('newChatBtn'),  
     backToChats: document.getElementById('backToChats'),  
     chatWithUser: document.getElementById('chatWithUser'),  
+    chatStatus: document.getElementById('chatStatus'),  
     privateMessages: document.getElementById('privateMessages'),  
     messageInput: document.getElementById('messageInput'),  
     sendMessageBtn: document.getElementById('sendMessageBtn'),  
@@ -32,6 +33,7 @@ const elements = {
     closeMenu: document.getElementById('closeMenu'),  
     currentUsernameDisplay: document.getElementById('currentUsernameDisplay'),  
     userAvatar: document.getElementById('userAvatar'),  
+    userStatusDisplay: document.getElementById('userStatusDisplay'),  
     loadingOverlay: document.getElementById('loadingOverlay'),  
     editProfileBtn: document.getElementById('editProfileBtn'),  
     findFriendsBtn: document.getElementById('findFriendsBtn'),  
@@ -67,7 +69,6 @@ let usersUnsubscribe = null;
 let messageListener = null;  
 let scrollPositions = {};  
 let connectionId = null;  
-let emojiPicker = null;
 
 init();  
 
@@ -76,8 +77,91 @@ function init() {
     setupEventListeners();  
     document.addEventListener('visibilitychange', handleVisibilityChange);  
     window.addEventListener('beforeunload', handleBeforeUnload);  
-    addMediaButtons();
-    setupFileInputs();
+    setTimeout(addMediaButtons, 1000);
+}
+
+function addMediaButtons() {
+    const container = document.querySelector('.message-input-container');
+    if (!container) return;
+    
+    const photoInput = document.createElement('input');
+    photoInput.type = 'file';
+    photoInput.id = 'photoInput';
+    photoInput.accept = 'image/*';
+    photoInput.style.display = 'none';
+    photoInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) alert('Фото: ' + file.name);
+    };
+    document.body.appendChild(photoInput);
+    
+    const videoInput = document.createElement('input');
+    videoInput.type = 'file';
+    videoInput.id = 'videoInput';
+    videoInput.accept = 'video/*';
+    videoInput.style.display = 'none';
+    videoInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) alert('Видео: ' + file.name);
+    };
+    document.body.appendChild(videoInput);
+    
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'fileInput';
+    fileInput.style.display = 'none';
+    fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) alert('Файл: ' + file.name);
+    };
+    document.body.appendChild(fileInput);
+    
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.style.display = 'flex';
+    buttonsDiv.style.gap = '5px';
+    buttonsDiv.style.marginRight = '10px';
+    
+    const photoBtn = document.createElement('button');
+    photoBtn.innerHTML = '📷';
+    photoBtn.style.width = '40px';
+    photoBtn.style.height = '40px';
+    photoBtn.style.borderRadius = '50%';
+    photoBtn.style.border = 'none';
+    photoBtn.style.background = '#2a3a4a';
+    photoBtn.style.color = 'white';
+    photoBtn.style.fontSize = '20px';
+    photoBtn.style.cursor = 'pointer';
+    photoBtn.onclick = () => document.getElementById('photoInput').click();
+    
+    const videoBtn = document.createElement('button');
+    videoBtn.innerHTML = '🎥';
+    videoBtn.style.width = '40px';
+    videoBtn.style.height = '40px';
+    videoBtn.style.borderRadius = '50%';
+    videoBtn.style.border = 'none';
+    videoBtn.style.background = '#2a3a4a';
+    videoBtn.style.color = 'white';
+    videoBtn.style.fontSize = '20px';
+    videoBtn.style.cursor = 'pointer';
+    videoBtn.onclick = () => document.getElementById('videoInput').click();
+    
+    const fileBtn = document.createElement('button');
+    fileBtn.innerHTML = '📎';
+    fileBtn.style.width = '40px';
+    fileBtn.style.height = '40px';
+    fileBtn.style.borderRadius = '50%';
+    fileBtn.style.border = 'none';
+    fileBtn.style.background = '#2a3a4a';
+    fileBtn.style.color = 'white';
+    fileBtn.style.fontSize = '20px';
+    fileBtn.style.cursor = 'pointer';
+    fileBtn.onclick = () => document.getElementById('fileInput').click();
+    
+    buttonsDiv.appendChild(photoBtn);
+    buttonsDiv.appendChild(videoBtn);
+    buttonsDiv.appendChild(fileBtn);
+    
+    container.insertBefore(buttonsDiv, container.firstChild);
 }
 
 function handleVisibilityChange() {  
@@ -148,6 +232,7 @@ function showLogin() {
     elements.loginScreen.style.display = 'flex';  
     elements.chatsScreen.style.display = 'none';  
     elements.chatScreen.style.display = 'none';  
+    if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
 }  
 
 function showChats() {  
@@ -155,150 +240,8 @@ function showChats() {
     elements.chatsScreen.style.display = 'flex';  
     elements.chatScreen.style.display = 'none';  
     elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;  
+    if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
 }  
-
-function addMediaButtons() {
-    const messageControls = document.querySelector('.message-input-container');
-    if (!messageControls) return;
-    
-    const mediaButtons = document.createElement('div');
-    mediaButtons.className = 'media-buttons';
-    
-    const photoBtn = document.createElement('button');
-    photoBtn.className = 'media-btn photo-btn';
-    photoBtn.innerHTML = '📷';
-    photoBtn.title = 'Отправить фото';
-    photoBtn.onclick = () => document.getElementById('photoInput').click();
-    
-    const videoBtn = document.createElement('button');
-    videoBtn.className = 'media-btn video-btn';
-    videoBtn.innerHTML = '🎥';
-    videoBtn.title = 'Отправить видео';
-    videoBtn.onclick = () => document.getElementById('videoInput').click();
-    
-    const fileBtn = document.createElement('button');
-    fileBtn.className = 'media-btn file-btn';
-    fileBtn.innerHTML = '📎';
-    fileBtn.title = 'Отправить файл';
-    fileBtn.onclick = () => document.getElementById('fileInput').click();
-    
-    const emojiBtn = document.createElement('button');
-    emojiBtn.className = 'media-btn emoji-btn';
-    emojiBtn.innerHTML = '😊';
-    emojiBtn.title = 'Смайлики';
-    emojiBtn.onclick = toggleEmojiPicker;
-    
-    mediaButtons.appendChild(photoBtn);
-    mediaButtons.appendChild(videoBtn);
-    mediaButtons.appendChild(fileBtn);
-    mediaButtons.appendChild(emojiBtn);
-    
-    messageControls.insertBefore(mediaButtons, messageControls.firstChild);
-}
-
-function setupFileInputs() {
-    const photoInput = document.createElement('input');
-    photoInput.type = 'file';
-    photoInput.id = 'photoInput';
-    photoInput.accept = 'image/*';
-    photoInput.style.display = 'none';
-    photoInput.onchange = (e) => uploadFile(e.target.files[0], 'photo');
-    document.body.appendChild(photoInput);
-    
-    const videoInput = document.createElement('input');
-    videoInput.type = 'file';
-    videoInput.id = 'videoInput';
-    videoInput.accept = 'video/*';
-    videoInput.style.display = 'none';
-    videoInput.onchange = (e) => uploadFile(e.target.files[0], 'video');
-    document.body.appendChild(videoInput);
-    
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.id = 'fileInput';
-    fileInput.style.display = 'none';
-    fileInput.onchange = (e) => uploadFile(e.target.files[0], 'file');
-    document.body.appendChild(fileInput);
-}
-
-function toggleEmojiPicker() {
-    if (emojiPicker && emojiPicker.style.display === 'flex') {
-        emojiPicker.style.display = 'none';
-        return;
-    }
-    
-    if (!emojiPicker) {
-        emojiPicker = document.createElement('div');
-        emojiPicker.className = 'emoji-picker';
-        
-        const emojis = ['😊', '😂', '❤️', '👍', '🔥', '😢', '🎉', '😎', '🤔', '👏', '🙏', '💯', '⭐', '🏆', '✅', '❌'];
-        
-        emojis.forEach(emoji => {
-            const span = document.createElement('span');
-            span.className = 'emoji-item';
-            span.textContent = emoji;
-            span.onclick = () => {
-                elements.messageInput.value += emoji;
-                emojiPicker.style.display = 'none';
-            };
-            emojiPicker.appendChild(span);
-        });
-        
-        document.body.appendChild(emojiPicker);
-    }
-    
-    const inputRect = elements.messageInput.getBoundingClientRect();
-    emojiPicker.style.position = 'absolute';
-    emojiPicker.style.bottom = (window.innerHeight - inputRect.top + 50) + 'px';
-    emojiPicker.style.left = inputRect.left + 'px';
-    emojiPicker.style.display = 'flex';
-}
-
-async function uploadFile(file, type) {
-    if (!file || !currentChatUserId) return;
-    
-    showLoading(true);
-    
-    try {
-        const fileName = `${Date.now()}_${file.name}`;
-        const fileRef = storage.ref().child(`chats/${currentChatUserId}/${fileName}`);
-        await fileRef.put(file);
-        const url = await fileRef.getDownloadURL();
-        
-        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
-        
-        let messageType = 'file';
-        let preview = '';
-        
-        if (type === 'photo') {
-            messageType = 'photo';
-            preview = `<img src="${url}" class="message-image" onclick="window.open('${url}')">`;
-        } else if (type === 'video') {
-            messageType = 'video';
-            preview = `<video src="${url}" controls class="message-video"></video>`;
-        } else {
-            preview = `<a href="${url}" target="_blank" class="message-file">📎 ${file.name}</a>`;
-        }
-        
-        await db.collection('messages').add({
-            chat_id: chatId,
-            participants: [currentUser.uid, currentChatUserId],
-            sender: currentUser.uid,
-            receiver: currentChatUserId,
-            message: file.name,
-            type: messageType,
-            fileUrl: url,
-            preview: preview,
-            read: false,
-            created_at: new Date().toISOString()
-        });
-        
-    } catch (e) {
-        alert('Ошибка при загрузке файла');
-    } finally {
-        showLoading(false);
-    }
-}
 
 async function showChat(username) {  
     showLoading(true);  
@@ -315,6 +258,7 @@ async function showChat(username) {
         elements.chatScreen.style.display = 'flex';  
         elements.privateMessages.innerHTML = '';  
         elements.messageInput.value = '';  
+        if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
           
         await loadMessages(user.uid);  
           
@@ -578,7 +522,7 @@ async function loadChats() {
                 chatsMap.set(otherUserId, {  
                     userId: otherUserId,  
                     username: otherUsername,  
-                    lastMessage: msg.type === 'photo' ? '📷 Фото' : (msg.type === 'video' ? '🎥 Видео' : msg.message),  
+                    lastMessage: msg.message,  
                     lastTime: msg.created_at,  
                     isMyMessage: msg.sender === currentUser.uid  
                 });  
@@ -688,22 +632,11 @@ function displayMessage(msg, isMyMessage, msgId) {
         timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });  
     }  
       
-    let content = '';  
-    if (msg.type === 'photo' && msg.preview) {  
-        content = msg.preview;  
-    } else if (msg.type === 'video' && msg.preview) {  
-        content = msg.preview;  
-    } else if (msg.type === 'file' && msg.preview) {  
-        content = msg.preview;  
-    } else {  
-        content = `<div class="text">${escapeHtml(msg.message)}</div>`;  
-    }  
-      
     const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';  
       
     messageElement.innerHTML = `  
         <div class="message-content">  
-            ${content}  
+            <div class="text">${escapeHtml(msg.message)}</div>  
             <div class="time">${timeString} ${statusSymbol}</div>  
         </div>  
     `;  
@@ -732,7 +665,6 @@ async function sendMessage() {
             sender: currentUser.uid,  
             receiver: currentChatUserId,  
             message: messageText,  
-            type: 'text',  
             read: false,  
             created_at: new Date().toISOString()  
         });  
