@@ -269,6 +269,10 @@ body {
     text-overflow: ellipsis;
 }
 
+.chat-last-message.typing-message {
+    color: #b19cd9;
+}
+
 .chat-time {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.6);
@@ -372,6 +376,69 @@ body {
     height: 18px;
     min-height: 18px;
     transition: all 0.3s ease;
+}
+
+.typing-animation {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.typing-animation span {
+    animation: typingDot 1.4s infinite;
+    opacity: 0;
+    font-size: 16px;
+    line-height: 1;
+}
+
+.typing-animation span:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.typing-animation span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-animation span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+.typing-animation-small {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    font-size: 13px;
+    color: #b19cd9;
+}
+
+.typing-animation-small span {
+    animation: typingDot 1.4s infinite;
+    opacity: 0;
+    font-size: 13px;
+    line-height: 1;
+}
+
+.typing-animation-small span:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.typing-animation-small span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-animation-small span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typingDot {
+    0%, 60%, 100% {
+        opacity: 0;
+        transform: translateY(0);
+    }
+    30% {
+        opacity: 1;
+        transform: translateY(-2px);
+    }
 }
 
 .private-messages {
@@ -1104,4 +1171,4 @@ body {
     .message {
         max-width: 90%;
     }
-    }
+}
