@@ -80,6 +80,18 @@ function init() {
     document.addEventListener('visibilitychange', handleVisibilityChange);  
     window.addEventListener('beforeunload', handleBeforeUnload);  
     setInterval(cleanupOldConnections, 10000);
+    setInterval(() => {
+        try {
+            const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
+            db.collectionGroup('connections')
+                .where('last_seen', '<', threeSecondsAgo)
+                .where('is_online', '==', true)
+                .get()
+                .then(snapshot => {
+                    snapshot.docs.forEach(doc => doc.ref.update({ is_online: false }));
+                });
+        } catch (e) {}
+    }, 3000);
     startHeartbeat();
 }  
 
