@@ -385,6 +385,17 @@ function setupMessageListener(userId) {
                             }
                         }
                     }
+                } else if (change.type === 'modified') {
+                    const msg = change.doc.data();
+                    const msgId = change.doc.id;
+                    const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
+                    
+                    if (messageElement && msg.read) {
+                        const timeElement = messageElement.querySelector('.time');
+                        if (timeElement && messageElement.classList.contains('me')) {
+                            timeElement.textContent = timeElement.textContent.replace('✓', '✓✓');
+                        }
+                    }
                 }
             });
         });
@@ -843,14 +854,6 @@ async function markMessagesAsRead(userId) {
                 updateTitle();
                 displayChats();
             }
-            
-            const messages = document.querySelectorAll('.message.me');
-            messages.forEach(msg => {
-                const timeElement = msg.querySelector('.time');
-                if (timeElement && !timeElement.textContent.includes('✓✓')) {
-                    timeElement.textContent = timeElement.textContent.replace('✓', '✓✓');
-                }
-            });
         }
     } catch (e) {
         console.error('Ошибка отметки прочтения:', e);
@@ -899,8 +902,8 @@ async function login() {
         return;
     }
 
-    if (!/^[A-Za-z0-9_]+$/.test(username)) {
-        showError(elements.loginError, 'Только буквы, цифры и _');
+    if (username.length > 15) {
+        showError(elements.loginError, 'Максимум 15 символов');
         return;
     }
 
@@ -962,8 +965,8 @@ async function editProfile() {
         return;
     }
       
-    if (!/^[A-Za-z0-9_]+$/.test(newUsername)) {
-        showError(elements.editUsernameError, 'Только буквы, цифры и _');
+    if (newUsername.length > 15) {
+        showError(elements.editUsernameError, 'Максимум 15 символов');
         return;
     }
       
