@@ -492,19 +492,19 @@ body {
 .side-menu {
     position: fixed;
     top: 0;
-    right: -300px;
+    left: -280px;
     width: 280px;
     height: 100%;
     background: rgba(45, 27, 105, 0.95);
     z-index: 2000;
-    transition: right 0.3s ease;
-    border-left: 1px solid rgba(177, 156, 217, 0.3);
+    transition: left 0.3s ease;
+    border-right: 1px solid rgba(177, 156, 217, 0.3);
     display: none;
     backdrop-filter: blur(10px);
 }
 
 .side-menu.show {
-    right: 0;
+    left: 0;
 }
 
 .side-menu-header {
