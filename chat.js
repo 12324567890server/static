@@ -573,6 +573,11 @@ function setupRealtimeSubscriptions() {
                     username: userData.username,
                     is_online: userData.is_online === true
                 });
+                
+                if (currentChatUserId === change.doc.id) {
+                    currentChatWith = userData.username;
+                    elements.chatWithUser.textContent = userData.username;
+                }
             } else if (change.type === 'removed') {
                 onlineUsers.delete(change.doc.id);
             }
@@ -995,8 +1000,6 @@ async function editProfile() {
             return;
         }
 
-        const oldUsername = currentUser.username;
-        
         await db.collection('users').doc(currentUser.uid).update({
             username: newUsername
         });
@@ -1006,13 +1009,8 @@ async function editProfile() {
           
         updateUI();
         hideModal('editProfileModal');
-          
-        if (currentChatWith === oldUsername) {
-            currentChatWith = newUsername;
-            elements.chatWithUser.textContent = newUsername;
-        }
-          
         elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
+        
     } catch (e) {
         showError(elements.editUsernameError, 'Ошибка при изменении профиля');
     } finally {
