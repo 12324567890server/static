@@ -403,8 +403,6 @@ function setupRealtimeSubscriptions() {
             updateChatStatus();
         }
         displayChats();
-        updateSearchResultsWithStatus();
-        updateContactsWithStatus();
     });
 
     chatsUnsubscribe = db.collection('messages')  
@@ -509,72 +507,6 @@ function updateChatStatus() {
     }
 }
 
-function updateSearchResultsWithStatus() {
-    const searchResults = document.querySelectorAll('.user-result');
-    searchResults.forEach(result => {
-        const nameElement = result.querySelector('.user-result-name');
-        if (nameElement) {
-            const username = nameElement.textContent;
-            findUserByUsername(username).then(user => {
-                if (user) {
-                    const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-                    const avatarElement = result.querySelector('.user-result-avatar');
-                    const statusElement = result.querySelector('div[style*="font-size: 12px"]');
-                    if (avatarElement) {
-                        avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
-                    }
-                    if (statusElement) {
-                        statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                    }
-                }
-            });
-        }
-    });
-}
-
-function updateContactsWithStatus() {
-    const contactsItems = document.querySelectorAll('.contact-item');
-    contactsItems.forEach(item => {
-        const nameElement = item.querySelector('.contact-name');
-        if (nameElement) {
-            const username = nameElement.textContent;
-            findUserByUsername(username).then(user => {
-                if (user) {
-                    const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-                    const avatarElement = item.querySelector('.contact-avatar');
-                    const statusElement = item.querySelector('div[style*="font-size: 12px"]');
-                    if (avatarElement) {
-                        avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
-                    }
-                    if (statusElement) {
-                        statusElement.textContent = isOnline ? 'на связи' : 'без связи';
-                    }
-                }
-            });
-        }
-    });
-}
-
-const originalDisplayChats = displayChats;
-displayChats = function() {
-    if (originalDisplayChats) originalDisplayChats();
-    document.querySelectorAll('.chat-item').forEach(item => {
-        const nameElement = item.querySelector('.chat-name');
-        if (nameElement) {
-            const username = nameElement.textContent.trim();
-            findUserByUsername(username).then(user => {
-                if (user) {
-                    const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-                    const avatar = item.querySelector('.chat-avatar');
-                    if (avatar) {
-                        avatar.className = `chat-avatar ${isOnline ? 'online' : ''}`;
-                    }
-                }
-            });
-        }
-    });
-};
-
 async function loadChats() {  
     if (!currentUser) return;  
       
@@ -657,12 +589,16 @@ function displayChats() {
         const timeString = formatMessageTime(chat.lastTime);  
         const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';  
         const displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;  
+        
+        const userStatus = onlineUsers.get(chat.userId);
+        const isOnline = userStatus?.is_online === true;
           
         div.innerHTML = `  
-            <div class="chat-avatar">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>  
+            <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>  
             <div class="chat-info">  
                 <div class="chat-name">  
                     ${escapeHtml(chat.username)}  
+                    <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>  
                 </div>  
                 <div class="chat-last-message">${escapeHtml(messagePrefix + displayMessage)}</div>  
                 <div class="chat-time">${timeString}</div>  
@@ -953,12 +889,15 @@ async function searchUsers() {
                 hideModal('findFriendsModal');  
                 showChat(user.username);  
             };  
+            
+            const isOnline = onlineUsers.get(user.uid)?.is_online === true;
               
             userElement.innerHTML = `  
                 <div class="user-result-info">  
-                    <div class="user-result-avatar">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>  
+                    <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>  
                     <div>  
                         <div class="user-result-name">${escapeHtml(user.username)}</div>  
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>  
                     </div>  
                 </div>  
             `;  
@@ -986,15 +925,20 @@ function loadContacts() {
             hideModal('contactsModal');  
             showChat(contact.username);  
         };  
-          
-        contactElement.innerHTML = `  
-            <div class="contact-info">  
-                <div class="contact-avatar">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>  
-                <div>  
-                    <div class="contact-name">${escapeHtml(contact.username)}</div>  
+        
+        findUserByUsername(contact.username).then(user => {
+            const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
+            
+            contactElement.innerHTML = `  
+                <div class="contact-info">  
+                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>  
+                    <div>  
+                        <div class="contact-name">${escapeHtml(contact.username)}</div>  
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>  
+                    </div>  
                 </div>  
-            </div>  
-        `;  
+            `;
+        });  
           
         elements.contactsList.appendChild(contactElement);  
     });  
