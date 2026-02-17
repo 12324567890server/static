@@ -78,9 +78,12 @@ let isPageVisible = true;
 let chats = [];
 let unreadCounts = {};
 let onlineUsers = new Map();
+let typingUsers = new Map();
+let typingTimeouts = new Map();
 let messagesUnsubscribe = null;
 let chatsUnsubscribe = null;
 let usersUnsubscribe = null;
+let typingUnsubscribe = null;
 let heartbeatInterval = null;
 let lastReadTime = {};
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -282,6 +285,7 @@ async function checkUser() {
                 setupRealtimeSubscriptions();
                 loadChats();
                 startHeartbeat();
+                setupTypingListener();
             } else {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -294,6 +298,82 @@ async function checkUser() {
     } finally {
         showLoading(false);
     }
+}
+
+function setupTypingListener() {
+    if (typingUnsubscribe) {
+        typingUnsubscribe();
+    }
+    
+    typingUnsubscribe = db.collection('typing').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added' || change.type === 'modified') {
+                const data = change.doc.data();
+                if (data.userId !== currentUser?.uid) {
+                    typingUsers.set(data.userId, {
+                        isTyping: true,
+                        chatId: data.chatId
+                    });
+                    
+                    if (currentChatUserId === data.userId && data.chatId.includes(currentUser.uid)) {
+                        showTypingIndicator();
+                    }
+                    
+                    displayChats();
+                }
+            } else if (change.type === 'removed') {
+                const data = change.doc.data();
+                typingUsers.delete(data.userId);
+                
+                if (currentChatUserId === data.userId) {
+                    hideTypingIndicator();
+                }
+                
+                displayChats();
+            }
+        });
+    });
+}
+
+let typingTimer = null;
+
+function setupTypingDetection() {
+    if (!currentChatUserId) return;
+    
+    elements.messageInput.addEventListener('input', () => {
+        if (!currentChatUserId) return;
+        
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        
+        if (typingTimer) {
+            clearTimeout(typingTimer);
+        } else {
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).set({
+                userId: currentUser.uid,
+                chatId: chatId,
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        typingTimer = setTimeout(() => {
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+            typingTimer = null;
+        }, 3000);
+    });
+}
+
+function showTypingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    
+    statusElement.innerHTML = '<span class="typing-animation">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
+    statusElement.style.color = '#b19cd9';
+}
+
+function hideTypingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    updateChatStatus();
 }
 
 function showLogin() {
@@ -330,6 +410,7 @@ async function showChat(username) {
         elements.messageInput.value = '';
           
         await loadMessages(user.uid);
+        setupTypingDetection();
           
         setTimeout(() => {
             if (isChatActive && isPageVisible) {
@@ -340,6 +421,10 @@ async function showChat(username) {
         updateChatStatus();
         scrollToBottom();
         setupMessageListener(user.uid);
+        
+        if (typingUsers.has(user.uid)) {
+            showTypingIndicator();
+        }
           
     } catch (e) {
     } finally {
@@ -426,6 +511,13 @@ function setupEventListeners() {
         if (messageListener) {
             messageListener();
             messageListener = null;
+        }
+        
+        if (typingTimer) {
+            clearTimeout(typingTimer);
+            const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+            typingTimer = null;
         }
           
         currentChatWith = null;
@@ -546,6 +638,10 @@ function cleanupSubscriptions() {
         messageListener();
         messageListener = null;
     }
+    if (typingUnsubscribe) {
+        typingUnsubscribe();
+        typingUnsubscribe = null;
+    }
 }
 
 function setupRealtimeSubscriptions() {
@@ -613,6 +709,12 @@ function stopHeartbeat() {
 
 function updateChatStatus() {
     if (!currentChatUserId || !elements.chatStatus) return;
+    
+    if (typingUsers.has(currentChatUserId)) {
+        showTypingIndicator();
+        return;
+    }
+    
     const user = onlineUsers.get(currentChatUserId);
     const isOnline = user?.is_online === true;
       
@@ -730,10 +832,17 @@ function displayChats() {
           
         const userStatus = onlineUsers.get(chat.userId);
         const isOnline = userStatus?.is_online === true;
+        const isTyping = typingUsers.has(chat.userId);
         const unreadCount = unreadCounts[chat.userId] || 0;
         const timeString = formatMessageTime(chat.lastTime);
         const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
-        const displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
+        let displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
+        
+        if (isTyping) {
+            displayMessage = '<span class="typing-animation-small">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
+        } else {
+            displayMessage = escapeHtml(messagePrefix + displayMessage);
+        }
           
         div.innerHTML = `
             <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
@@ -742,7 +851,7 @@ function displayChats() {
                     ${escapeHtml(chat.username)}
                     <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>
                 </div>
-                <div class="chat-last-message">${escapeHtml(messagePrefix + displayMessage)}</div>
+                <div class="chat-last-message ${isTyping ? 'typing-message' : ''}">${displayMessage}</div>
                 <div class="chat-time">${timeString}</div>
             </div>
             ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
@@ -817,6 +926,13 @@ function scrollToBottom() {
 
 async function sendMessage() {
     if (!currentChatUserId || !currentUser || !elements.messageInput.value.trim()) return;
+    
+    if (typingTimer) {
+        clearTimeout(typingTimer);
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+        typingTimer = null;
+    }
       
     const messageText = elements.messageInput.value.trim();
     elements.messageInput.value = '';
@@ -954,6 +1070,7 @@ async function login() {
         setupRealtimeSubscriptions();
         loadChats();
         startHeartbeat();
+        setupTypingListener();
           
     } catch (e) {
         showError(elements.loginError, 'Ошибка при входе');
@@ -1138,6 +1255,13 @@ function loadContacts() {
 
 async function logout() {
     showLoading(true);
+    
+    if (typingTimer) {
+        clearTimeout(typingTimer);
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+        typingTimer = null;
+    }
       
     try {
         await removeConnection();
@@ -1151,6 +1275,7 @@ async function logout() {
     currentChatUserId = null;
     isChatActive = false;
     onlineUsers.clear();
+    typingUsers.clear();
     unreadCounts = {};
     scrollPositions = {};
     showLogin();
