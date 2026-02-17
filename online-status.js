@@ -1,20 +1,6 @@
-let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
 let onlineUsers = new Map();
 let heartbeatInterval = null;
 let usersUnsubscribe = null;
-
-const findUserByUsername = async (username) => {
-    const snapshot = await db.collection('users').where('username', '==', username).get();
-    if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        return {
-            uid: doc.id,
-            username: doc.data().username
-        };
-    }
-    return null;
-};
 
 function startHeartbeat() {
     stopHeartbeat();
