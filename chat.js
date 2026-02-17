@@ -69,8 +69,6 @@ let messageListener = null;
 let scrollPositions = {};  
 let connectionId = null;  
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);  
-let onlineUsers = new Map();
-let heartbeatInterval = null;
 
 init();  
 
@@ -79,20 +77,6 @@ function init() {
     setupEventListeners();  
     document.addEventListener('visibilitychange', handleVisibilityChange);  
     window.addEventListener('beforeunload', handleBeforeUnload);  
-    setInterval(cleanupOldConnections, 10000);
-    setInterval(() => {
-        try {
-            const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
-            db.collectionGroup('connections')
-                .where('last_seen', '<', threeSecondsAgo)
-                .where('is_online', '==', true)
-                .get()
-                .then(snapshot => {
-                    snapshot.docs.forEach(doc => doc.ref.update({ is_online: false }));
-                });
-        } catch (e) {}
-    }, 3000);
-    startHeartbeat();
 }  
 
 function handleVisibilityChange() {  
@@ -131,8 +115,6 @@ async function checkUser() {
                 await createConnection();  
                 showChats();  
                 updateUI();  
-                setupRealtimeSubscriptions();  
-                startHeartbeat();
                 loadChats();  
             } else {  
                 localStorage.removeItem('speednexus_user');  
@@ -160,7 +142,6 @@ async function createConnection() {
 }  
 
 function showLogin() {  
-    stopHeartbeat();
     cleanupSubscriptions();  
     elements.loginScreen.style.display = 'flex';  
     elements.chatsScreen.style.display = 'none';  
@@ -200,7 +181,6 @@ async function showChat(username) {
           
         scrollToBottom();  
         setupMessageListener(user.uid);  
-        updateChatStatus();
           
     } catch (e) {  
     } finally {  
@@ -395,36 +375,6 @@ function cleanupSubscriptions() {
     }  
 }  
 
-function setupRealtimeSubscriptions() {  
-    cleanupSubscriptions();  
-    if (!currentUser) return;  
-
-    usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
-        snapshot.docChanges().forEach(change => {
-            if (change.type === 'modified' || change.type === 'added') {
-                const userData = change.doc.data();
-                onlineUsers.set(change.doc.id, {
-                    username: userData.username,
-                    is_online: userData.is_online === true
-                });
-            } else if (change.type === 'removed') {
-                onlineUsers.delete(change.doc.id);
-            }
-        });
-        if (currentChatWith) {
-            updateChatStatus();
-        }
-        displayChats();
-    });
-
-    chatsUnsubscribe = db.collection('messages')  
-        .where('participants', 'array-contains', currentUser.uid)  
-        .orderBy('created_at', 'desc')  
-        .onSnapshot(() => {  
-            loadChats();  
-        });  
-}  
-
 async function findUserByUsername(username) {  
     const snapshot = await db.collection('users').where('username', '==', username).get();  
     if (!snapshot.empty) {  
@@ -436,88 +386,6 @@ async function findUserByUsername(username) {
     }  
     return null;  
 }  
-
-function startHeartbeat() {
-    stopHeartbeat();
-    heartbeatInterval = setInterval(() => {
-        if (currentUser && connectionId && navigator.onLine && !document.hidden) {
-            updateOnlineStatus(true);
-        }
-    }, 5000);
-}
-
-function stopHeartbeat() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-    }
-}
-
-async function updateOnlineStatus(isOnline) {
-    if (!currentUser || !connectionId) return;
-    try {
-        const connectionRef = db.collection('users')
-            .doc(currentUser.uid)
-            .collection('connections')
-            .doc(connectionId);
-        await connectionRef.set({
-            connection_id: connectionId,
-            is_online: isOnline,
-            last_seen: new Date().toISOString(),
-            device: isMobile ? 'mobile' : 'desktop'
-        }, { merge: true });
-        await updateUserStatus(currentUser.uid);
-    } catch (e) {}
-}
-
-async function updateUserStatus(userId) {
-    try {
-        const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
-        const connectionsSnapshot = await db.collection('users')
-            .doc(userId)
-            .collection('connections')
-            .where('is_online', '==', true)
-            .where('last_seen', '>', tenSecondsAgo)
-            .get();
-        const isOnline = !connectionsSnapshot.empty;
-        await db.collection('users').doc(userId).update({
-            is_online: isOnline,
-            last_check: new Date().toISOString()
-        });
-    } catch (e) {}
-}
-
-async function cleanupOldConnections() {
-    try {
-        const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
-        const connectionsSnapshot = await db.collectionGroup('connections')
-            .where('last_seen', '<', tenSecondsAgo)
-            .where('is_online', '==', true)
-            .get();
-
-        for (const doc of connectionsSnapshot.docs) {
-            await doc.ref.update({
-                is_online: false,
-                last_seen: new Date().toISOString()
-            });
-            const userId = doc.ref.parent.parent.id;
-            await updateUserStatus(userId);
-        }
-    } catch (e) {}
-}
-
-function updateChatStatus() {
-    if (!currentChatUserId || !elements.chatStatus) return;
-    const user = onlineUsers.get(currentChatUserId);
-    const isOnline = user?.is_online === true;
-    if (isOnline) {
-        elements.chatStatus.textContent = 'на связи';
-        elements.chatStatus.style.color = '#4CAF50';
-    } else {
-        elements.chatStatus.textContent = 'был(а) недавно';
-        elements.chatStatus.style.color = 'rgba(255,255,255,0.5)';
-    }
-}
 
 async function loadChats() {  
     if (!currentUser) return;  
@@ -601,16 +469,12 @@ function displayChats() {
         const timeString = formatMessageTime(chat.lastTime);  
         const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';  
         const displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;  
-        
-        const userStatus = onlineUsers.get(chat.userId);
-        const isOnline = userStatus?.is_online === true;
           
         div.innerHTML = `  
-            <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>  
+            <div class="chat-avatar">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>  
             <div class="chat-info">  
                 <div class="chat-name">  
                     ${escapeHtml(chat.username)}  
-                    <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>  
                 </div>  
                 <div class="chat-last-message">${escapeHtml(messagePrefix + displayMessage)}</div>  
                 <div class="chat-time">${timeString}</div>  
@@ -809,7 +673,6 @@ async function login() {
 
         showChats();  
         updateUI();  
-        setupRealtimeSubscriptions();  
         loadChats();  
           
     } catch (e) {  
@@ -901,15 +764,12 @@ async function searchUsers() {
                 hideModal('findFriendsModal');  
                 showChat(user.username);  
             };  
-            
-            const isOnline = onlineUsers.get(user.uid)?.is_online === true;
               
             userElement.innerHTML = `  
                 <div class="user-result-info">  
-                    <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>  
+                    <div class="user-result-avatar">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>  
                     <div>  
                         <div class="user-result-name">${escapeHtml(user.username)}</div>  
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>  
                     </div>  
                 </div>  
             `;  
@@ -937,20 +797,15 @@ function loadContacts() {
             hideModal('contactsModal');  
             showChat(contact.username);  
         };  
-        
-        findUserByUsername(contact.username).then(user => {
-            const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
-            
-            contactElement.innerHTML = `  
-                <div class="contact-info">  
-                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>  
-                    <div>  
-                        <div class="contact-name">${escapeHtml(contact.username)}</div>  
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>  
-                    </div>  
+          
+        contactElement.innerHTML = `  
+            <div class="contact-info">  
+                <div class="contact-avatar">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>  
+                <div>  
+                    <div class="contact-name">${escapeHtml(contact.username)}</div>  
                 </div>  
-            `;
-        });  
+            </div>  
+        `;  
           
         elements.contactsList.appendChild(contactElement);  
     });  
@@ -964,7 +819,6 @@ async function logout() {
     } catch (e) {}  
       
     localStorage.removeItem('speednexus_user');  
-    stopHeartbeat();
     cleanupSubscriptions();  
     currentUser = null;  
     currentChatWith = null;  
