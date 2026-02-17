@@ -181,11 +181,6 @@ body {
 .chats-list::-webkit-scrollbar-thumb {
     background: linear-gradient(135deg, #8b5cf6, #a78bfa);
     border-radius: 10px;
-    transition: all 0.3s ease;
-}
-
-.chats-list::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #7c3aed, #8b5cf6);
 }
 
 .chats-list {
@@ -269,10 +264,6 @@ body {
     text-overflow: ellipsis;
 }
 
-.chat-last-message.typing-message {
-    color: #b19cd9;
-}
-
 .chat-time {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.6);
@@ -294,7 +285,7 @@ body {
     transform: translateY(-50%);
 }
 
-.new-chat-btn {
+.find-friends-btn {
     position: fixed;
     bottom: 25px;
     right: 25px;
@@ -313,7 +304,7 @@ body {
     justify-content: center;
 }
 
-.new-chat-btn:active {
+.find-friends-btn:active {
     transform: scale(0.95);
 }
 
@@ -375,70 +366,6 @@ body {
     color: rgba(255, 255, 255, 0.9);
     height: 18px;
     min-height: 18px;
-    transition: all 0.3s ease;
-}
-
-.typing-animation {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-}
-
-.typing-animation span {
-    animation: typingDot 1.4s infinite;
-    opacity: 0;
-    font-size: 16px;
-    line-height: 1;
-}
-
-.typing-animation span:nth-child(1) {
-    animation-delay: 0s;
-}
-
-.typing-animation span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.typing-animation span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-.typing-animation-small {
-    display: inline-flex;
-    align-items: center;
-    gap: 1px;
-    font-size: 13px;
-    color: #b19cd9;
-}
-
-.typing-animation-small span {
-    animation: typingDot 1.4s infinite;
-    opacity: 0;
-    font-size: 13px;
-    line-height: 1;
-}
-
-.typing-animation-small span:nth-child(1) {
-    animation-delay: 0s;
-}
-
-.typing-animation-small span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.typing-animation-small span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes typingDot {
-    0%, 60%, 100% {
-        opacity: 0;
-        transform: translateY(0);
-    }
-    30% {
-        opacity: 1;
-        transform: translateY(-2px);
-    }
 }
 
 .private-messages {
@@ -456,7 +383,6 @@ body {
 
 .private-messages::-webkit-scrollbar {
     width: 6px;
-    height: 6px;
 }
 
 .private-messages::-webkit-scrollbar-track {
@@ -467,16 +393,6 @@ body {
 .private-messages::-webkit-scrollbar-thumb {
     background: linear-gradient(135deg, #8b5cf6, #a78bfa);
     border-radius: 10px;
-    transition: all 0.3s ease;
-}
-
-.private-messages::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #7c3aed, #8b5cf6);
-}
-
-.private-messages {
-    scrollbar-width: thin;
-    scrollbar-color: #8b5cf6 rgba(255, 255, 255, 0.05);
 }
 
 .message {
@@ -488,10 +404,6 @@ body {
 }
 
 @keyframes messageAppear {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
     to {
         opacity: 1;
         transform: translateY(0);
@@ -510,10 +422,7 @@ body {
     padding: 12px 16px;
     border-radius: 18px;
     line-height: 1.4;
-    position: relative;
     word-wrap: break-word;
-    overflow-wrap: break-word;
-    word-break: break-word;
 }
 
 .message.me .message-content {
@@ -529,40 +438,11 @@ body {
     border-bottom-left-radius: 5px;
 }
 
-.message .text {
-    margin-bottom: 5px;
-}
-
 .message .time {
     font-size: 11px;
     text-align: right;
     opacity: 0.7;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 5px;
     margin-top: 4px;
-}
-
-.message.me .time {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.message.other .time {
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.message-status {
-    font-size: 12px;
-    opacity: 0.8;
-}
-
-.message-status.read {
-    color: #4CAF50;
-}
-
-.message-status.delivered {
-    color: rgba(255, 255, 255, 0.7);
 }
 
 .message-input-container {
@@ -584,16 +464,10 @@ body {
     font-size: 15px;
     outline: none;
     min-height: 44px;
-    transition: all 0.2s;
 }
 
 .message-input:focus {
     border-color: #b19cd9;
-}
-
-.message-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 .send-btn {
@@ -603,11 +477,9 @@ body {
     background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     color: white;
     font-size: 20px;
-    font-weight: 600;
     cursor: pointer;
     min-width: 50px;
     min-height: 44px;
-    transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -615,12 +487,6 @@ body {
 
 .send-btn:active {
     transform: scale(0.95);
-}
-
-.send-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
 }
 
 .side-menu {
@@ -692,13 +558,8 @@ body {
     justify-content: center;
 }
 
-.close-menu-btn:active {
-    opacity: 0.7;
-}
-
 .side-menu-content {
     padding: 20px 15px;
-    background: transparent;
 }
 
 .side-menu-btn {
@@ -715,12 +576,10 @@ body {
     align-items: center;
     gap: 12px;
     margin-bottom: 10px;
-    transition: all 0.2s;
 }
 
 .side-menu-btn:active {
     background: rgba(177, 156, 217, 0.2);
-    transform: translateY(-1px);
 }
 
 .modal {
@@ -735,6 +594,10 @@ body {
     align-items: center;
     z-index: 3000;
     padding: 15px;
+}
+
+.modal.active {
+    display: flex;
 }
 
 .modal-content {
@@ -776,17 +639,11 @@ body {
     justify-content: center;
 }
 
-.close-modal:active {
-    opacity: 0.7;
-}
-
 .modal-body {
     padding: 20px;
     overflow-y: auto;
     max-height: calc(90vh - 70px);
     -webkit-overflow-scrolling: touch;
-    background: transparent;
-    overscroll-behavior-y: contain;
 }
 
 .modal-body::-webkit-scrollbar {
@@ -803,11 +660,6 @@ body {
     border-radius: 10px;
 }
 
-.modal-body {
-    scrollbar-width: thin;
-    scrollbar-color: #8b5cf6 rgba(255, 255, 255, 0.05);
-}
-
 .modal-input {
     width: 100%;
     padding: 14px 16px;
@@ -818,7 +670,6 @@ body {
     font-size: 15px;
     outline: none;
     margin-bottom: 15px;
-    transition: all 0.2s;
 }
 
 .modal-input:focus {
@@ -835,21 +686,14 @@ body {
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .modal-btn:active {
     transform: scale(0.98);
 }
 
-.modal-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 .search-results {
     margin-top: 20px;
-    background: transparent;
 }
 
 .user-result {
@@ -861,7 +705,6 @@ body {
     justify-content: space-between;
     margin-bottom: 8px;
     cursor: pointer;
-    transition: all 0.2s;
     border: 1px solid rgba(177, 156, 217, 0.3);
 }
 
@@ -906,36 +749,9 @@ body {
     font-weight: 500;
 }
 
-.user-result-status {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 12px;
-}
-
 .contacts-list {
     max-height: 300px;
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    background: transparent;
-    overscroll-behavior-y: contain;
-}
-
-.contacts-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.contacts-list::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-}
-
-.contacts-list::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-    border-radius: 10px;
-}
-
-.contacts-list {
-    scrollbar-width: thin;
-    scrollbar-color: #8b5cf6 rgba(255, 255, 255, 0.05);
 }
 
 .contact-item {
@@ -944,21 +760,9 @@ body {
     padding: 12px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     margin-bottom: 8px;
     cursor: pointer;
-    transition: all 0.2s;
     border: 1px solid rgba(177, 156, 217, 0.3);
-}
-
-.contact-item:active {
-    background: rgba(177, 156, 217, 0.2);
-}
-
-.contact-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
 }
 
 .contact-avatar {
@@ -972,6 +776,7 @@ body {
     font-size: 16px;
     font-weight: bold;
     color: white;
+    margin-right: 10px;
     position: relative;
 }
 
@@ -990,11 +795,6 @@ body {
 .contact-name {
     color: #ffffff;
     font-weight: 500;
-}
-
-.contact-status {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 12px;
 }
 
 .loading-overlay {
@@ -1035,140 +835,16 @@ body {
     }
 }
 
-@media (max-width: 768px) {
-    .message {
-        max-width: 85%;
-    }
-    
-    .message-input-container {
-        padding: 10px 12px;
-    }
-    
-    .message-input {
-        padding: 11px 13px;
-        font-size: 14px;
-    }
-    
-    .send-btn {
-        padding: 0 16px;
-        font-size: 18px;
-    }
-    
-    .side-menu {
-        width: 85%;
-        max-width: 280px;
-    }
-    
-    .private-messages::-webkit-scrollbar,
-    .chats-list::-webkit-scrollbar,
-    .modal-body::-webkit-scrollbar,
-    .contacts-list::-webkit-scrollbar {
-        width: 8px;
-    }
-}
-
-@media (min-width: 769px) {
-    body {
-        max-width: 500px;
-        margin: 0 auto;
-        background: #2d1b69 !important;
-    }
-    
-    .chats-screen, .chat-screen, .login-screen {
-        max-width: 500px;
-        margin: 0 auto;
-    }
-}
-
 @media (max-width: 480px) {
-    .chats-title {
-        font-size: 17px;
-    }
-    
-    .chat-item {
-        padding: 10px 12px;
-    }
-    
-    .chat-avatar {
-        width: 45px;
-        height: 45px;
-        font-size: 18px;
-    }
-    
-    .chat-name {
-        font-size: 15px;
-    }
-    
-    .chat-last-message {
-        font-size: 13px;
-    }
-    
-    .new-chat-btn {
+    .find-friends-btn {
         width: 56px;
         height: 56px;
-        font-size: 28px;
+        font-size: 24px;
         bottom: 15px;
         right: 15px;
     }
     
-    .chat-username {
-        font-size: 17px;
-    }
-    
     .message {
         max-width: 85%;
-    }
-    
-    .message-content {
-        padding: 9px 12px;
-        font-size: 14px;
-    }
-    
-    .message-input-container {
-        padding: 10px 12px;
-        gap: 8px;
-    }
-    
-    .message-input {
-        padding: 11px 13px;
-        font-size: 14px;
-        min-height: 42px;
-    }
-    
-    .send-btn {
-        padding: 0 16px;
-        font-size: 18px;
-        min-width: 46px;
-        min-height: 42px;
-    }
-    
-    .modal-content {
-        max-width: 95%;
-    }
-    
-    .side-menu {
-        width: 100%;
-        max-width: 280px;
-    }
-}
-
-@media (max-width: 350px) {
-    .chat-avatar {
-        width: 40px;
-        height: 40px;
-        font-size: 16px;
-        margin-right: 10px;
-    }
-    
-    .chat-name {
-        font-size: 14px;
-    }
-    
-    .chat-last-message {
-        font-size: 12px;
-    }
-    
-    .message {
-        max-width: 90%;
     }
 }
