@@ -194,11 +194,7 @@ async function updateOnlineStatus(isOnline) {
                 is_online: isOnline,
                 last_seen: now
             });
-        
-        console.log('Статус обновлен:', isOnline);
-    } catch (e) {
-        console.error('Ошибка статуса:', e);
-    }
+    } catch (e) {}
 }
 
 async function createConnection() {
@@ -227,11 +223,7 @@ async function createConnection() {
                 is_online: true,
                 last_seen: now
             }, { merge: true });
-        
-        console.log('Connection создан');
-    } catch (e) {
-        console.error('Ошибка создания connection:', e);
-    }
+    } catch (e) {}
 }
 
 async function removeConnection() {
@@ -263,11 +255,7 @@ async function removeConnection() {
                     last_seen: now
                 });
         }
-        
-        console.log('Connection отключен');
-    } catch (e) {
-        console.error('Ошибка отключения:', e);
-    }
+    } catch (e) {}
 }
 
 async function checkUser() {
@@ -578,6 +566,13 @@ function setupRealtimeSubscriptions() {
                     currentChatWith = userData.username;
                     elements.chatWithUser.textContent = userData.username;
                 }
+                
+                if (currentUser && change.doc.id === currentUser.uid) {
+                    currentUser.username = userData.username;
+                    localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+                    updateUI();
+                    elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
+                }
             } else if (change.type === 'removed') {
                 onlineUsers.delete(change.doc.id);
             }
@@ -839,9 +834,7 @@ async function sendMessage() {
             read: false,
             created_at: new Date().toISOString()
         });
-    } catch (e) {
-        console.error('Ошибка отправки:', e);
-    }
+    } catch (e) {}
 }
 
 async function markMessagesAsRead(userId) {
@@ -871,9 +864,7 @@ async function markMessagesAsRead(userId) {
                 displayChats();
             }
         }
-    } catch (e) {
-        console.error('Ошибка отметки прочтения:', e);
-    }
+    } catch (e) {}
 }
 
 function updateTitle() {
@@ -965,7 +956,6 @@ async function login() {
         startHeartbeat();
           
     } catch (e) {
-        console.error('Ошибка входа:', e);
         showError(elements.loginError, 'Ошибка при входе');
         localStorage.removeItem('speednexus_user');
         currentUser = null;
@@ -1004,12 +994,7 @@ async function editProfile() {
             username: newUsername
         });
 
-        currentUser.username = newUsername;
-        localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-          
-        updateUI();
         hideModal('editProfileModal');
-        elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
         
     } catch (e) {
         showError(elements.editUsernameError, 'Ошибка при изменении профиля');
@@ -1221,10 +1206,7 @@ window.fixStatus = async function() {
             }, { merge: true });
         
         alert('Статус обновлен! Проверь Firebase');
-        console.log('Готово');
-    } catch (e) {
-        console.error('Ошибка:', e);
-    }
+    } catch (e) {}
 };
 
 })();
