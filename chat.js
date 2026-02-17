@@ -65,6 +65,9 @@ let unreadCounts = {};
 let messagesUnsubscribe = null;  
 let chatsUnsubscribe = null;  
 let usersUnsubscribe = null;  
+let heartbeatInterval = null;  
+let lastReadTime = {};  
+let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);  
 let messageListener = null;  
 let scrollPositions = {};  
 let connectionId = null;  
@@ -137,7 +140,7 @@ async function createConnection() {
         connection_id: connectionId,  
         created_at: new Date().toISOString(),  
         last_seen: new Date().toISOString(),  
-        device: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ? 'mobile' : 'desktop'  
+        device: isMobile ? 'mobile' : 'desktop'  
     });  
 }  
 
@@ -146,6 +149,7 @@ function showLogin() {
     elements.loginScreen.style.display = 'flex';  
     elements.chatsScreen.style.display = 'none';  
     elements.chatScreen.style.display = 'none';  
+    if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
 }  
 
 function showChats() {  
@@ -153,6 +157,7 @@ function showChats() {
     elements.chatsScreen.style.display = 'flex';  
     elements.chatScreen.style.display = 'none';  
     elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;  
+    if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
 }  
 
 async function showChat(username) {  
@@ -170,6 +175,7 @@ async function showChat(username) {
         elements.chatScreen.style.display = 'flex';  
         elements.privateMessages.innerHTML = '';  
         elements.messageInput.value = '';  
+        if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
           
         await loadMessages(user.uid);  
           
