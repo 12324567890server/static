@@ -173,42 +173,101 @@ function handleBeforeUnload() {
 
 async function updateOnlineStatus(isOnline) {
     if (!currentUser || !connectionId) return;
-      
+    
     try {
-        const connectionRef = db.collection('users')
+        const now = new Date().toISOString();
+        
+        await db.collection('users')
             .doc(currentUser.uid)
             .collection('connections')
-            .doc(connectionId);
-          
-        await connectionRef.set({
-            connection_id: connectionId,
-            is_online: isOnline,
-            last_seen: new Date().toISOString(),
-            device: isMobile ? 'mobile' : 'desktop'
-        }, { merge: true });
-          
-        await updateUserStatus(currentUser.uid);
-          
-    } catch (e) {}
+            .doc(connectionId)
+            .set({
+                connection_id: connectionId,
+                is_online: isOnline,
+                last_seen: now,
+                device: isMobile ? 'mobile' : 'desktop'
+            });
+        
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .update({
+                is_online: isOnline,
+                last_seen: now
+            });
+        
+        console.log('Статус обновлен:', isOnline);
+    } catch (e) {
+        console.error('Ошибка статуса:', e);
+    }
+}
+
+async function createConnection() {
+    if (!currentUser) return;
+    
+    try {
+        const now = new Date().toISOString();
+        
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .collection('connections')
+            .doc(connectionId)
+            .set({
+                connection_id: connectionId,
+                created_at: now,
+                last_seen: now,
+                is_online: true,
+                device: isMobile ? 'mobile' : 'desktop'
+            });
+        
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .set({
+                uid: currentUser.uid,
+                username: currentUser.username,
+                is_online: true,
+                last_seen: now
+            }, { merge: true });
+        
+        console.log('Connection создан');
+    } catch (e) {
+        console.error('Ошибка создания connection:', e);
+    }
 }
 
 async function removeConnection() {
     if (!currentUser || !connectionId) return;
-      
+    
     try {
-        const connectionRef = db.collection('users')
+        const now = new Date().toISOString();
+        
+        await db.collection('users')
             .doc(currentUser.uid)
             .collection('connections')
-            .doc(connectionId);
-          
-        await connectionRef.update({
-            is_online: false,
-            last_seen: new Date().toISOString()
-        });
-          
-        await updateUserStatus(currentUser.uid);
-          
-    } catch (e) {}
+            .doc(connectionId)
+            .update({
+                is_online: false,
+                last_seen: now
+            });
+        
+        const activeConnections = await db.collection('users')
+            .doc(currentUser.uid)
+            .collection('connections')
+            .where('is_online', '==', true)
+            .get();
+        
+        if (activeConnections.empty) {
+            await db.collection('users')
+                .doc(currentUser.uid)
+                .update({
+                    is_online: false,
+                    last_seen: now
+                });
+        }
+        
+        console.log('Connection отключен');
+    } catch (e) {
+        console.error('Ошибка отключения:', e);
+    }
 }
 
 async function checkUser() {
@@ -247,23 +306,6 @@ async function checkUser() {
     } finally {
         showLoading(false);
     }
-}
-
-async function createConnection() {
-    if (!currentUser) return;
-      
-    const connectionRef = db.collection('users')
-        .doc(currentUser.uid)
-        .collection('connections')
-        .doc(connectionId);
-      
-    await connectionRef.set({
-        connection_id: connectionId,
-        created_at: new Date().toISOString(),
-        last_seen: new Date().toISOString(),
-        is_online: true,
-        device: isMobile ? 'mobile' : 'desktop'
-    });
 }
 
 function showLogin() {
@@ -756,27 +798,31 @@ async function sendMessage() {
       
     const messageText = elements.messageInput.value.trim();
     elements.messageInput.value = '';
-      
-    const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+    
+    const participantsArray = [currentUser.uid, currentChatUserId].sort();
+    const chatId = participantsArray.join('_');
       
     try {
         await db.collection('messages').add({
             chat_id: chatId,
-            participants: [currentUser.uid, currentChatUserId],
+            participants: participantsArray,
             sender: currentUser.uid,
             receiver: currentChatUserId,
             message: messageText,
             read: false,
             created_at: new Date().toISOString()
         });
-          
-    } catch (e) {}
+    } catch (e) {
+        console.error('Ошибка отправки:', e);
+    }
 }
 
 async function markMessagesAsRead(userId) {
     if (!userId || !currentUser || !isChatActive || !isPageVisible) return;
-      
+    
     try {
+        console.log('Проверка непрочитанных сообщений...');
+        
         const snapshot = await db.collection('messages')
             .where('receiver', '==', currentUser.uid)
             .where('sender', '==', userId)
@@ -784,19 +830,28 @@ async function markMessagesAsRead(userId) {
             .get();
 
         if (!snapshot.empty) {
+            console.log(`Найдено ${snapshot.size} непрочитанных сообщений`);
+            
             const batch = db.batch();
             snapshot.forEach(doc => {
-                batch.update(doc.ref, { read: true });
+                batch.update(doc.ref, { 
+                    read: true,
+                    read_at: new Date().toISOString()
+                });
             });
+            
             await batch.commit();
-              
+            console.log('Сообщения отмечены как прочитанные');
+            
             if (unreadCounts[userId]) {
                 delete unreadCounts[userId];
                 updateTitle();
                 displayChats();
             }
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error('Ошибка отметки прочтения:', e);
+    }
 }
 
 function updateTitle() {
@@ -849,20 +904,27 @@ async function login() {
     showLoading(true);
     try {
         const existingUser = await findUserByUsername(username);
+        const now = new Date().toISOString();
           
         if (existingUser) {
             currentUser = {
                 uid: existingUser.uid,
                 username: existingUser.username
             };
+            
+            await db.collection('users').doc(currentUser.uid).update({
+                is_online: true,
+                last_seen: now
+            });
         } else {
             const uid = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-              
+            
             await db.collection('users').doc(uid).set({
                 uid: uid,
                 username: username,
-                is_online: false,
-                created_at: new Date().toISOString()
+                is_online: true,
+                last_seen: now,
+                created_at: now
             });
 
             currentUser = { uid, username };
@@ -874,8 +936,6 @@ async function login() {
           
         localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
           
-        await updateOnlineStatus(true);
-
         showChats();
         updateUI();
         setupRealtimeSubscriptions();
@@ -883,6 +943,7 @@ async function login() {
         startHeartbeat();
           
     } catch (e) {
+        console.error('Ошибка входа:', e);
         showError(elements.loginError, 'Ошибка при входе');
         localStorage.removeItem('speednexus_user');
         currentUser = null;
@@ -1126,5 +1187,28 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+window.fixStatus = async function() {
+    if (!currentUser) {
+        alert('Сначала войдите');
+        return;
+    }
+    
+    try {
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .set({
+                uid: currentUser.uid,
+                username: currentUser.username,
+                is_online: true,
+                last_seen: new Date().toISOString()
+            }, { merge: true });
+        
+        alert('Статус обновлен! Проверь Firebase');
+        console.log('Готово');
+    } catch (e) {
+        console.error('Ошибка:', e);
+    }
+};
 
 })();
