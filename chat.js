@@ -10,7 +10,6 @@ appId: "1:524449944041:web:362f4343ed1507ec2d3b78"
 
 firebase.initializeApp(firebaseConfig);  
 const db = firebase.firestore();  
-const storage = firebase.storage();
 
 const elements = {  
     loginScreen: document.getElementById('loginScreen'),  
@@ -77,92 +76,7 @@ function init() {
     setupEventListeners();  
     document.addEventListener('visibilitychange', handleVisibilityChange);  
     window.addEventListener('beforeunload', handleBeforeUnload);  
-    setTimeout(addMediaButtons, 1000);
-}
-
-function addMediaButtons() {
-    const container = document.querySelector('.message-input-container');
-    if (!container) return;
-    
-    const photoInput = document.createElement('input');
-    photoInput.type = 'file';
-    photoInput.id = 'photoInput';
-    photoInput.accept = 'image/*';
-    photoInput.style.display = 'none';
-    photoInput.onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) alert('Фото: ' + file.name);
-    };
-    document.body.appendChild(photoInput);
-    
-    const videoInput = document.createElement('input');
-    videoInput.type = 'file';
-    videoInput.id = 'videoInput';
-    videoInput.accept = 'video/*';
-    videoInput.style.display = 'none';
-    videoInput.onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) alert('Видео: ' + file.name);
-    };
-    document.body.appendChild(videoInput);
-    
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.id = 'fileInput';
-    fileInput.style.display = 'none';
-    fileInput.onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) alert('Файл: ' + file.name);
-    };
-    document.body.appendChild(fileInput);
-    
-    const buttonsDiv = document.createElement('div');
-    buttonsDiv.style.display = 'flex';
-    buttonsDiv.style.gap = '5px';
-    buttonsDiv.style.marginRight = '10px';
-    
-    const photoBtn = document.createElement('button');
-    photoBtn.innerHTML = '📷';
-    photoBtn.style.width = '40px';
-    photoBtn.style.height = '40px';
-    photoBtn.style.borderRadius = '50%';
-    photoBtn.style.border = 'none';
-    photoBtn.style.background = '#2a3a4a';
-    photoBtn.style.color = 'white';
-    photoBtn.style.fontSize = '20px';
-    photoBtn.style.cursor = 'pointer';
-    photoBtn.onclick = () => document.getElementById('photoInput').click();
-    
-    const videoBtn = document.createElement('button');
-    videoBtn.innerHTML = '🎥';
-    videoBtn.style.width = '40px';
-    videoBtn.style.height = '40px';
-    videoBtn.style.borderRadius = '50%';
-    videoBtn.style.border = 'none';
-    videoBtn.style.background = '#2a3a4a';
-    videoBtn.style.color = 'white';
-    videoBtn.style.fontSize = '20px';
-    videoBtn.style.cursor = 'pointer';
-    videoBtn.onclick = () => document.getElementById('videoInput').click();
-    
-    const fileBtn = document.createElement('button');
-    fileBtn.innerHTML = '📎';
-    fileBtn.style.width = '40px';
-    fileBtn.style.height = '40px';
-    fileBtn.style.borderRadius = '50%';
-    fileBtn.style.border = 'none';
-    fileBtn.style.background = '#2a3a4a';
-    fileBtn.style.color = 'white';
-    fileBtn.style.fontSize = '20px';
-    fileBtn.style.cursor = 'pointer';
-    fileBtn.onclick = () => document.getElementById('fileInput').click();
-    
-    buttonsDiv.appendChild(photoBtn);
-    buttonsDiv.appendChild(videoBtn);
-    buttonsDiv.appendChild(fileBtn);
-    
-    container.insertBefore(buttonsDiv, container.firstChild);
-}
+}  
 
 function handleVisibilityChange() {  
     isPageVisible = !document.hidden;  
@@ -232,7 +146,6 @@ function showLogin() {
     elements.loginScreen.style.display = 'flex';  
     elements.chatsScreen.style.display = 'none';  
     elements.chatScreen.style.display = 'none';  
-    if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
 }  
 
 function showChats() {  
@@ -240,7 +153,6 @@ function showChats() {
     elements.chatsScreen.style.display = 'flex';  
     elements.chatScreen.style.display = 'none';  
     elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;  
-    if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
 }  
 
 async function showChat(username) {  
@@ -258,7 +170,6 @@ async function showChat(username) {
         elements.chatScreen.style.display = 'flex';  
         elements.privateMessages.innerHTML = '';  
         elements.messageInput.value = '';  
-        if (elements.chatStatus) elements.chatStatus.style.display = 'none';  
           
         await loadMessages(user.uid);  
           
