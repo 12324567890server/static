@@ -14,7 +14,7 @@
             <div class="login-header">
                 <h1>SpeedNexus</h1>
             </div>
-            <input type="text" id="loginUsername" class="login-input" placeholder="Введите ваш никнейм" maxlength="20">
+            <input type="text" id="loginUsername" class="login-input" placeholder="Введите ваш никнейм" maxlength="20" pattern="[A-Za-z0-9_]+" title="Только буквы, цифры и _">
             <div id="loginError" class="error-message"></div>
             <button id="loginButton" class="login-btn">Продолжить</button>
         </div>
@@ -33,14 +33,9 @@
         
         <div id="chatsList" class="chats-list"></div>
         
-        <div class="action-buttons">
-            <button id="findFriendsCircleBtn" class="find-friends-circle-btn">
-                <span class="find-friends-icon"></span>
-            </button>
-            <button id="newChatBtn" class="new-chat-btn">
-                <span class="icon new-chat-icon"></span>
-            </button>
-        </div>
+        <button id="newChatBtn" class="new-chat-btn">
+            <span class="icon new-chat-icon"></span>
+        </button>
     </div>
 
     <div id="chatScreen" class="chat-screen">
@@ -79,6 +74,10 @@
                 <span class="icon edit-icon"></span>
                 <span class="btn-text">Изменить профиль</span>
             </button>
+            <button id="findFriendsBtn" class="side-menu-btn">
+                <span class="icon search-icon"></span>
+                <span class="btn-text">Найти друзей</span>
+            </button>
             <button id="contactsBtn" class="side-menu-btn">
                 <span class="icon contacts-icon"></span>
                 <span class="btn-text">Контакты</span>
@@ -97,7 +96,7 @@
                 <button class="close-modal" data-close="editProfileModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
+                <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм" pattern="[A-Za-z0-9_]+">
                 <div id="editUsernameError" class="error-message"></div>
                 <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
             </div>
@@ -112,6 +111,7 @@
             </div>
             <div class="modal-body">
                 <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя" maxlength="20">
+                <div id="searchError" class="error-message"></div>
                 <button id="searchBtn" class="modal-btn">Найти</button>
                 <div id="searchResults" class="search-results"></div>
             </div>
