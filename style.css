@@ -285,10 +285,36 @@ body {
     transform: translateY(-50%);
 }
 
-.new-chat-btn {
+.action-buttons {
     position: fixed;
     bottom: 25px;
     right: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 100;
+}
+
+.search-friends-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.search-friends-btn:active {
+    transform: scale(0.95);
+}
+
+.new-chat-btn {
     width: 56px;
     height: 56px;
     border-radius: 50%;
@@ -298,7 +324,6 @@ body {
     font-size: 28px;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
-    z-index: 100;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -839,15 +864,25 @@ body {
 }
 
 @media (max-width: 480px) {
+    .action-buttons {
+        bottom: 15px;
+        right: 15px;
+        gap: 10px;
+    }
+    
+    .search-friends-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 22px;
+    }
+    
     .new-chat-btn {
         width: 52px;
         height: 52px;
         font-size: 26px;
-        bottom: 15px;
-        right: 15px;
     }
     
     .message {
         max-width: 85%;
     }
-                                }
+    }
