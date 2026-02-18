@@ -34,6 +34,7 @@ const elements = {
     searchChats: document.getElementById('searchChats'),
     chatsMenuBtn: document.getElementById('chatsMenuBtn'),
     newChatBtn: document.getElementById('newChatBtn'),
+    findFriendsCircleBtn: document.getElementById('findFriendsCircleBtn'),
     backToChats: document.getElementById('backToChats'),
     chatWithUser: document.getElementById('chatWithUser'),
     chatStatus: document.getElementById('chatStatus'),
@@ -50,7 +51,6 @@ const elements = {
     userStatusDisplay: document.getElementById('userStatusDisplay'),
     loadingOverlay: document.getElementById('loadingOverlay'),
     editProfileBtn: document.getElementById('editProfileBtn'),
-    findFriendsBtn: document.getElementById('findFriendsBtn'),
     contactsBtn: document.getElementById('contactsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
     editProfileModal: document.getElementById('editProfileModal'),
@@ -507,6 +507,13 @@ function setupEventListeners() {
         showModal('newChatModal');
     });
 
+    elements.findFriendsCircleBtn.addEventListener('click', () => {
+        elements.searchUsername.value = '';
+        elements.searchResults.innerHTML = '';
+        showModal('findFriendsModal');
+        setTimeout(() => searchUsers(), 100);
+    });
+
     elements.backToChats.addEventListener('click', () => {
         if (messageListener) {
             messageListener();
@@ -533,13 +540,6 @@ function setupEventListeners() {
     });
 
     elements.saveProfileBtn.addEventListener('click', editProfile);
-
-    elements.findFriendsBtn.addEventListener('click', () => {
-        elements.searchUsername.value = '';
-        elements.searchResults.innerHTML = '';
-        showModal('findFriendsModal');
-        setTimeout(() => searchUsers(), 100);
-    });
 
     elements.searchBtn.addEventListener('click', searchUsers);
     elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
