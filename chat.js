@@ -1438,8 +1438,39 @@ function listenForIncomingCalls() {
                     const callData = change.doc.data();
                     showIncomingCall(callData, change.doc.id);
                 }
+                if (change.type === 'modified') {
+                    const callData = change.doc.data();
+                    if (callData.status === 'ended' || callData.status === 'declined') {
+                        if (document.getElementById('incomingCallModal').style.display === 'flex') {
+                            document.getElementById('incomingCallModal').style.display = 'none';
+                            stopRingtone();
+                        }
+                        if (document.getElementById('activeCallContainer').style.display === 'block') {
+                            forceEndCall();
+                        }
+                    }
+                }
+                if (change.type === 'removed') {
+                    forceEndCall();
+                }
             });
         });
+}
+
+function forceEndCall() {
+    stopRingtone();
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    document.getElementById('activeCallContainer').style.display = 'none';
+    document.getElementById('incomingCallModal').style.display = 'none';
+    stopCallTimer();
+    currentCallId = null;
 }
 
 function showIncomingCall(callData, callId) {
@@ -1515,7 +1546,10 @@ async function initiateCall(isVideo) {
 function setupCallListener(callId) {
     db.collection('calls').doc(callId).onSnapshot(snapshot => {
         const data = snapshot.data();
-        if (!data) return;
+        if (!data) {
+            forceEndCall();
+            return;
+        }
         
         if (data.status === 'answered') {
             stopRingtone();
@@ -1523,7 +1557,7 @@ function setupCallListener(callId) {
             startCall(callId, data.type === 'video');
         } else if (data.status === 'declined' || data.status === 'ended') {
             stopRingtone();
-            endCall();
+            forceEndCall();
         }
     });
 }
