@@ -99,6 +99,8 @@ let callSeconds = 0;
 let incomingCallListener = null;
 let isMuted = false;
 let isVideoEnabled = true;
+let ringtoneAudio = null;
+let vibrationInterval = null;
 
 const STUN_SERVERS = {
     iceServers: [
@@ -209,6 +211,7 @@ function handleBeforeUnload() {
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
+    stopRingtone();
 }
 
 async function updateOnlineStatus(isOnline) {
@@ -1377,6 +1380,45 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function playRingtone() {
+    try {
+        if (!ringtoneAudio) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 800;
+            gainNode.gain.value = 0.1;
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            oscillator.start();
+            oscillator.stop(ctx.currentTime + 0.5);
+            setTimeout(() => {
+                if (document.getElementById('incomingCallModal').style.display === 'flex') {
+                    playRingtone();
+                }
+            }, 1000);
+        }
+    } catch (e) {}
+    
+    if (navigator.vibrate) {
+        vibrationInterval = setInterval(() => {
+            navigator.vibrate([500, 500, 500]);
+        }, 1500);
+    }
+}
+
+function stopRingtone() {
+    if (vibrationInterval) {
+        clearInterval(vibrationInterval);
+        vibrationInterval = null;
+    }
+    if (ringtoneAudio) {
+        ringtoneAudio.pause();
+        ringtoneAudio = null;
+    }
+}
+
 function listenForIncomingCalls() {
     if (!currentUser) return;
     
@@ -1401,6 +1443,7 @@ function showIncomingCall(callData, callId) {
     document.getElementById('callType').textContent = callData.type === 'video' ? 'видеозвонок' : 'аудиозвонок';
     
     document.getElementById('incomingCallModal').style.display = 'flex';
+    playRingtone();
 }
 
 async function initiateCall(isVideo) {
@@ -1419,7 +1462,7 @@ async function initiateCall(isVideo) {
             });
         } catch (mediaError) {
             showLoading(false);
-            alert('Ошибка доступа к микрофону/камере. Разрешите доступ в браузере.');
+            alert('Ошибка доступа к микрофону/камере. Проверьте разрешения.');
             return;
         }
 
@@ -1459,10 +1502,12 @@ function setupCallListener(callId) {
         const data = snapshot.data();
         if (!data) return;
         
-        if (data.status === 'answered' && data.calleeId === currentUser.uid) {
+        if (data.status === 'answered') {
+            stopRingtone();
             document.getElementById('incomingCallModal').style.display = 'none';
             startCall(callId, data.type === 'video');
         } else if (data.status === 'declined' || data.status === 'ended') {
+            stopRingtone();
             endCall();
         }
     });
@@ -1472,6 +1517,7 @@ async function answerCall() {
     if (!currentCallId) return;
     
     try {
+        stopRingtone();
         await db.collection('calls').doc(currentCallId).update({
             status: 'answered',
             answeredAt: new Date().toISOString()
@@ -1493,6 +1539,7 @@ async function declineCall() {
     if (!currentCallId) return;
     
     try {
+        stopRingtone();
         await db.collection('calls').doc(currentCallId).update({
             status: 'declined'
         });
@@ -1519,10 +1566,15 @@ async function startCall(callId, isVideo) {
         document.getElementById('callParticipant').textContent = otherUser.username;
         
         if (!localStream) {
-            localStream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-                video: isVideo
-            });
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: isVideo
+                });
+            } catch (mediaError) {
+                alert('Ошибка доступа к камере/микрофону');
+                return;
+            }
         }
 
         peerConnection = new RTCPeerConnection(STUN_SERVERS);
@@ -1535,18 +1587,22 @@ async function startCall(callId, isVideo) {
             document.getElementById('activeCallContainer').style.display = 'block';
             document.getElementById('audioOnlyContainer').style.display = 'none';
             const localVideo = document.getElementById('localVideo');
-            localVideo.srcObject = localStream;
+            if (localVideo) {
+                localVideo.srcObject = localStream;
+                localVideo.style.display = 'block';
+            }
         } else {
             document.getElementById('activeCallContainer').style.display = 'block';
-            document.getElementById('videoContainer').style.display = 'none';
             document.getElementById('audioOnlyContainer').style.display = 'flex';
             document.getElementById('audioAvatar').textContent = otherUser.username.charAt(0).toUpperCase();
         }
 
         peerConnection.ontrack = (event) => {
-            const remoteVideo = document.getElementById('remoteVideo');
-            if (remoteVideo) {
-                remoteVideo.srcObject = event.streams[0];
+            if (event.track.kind === 'video') {
+                const remoteVideo = document.getElementById('remoteVideo');
+                if (remoteVideo) {
+                    remoteVideo.srcObject = event.streams[0];
+                }
             }
         };
 
@@ -1561,7 +1617,10 @@ async function startCall(callId, isVideo) {
         };
 
         if (isCaller) {
-            const offer = await peerConnection.createOffer();
+            const offer = await peerConnection.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: isVideo
+            });
             await peerConnection.setLocalDescription(offer);
             
             await db.collection('calls').doc(callId).update({
@@ -1621,6 +1680,7 @@ function listenForAnswer(callId) {
 }
 
 async function endCall() {
+    stopRingtone();
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
