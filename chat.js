@@ -99,8 +99,6 @@ let callSeconds = 0;
 let incomingCallListener = null;
 let isMuted = false;
 let isVideoEnabled = true;
-let hasCamera = true;
-let hasMicrophone = true;
 let forceEndCallTimer = null;
 let callStatusListener = null;
 
