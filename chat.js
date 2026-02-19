@@ -99,7 +99,7 @@ let callSeconds = 0;
 let incomingCallListener = null;
 let isMuted = false;
 let isVideoEnabled = true;
-let ringtoneAudio = null;
+let ringtoneInterval = null;
 let vibrationInterval = null;
 
 const STUN_SERVERS = {
@@ -1382,40 +1382,47 @@ function escapeHtml(text) {
 
 function playRingtone() {
     try {
-        if (!ringtoneAudio) {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = ctx.createOscillator();
-            const gainNode = ctx.createGain();
-            oscillator.type = 'sine';
-            oscillator.frequency.value = 800;
-            gainNode.gain.value = 0.1;
-            oscillator.connect(gainNode);
-            gainNode.connect(ctx.destination);
-            oscillator.start();
-            oscillator.stop(ctx.currentTime + 0.5);
-            setTimeout(() => {
-                if (document.getElementById('incomingCallModal').style.display === 'flex') {
-                    playRingtone();
+        if (navigator.vibrate) {
+            vibrationInterval = setInterval(() => {
+                navigator.vibrate([1000, 500, 1000]);
+            }, 2500);
+        }
+        
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const playBeep = () => {
+            if (document.getElementById('incomingCallModal').style.display !== 'flex') {
+                if (vibrationInterval) {
+                    clearInterval(vibrationInterval);
+                    vibrationInterval = null;
                 }
-            }, 1000);
+                return;
+            }
+            
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 600;
+            gainNode.gain.value = 0.2;
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 1);
+            
+            setTimeout(playBeep, 2000);
+        };
+        
+        if (audioContext.state === 'suspended') {
+            audioContext.resume().then(playBeep);
+        } else {
+            playBeep();
         }
     } catch (e) {}
-    
-    if (navigator.vibrate) {
-        vibrationInterval = setInterval(() => {
-            navigator.vibrate([500, 500, 500]);
-        }, 1500);
-    }
 }
 
 function stopRingtone() {
     if (vibrationInterval) {
         clearInterval(vibrationInterval);
         vibrationInterval = null;
-    }
-    if (ringtoneAudio) {
-        ringtoneAudio.pause();
-        ringtoneAudio = null;
     }
 }
 
@@ -1461,9 +1468,17 @@ async function initiateCall(isVideo) {
                 video: isVideo
             });
         } catch (mediaError) {
-            showLoading(false);
-            alert('Ошибка доступа к микрофону/камере. Проверьте разрешения.');
-            return;
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: false
+                });
+                isVideo = false;
+            } catch (audioError) {
+                showLoading(false);
+                alert('Нет доступа к микрофону');
+                return;
+            }
         }
 
         currentCallId = [currentUser.uid, currentChatUserId].sort().join('_') + '_' + Date.now();
@@ -1493,7 +1508,7 @@ async function initiateCall(isVideo) {
         
     } catch (error) {
         showLoading(false);
-        alert('Ошибка при звонке: ' + error.message);
+        alert('Ошибка при звонке');
     }
 }
 
@@ -1572,8 +1587,16 @@ async function startCall(callId, isVideo) {
                     video: isVideo
                 });
             } catch (mediaError) {
-                alert('Ошибка доступа к камере/микрофону');
-                return;
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: false
+                    });
+                    isVideo = false;
+                } catch (audioError) {
+                    alert('Нет доступа к микрофону');
+                    return;
+                }
             }
         }
 
@@ -1585,7 +1608,6 @@ async function startCall(callId, isVideo) {
 
         if (isVideo) {
             document.getElementById('activeCallContainer').style.display = 'block';
-            document.getElementById('audioOnlyContainer').style.display = 'none';
             const localVideo = document.getElementById('localVideo');
             if (localVideo) {
                 localVideo.srcObject = localStream;
@@ -1613,6 +1635,16 @@ async function startCall(callId, isVideo) {
                     sender: currentUser.uid,
                     timestamp: new Date().toISOString()
                 });
+            }
+        };
+
+        peerConnection.oniceconnectionstatechange = () => {
+            if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
+                setTimeout(() => {
+                    if (peerConnection) {
+                        peerConnection.restartIce();
+                    }
+                }, 2000);
             }
         };
 
@@ -1725,12 +1757,6 @@ function toggleVideo() {
             isVideoEnabled = !isVideoEnabled;
             videoTrack.enabled = isVideoEnabled;
             document.getElementById('videoToggleButton').style.opacity = isVideoEnabled ? '1' : '0.5';
-            
-            if (!isVideoEnabled) {
-                document.getElementById('localVideo').style.display = 'none';
-            } else {
-                document.getElementById('localVideo').style.display = 'block';
-            }
         }
     }
 }
