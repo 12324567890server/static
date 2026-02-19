@@ -91,6 +91,28 @@ let messageListener = null;
 let scrollPositions = {};
 let connectionId = null;
 
+let localStream = null;
+let peerConnection = null;
+let currentCallId = null;
+let callTimer = null;
+let callSeconds = 0;
+let incomingCallListener = null;
+let isMuted = false;
+let isVideoEnabled = true;
+
+const STUN_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stun.services.mozilla.com' },
+        { urls: 'stun:stun.stunprotocol.org:3478' }
+    ],
+    iceCandidatePoolSize: 10
+};
+
 document.addEventListener('DOMContentLoaded', function() {
     init();
 });
@@ -171,6 +193,12 @@ function handleVisibilityChange() {
 function handleBeforeUnload() {
     if (currentUser && connectionId) {
         removeConnection();
+    }
+    if (peerConnection) {
+        peerConnection.close();
+    }
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
     }
 }
 
@@ -286,6 +314,7 @@ async function checkUser() {
                 loadChats();
                 startHeartbeat();
                 setupTypingListener();
+                listenForIncomingCalls();
             } else {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -408,6 +437,11 @@ async function showChat(username) {
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
         elements.messageInput.value = '';
+        
+        const callButtons = document.querySelector('.call-header-buttons');
+        if (callButtons) {
+            callButtons.style.display = 'flex';
+        }
           
         await loadMessages(user.uid);
         setupTypingDetection();
@@ -526,6 +560,15 @@ function setupEventListeners() {
             db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
             typingTimer = null;
         }
+        
+        const callButtons = document.querySelector('.call-header-buttons');
+        if (callButtons) {
+            callButtons.style.display = 'none';
+        }
+        
+        if (peerConnection) {
+            endCall();
+        }
           
         currentChatWith = null;
         currentChatUserId = null;
@@ -641,6 +684,10 @@ function cleanupSubscriptions() {
     if (typingUnsubscribe) {
         typingUnsubscribe();
         typingUnsubscribe = null;
+    }
+    if (incomingCallListener) {
+        incomingCallListener();
+        incomingCallListener = null;
     }
 }
 
@@ -1071,6 +1118,7 @@ async function login() {
         loadChats();
         startHeartbeat();
         setupTypingListener();
+        listenForIncomingCalls();
           
     } catch (e) {
         showError(elements.loginError, 'Ошибка при входе');
@@ -1262,6 +1310,10 @@ async function logout() {
         await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
         typingTimer = null;
     }
+    
+    if (peerConnection) {
+        await endCall();
+    }
       
     try {
         await removeConnection();
@@ -1312,6 +1364,311 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function listenForIncomingCalls() {
+    if (!currentUser) return;
+    
+    incomingCallListener = db.collection('calls')
+        .where('calleeId', '==', currentUser.uid)
+        .where('status', '==', 'ringing')
+        .onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const callData = change.doc.data();
+                    showIncomingCall(callData, change.doc.id);
+                }
+            });
+        });
+}
+
+function showIncomingCall(callData, callId) {
+    currentCallId = callId;
+    
+    document.getElementById('callerName').textContent = callData.callerName || 'Неизвестно';
+    document.getElementById('callerAvatar').textContent = (callData.callerName || 'U').charAt(0).toUpperCase();
+    document.getElementById('callType').textContent = callData.type === 'video' ? 'видеозвонок' : 'аудиозвонок';
+    
+    document.getElementById('incomingCallModal').style.display = 'flex';
+}
+
+async function initiateCall(isVideo) {
+    if (!currentChatUserId) {
+        alert('Сначала выберите чат');
+        return;
+    }
+
+    try {
+        showLoading(true);
+        
+        localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: isVideo
+        });
+
+        currentCallId = [currentUser.uid, currentChatUserId].sort().join('_') + '_' + Date.now();
+
+        await db.collection('calls').doc(currentCallId).set({
+            callerId: currentUser.uid,
+            callerName: currentUser.username,
+            calleeId: currentChatUserId,
+            status: 'ringing',
+            type: isVideo ? 'video' : 'audio',
+            createdAt: new Date().toISOString()
+        });
+
+        setupCallListener(currentCallId);
+        
+        showLoading(false);
+        
+    } catch (error) {
+        showLoading(false);
+        alert('Не удалось получить доступ к камере/микрофону');
+    }
+}
+
+function setupCallListener(callId) {
+    db.collection('calls').doc(callId).onSnapshot(snapshot => {
+        const data = snapshot.data();
+        if (!data) return;
+        
+        if (data.status === 'answered' && data.calleeId === currentUser.uid) {
+            document.getElementById('incomingCallModal').style.display = 'none';
+            startCall(callId, data.type === 'video');
+        } else if (data.status === 'declined' || data.status === 'ended') {
+            endCall();
+        }
+    });
+}
+
+async function answerCall() {
+    if (!currentCallId) return;
+    
+    try {
+        await db.collection('calls').doc(currentCallId).update({
+            status: 'answered',
+            answeredAt: new Date().toISOString()
+        });
+        
+        document.getElementById('incomingCallModal').style.display = 'none';
+        
+        const callDoc = await db.collection('calls').doc(currentCallId).get();
+        const callData = callDoc.data();
+        
+        await startCall(currentCallId, callData.type === 'video');
+        
+    } catch (error) {
+        alert('Ошибка при ответе на звонок');
+    }
+}
+
+async function declineCall() {
+    if (!currentCallId) return;
+    
+    try {
+        await db.collection('calls').doc(currentCallId).update({
+            status: 'declined'
+        });
+        
+        document.getElementById('incomingCallModal').style.display = 'none';
+        currentCallId = null;
+        
+    } catch (error) {
+        alert('Ошибка при отклонении звонка');
+    }
+}
+
+async function startCall(callId, isVideo) {
+    currentCallId = callId;
+    
+    try {
+        const callDoc = await db.collection('calls').doc(callId).get();
+        const callData = callDoc.data();
+        
+        const isCaller = callData.callerId === currentUser.uid;
+        const otherUserId = isCaller ? callData.calleeId : callData.callerId;
+        
+        const otherUser = await findUserById(otherUserId);
+        document.getElementById('callParticipant').textContent = otherUser.username;
+        
+        if (!localStream) {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: isVideo
+            });
+        }
+
+        peerConnection = new RTCPeerConnection(STUN_SERVERS);
+
+        localStream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, localStream);
+        });
+
+        if (isVideo) {
+            document.getElementById('videoContainer').style.display = 'block';
+            document.getElementById('audioOnlyContainer').style.display = 'none';
+            const localVideo = document.getElementById('localVideo');
+            localVideo.srcObject = localStream;
+        } else {
+            document.getElementById('videoContainer').style.display = 'none';
+            document.getElementById('audioOnlyContainer').style.display = 'flex';
+            document.getElementById('audioAvatar').textContent = otherUser.username.charAt(0).toUpperCase();
+        }
+
+        peerConnection.ontrack = (event) => {
+            const remoteVideo = document.getElementById('remoteVideo');
+            if (remoteVideo) {
+                remoteVideo.srcObject = event.streams[0];
+            }
+        };
+
+        peerConnection.onicecandidate = async (event) => {
+            if (event.candidate) {
+                await db.collection('calls').doc(callId).collection('ice').add({
+                    candidate: event.candidate.toJSON(),
+                    sender: currentUser.uid,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        };
+
+        if (isCaller) {
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            await db.collection('calls').doc(callId).update({
+                offer: {
+                    type: offer.type,
+                    sdp: offer.sdp
+                }
+            });
+        } else {
+            const callData = callDoc.data();
+            if (callData.offer) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                await db.collection('calls').doc(callId).update({
+                    answer: {
+                        type: answer.type,
+                        sdp: answer.sdp
+                    }
+                });
+            }
+        }
+
+        listenForIceCandidates(callId, isCaller ? callData.calleeId : callData.callerId);
+        
+        if (!isCaller && callData.offer) {
+            listenForAnswer(callId);
+        }
+
+        document.getElementById('activeCallContainer').style.display = 'block';
+        
+        startCallTimer();
+        
+    } catch (error) {
+        alert('Ошибка при начале звонка');
+    }
+}
+
+function listenForIceCandidates(callId, otherUserId) {
+    db.collection('calls').doc(callId).collection('ice')
+        .where('sender', '==', otherUserId)
+        .onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const candidate = new RTCIceCandidate(change.doc.data().candidate);
+                    peerConnection.addIceCandidate(candidate);
+                }
+            });
+        });
+}
+
+function listenForAnswer(callId) {
+    db.collection('calls').doc(callId).onSnapshot(snapshot => {
+        const data = snapshot.data();
+        if (data && data.answer && !peerConnection.currentRemoteDescription) {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+    });
+}
+
+async function endCall() {
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    if (currentCallId) {
+        try {
+            await db.collection('calls').doc(currentCallId).update({
+                status: 'ended',
+                endedAt: new Date().toISOString()
+            });
+        } catch (e) {}
+        currentCallId = null;
+    }
+    
+    document.getElementById('activeCallContainer').style.display = 'none';
+    document.getElementById('incomingCallModal').style.display = 'none';
+    
+    stopCallTimer();
+}
+
+function toggleMute() {
+    if (localStream) {
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack) {
+            isMuted = !isMuted;
+            audioTrack.enabled = !isMuted;
+            document.getElementById('muteButton').style.opacity = isMuted ? '0.5' : '1';
+        }
+    }
+}
+
+function toggleVideo() {
+    if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+            isVideoEnabled = !isVideoEnabled;
+            videoTrack.enabled = isVideoEnabled;
+            document.getElementById('videoToggleButton').style.opacity = isVideoEnabled ? '1' : '0.5';
+            
+            if (!isVideoEnabled) {
+                document.getElementById('localVideo').style.display = 'none';
+            } else {
+                document.getElementById('localVideo').style.display = 'block';
+            }
+        }
+    }
+}
+
+function startCallTimer() {
+    callSeconds = 0;
+    updateCallTimer();
+    callTimer = setInterval(updateCallTimer, 1000);
+}
+
+function stopCallTimer() {
+    if (callTimer) {
+        clearInterval(callTimer);
+        callTimer = null;
+    }
+}
+
+function updateCallTimer() {
+    const minutes = Math.floor(callSeconds / 60);
+    const seconds = callSeconds % 60;
+    document.getElementById('callTimer').textContent = 
+        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    callSeconds++;
 }
 
 window.fixStatus = async function() {
