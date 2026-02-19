@@ -117,6 +117,18 @@ document.addEventListener('DOMContentLoaded', function() {
     init();
 });
 
+async function createCallsCollection() {
+    try {
+        await db.collection('calls').doc('_init').set({
+            initialized: true,
+            timestamp: new Date().toISOString()
+        });
+        console.log('Коллекция calls создана');
+    } catch (error) {
+        console.log('Ошибка создания calls:', error);
+    }
+}
+
 function init() {
     checkUser();
     setupEventListeners();
@@ -315,6 +327,7 @@ async function checkUser() {
                 startHeartbeat();
                 setupTypingListener();
                 listenForIncomingCalls();
+                createCallsCollection();
             } else {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -1119,6 +1132,7 @@ async function login() {
         startHeartbeat();
         setupTypingListener();
         listenForIncomingCalls();
+        createCallsCollection();
           
     } catch (e) {
         showError(elements.loginError, 'Ошибка при входе');
