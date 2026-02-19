@@ -50,6 +50,15 @@
                 <div id="chatWithUser" class="chat-username">-</div>
                 <div id="chatStatus" class="chat-status">без связи</div>
             </div>
+            <!-- Кнопки звонков -->
+            <div class="call-header-buttons">
+                <button class="custom-call-btn" onclick="initiateCall(false)" title="Аудиозвонок">
+                    <div class="btn-icon-audio"></div>
+                </button>
+                <button class="custom-call-btn" onclick="initiateCall(true)" title="Видеозвонок">
+                    <div class="btn-icon-video"></div>
+                </button>
+            </div>
         </div>
         
         <div id="privateMessages" class="private-messages"></div>
@@ -59,6 +68,51 @@
             <button id="sendMessageBtn" class="send-btn">
                 <span class="send-icon"></span>
             </button>
+        </div>
+    </div>
+
+    <!-- Модалка входящего звонка -->
+    <div id="incomingCallModal" class="nexus-modal" style="display: none;">
+        <div class="nexus-call-card">
+            <div class="nexus-avatar-circle">
+                <div class="nexus-avatar-inner initials" id="callerAvatar">U</div>
+            </div>
+            <div class="nexus-caller-name" id="callerName">Загрузка...</div>
+            <div class="nexus-call-type" id="callType">аудиозвонок</div>
+            <div class="nexus-action-row">
+                <button class="nexus-btn nexus-answer" onclick="answerCall()">
+                    <span class="btn-icon">✓</span>
+                </button>
+                <button class="nexus-btn nexus-decline" onclick="declineCall()">
+                    <span class="btn-icon">✕</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Контейнер активного звонка -->
+    <div id="activeCallContainer" class="nexus-call-active" style="display: none;">
+        <div id="videoContainer" class="nexus-video-grid" style="display: none;">
+            <video id="remoteVideo" class="nexus-video-remote" autoplay playsinline></video>
+            <video id="localVideo" class="nexus-video-local" autoplay playsinline muted></video>
+        </div>
+        <div class="nexus-audio-only" id="audioOnlyContainer" style="display: flex;">
+            <div class="nexus-audio-avatar" id="audioAvatar">U</div>
+        </div>
+        <div class="nexus-call-controls">
+            <div class="nexus-timer" id="callTimer">00:00</div>
+            <div class="nexus-participant" id="callParticipant"></div>
+            <div class="nexus-controls-row">
+                <button class="nexus-control-btn" id="muteButton" onclick="toggleMute()">
+                    <div class="control-icon mute-icon"></div>
+                </button>
+                <button class="nexus-control-btn end-call" onclick="endCall()">
+                    <div class="control-icon end-icon"></div>
+                </button>
+                <button class="nexus-control-btn" id="videoToggleButton" onclick="toggleVideo()">
+                    <div class="control-icon video-icon"></div>
+                </button>
+            </div>
         </div>
     </div>
 
