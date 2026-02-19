@@ -91,7 +91,6 @@ let messageListener = null;
 let scrollPositions = {};
 let connectionId = null;
 
-// Звонки
 let localStream = null;
 let peerConnection = null;
 let currentCallId = null;
@@ -1381,51 +1380,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ========== ЗВОНКИ ==========
-
-function playRingtone() {
-    try {
-        if (navigator.vibrate) {
-            vibrationInterval = setInterval(() => {
-                navigator.vibrate([1000, 500, 1000]);
-            }, 2500);
-        }
-        
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const playBeep = () => {
-            if (document.getElementById('incomingCallModal').style.display !== 'flex') {
-                stopRingtone();
-                return;
-            }
-            
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            oscillator.type = 'sine';
-            oscillator.frequency.value = 600;
-            gainNode.gain.value = 0.2;
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 1);
-            
-            setTimeout(playBeep, 2000);
-        };
-        
-        if (audioContext.state === 'suspended') {
-            audioContext.resume().then(playBeep);
-        } else {
-            playBeep();
-        }
-    } catch (e) {}
-}
-
-function stopRingtone() {
-    if (vibrationInterval) {
-        clearInterval(vibrationInterval);
-        vibrationInterval = null;
-    }
-}
-
 function listenForIncomingCalls() {
     if (!currentUser) return;
     
@@ -1440,12 +1394,13 @@ function listenForIncomingCalls() {
                 }
                 if (change.type === 'modified') {
                     const callData = change.doc.data();
-                    if (callData.status === 'ended' || callData.status === 'declined') {
-                        forceEndCall();
+                    if (callData.status === 'answered') {
+                        stopRingtone();
+                        document.getElementById('incomingCallModal').style.display = 'none';
+                    } else if (callData.status === 'ended' || callData.status === 'declined') {
+                        stopRingtone();
+                        document.getElementById('incomingCallModal').style.display = 'none';
                     }
-                }
-                if (change.type === 'removed') {
-                    forceEndCall();
                 }
             });
         });
@@ -1459,7 +1414,13 @@ function showIncomingCall(callData, callId) {
     document.getElementById('callType').textContent = callData.type === 'video' ? 'видеозвонок' : 'аудиозвонок';
     
     document.getElementById('incomingCallModal').style.display = 'flex';
-    playRingtone();
+}
+
+function stopRingtone() {
+    if (vibrationInterval) {
+        clearInterval(vibrationInterval);
+        vibrationInterval = null;
+    }
 }
 
 async function initiateCall(isVideo) {
@@ -1525,17 +1486,15 @@ function setupCallListener(callId) {
     db.collection('calls').doc(callId).onSnapshot(snapshot => {
         const data = snapshot.data();
         if (!data) {
-            forceEndCall();
+            endCall();
             return;
         }
         
         if (data.status === 'answered') {
-            stopRingtone();
             document.getElementById('incomingCallModal').style.display = 'none';
             startCall(callId, data.type === 'video');
         } else if (data.status === 'declined' || data.status === 'ended') {
-            stopRingtone();
-            forceEndCall();
+            endCall();
         }
     });
 }
@@ -1544,7 +1503,6 @@ async function answerCall() {
     if (!currentCallId) return;
     
     try {
-        stopRingtone();
         await db.collection('calls').doc(currentCallId).update({
             status: 'answered',
             answeredAt: new Date().toISOString()
@@ -1566,7 +1524,6 @@ async function declineCall() {
     if (!currentCallId) return;
     
     try {
-        stopRingtone();
         await db.collection('calls').doc(currentCallId).update({
             status: 'declined'
         });
@@ -1654,15 +1611,7 @@ async function startCall(callId, isVideo) {
             if (peerConnection.iceConnectionState === 'disconnected' || 
                 peerConnection.iceConnectionState === 'failed' ||
                 peerConnection.iceConnectionState === 'closed') {
-                forceEndCall();
-            }
-        };
-
-        peerConnection.onconnectionstatechange = () => {
-            if (peerConnection.connectionState === 'disconnected' || 
-                peerConnection.connectionState === 'failed' ||
-                peerConnection.connectionState === 'closed') {
-                forceEndCall();
+                endCall();
             }
         };
 
@@ -1713,8 +1662,10 @@ function listenForIceCandidates(callId, otherUserId) {
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
-                    const candidate = new RTCIceCandidate(change.doc.data().candidate);
-                    peerConnection.addIceCandidate(candidate);
+                    try {
+                        const candidate = new RTCIceCandidate(change.doc.data().candidate);
+                        peerConnection.addIceCandidate(candidate);
+                    } catch (e) {}
                 }
             });
         });
@@ -1724,37 +1675,24 @@ function listenForAnswer(callId) {
     db.collection('calls').doc(callId).onSnapshot(snapshot => {
         const data = snapshot.data();
         if (data && data.answer && !peerConnection.currentRemoteDescription) {
-            peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            try {
+                peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } catch (e) {}
         }
     });
 }
 
-function forceEndCall() {
-    stopRingtone();
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-    }
-    document.getElementById('activeCallContainer').style.display = 'none';
-    document.getElementById('incomingCallModal').style.display = 'none';
-    stopCallTimer();
-    currentCallId = null;
-}
-
 async function endCall() {
-    stopRingtone();
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
     }
+    
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
     }
+    
     if (currentCallId) {
         try {
             await db.collection('calls').doc(currentCallId).update({
@@ -1764,8 +1702,10 @@ async function endCall() {
         } catch (e) {}
         currentCallId = null;
     }
+    
     document.getElementById('activeCallContainer').style.display = 'none';
     document.getElementById('incomingCallModal').style.display = 'none';
+    
     stopCallTimer();
 }
 
@@ -1775,7 +1715,10 @@ function toggleMute() {
         if (audioTrack) {
             isMuted = !isMuted;
             audioTrack.enabled = !isMuted;
-            document.getElementById('muteButton').style.opacity = isMuted ? '0.5' : '1';
+            const muteButton = document.getElementById('muteButton');
+            if (muteButton) {
+                muteButton.style.opacity = isMuted ? '0.5' : '1';
+            }
         }
     }
 }
@@ -1786,7 +1729,14 @@ function toggleVideo() {
         if (videoTrack) {
             isVideoEnabled = !isVideoEnabled;
             videoTrack.enabled = isVideoEnabled;
-            document.getElementById('videoToggleButton').style.opacity = isVideoEnabled ? '1' : '0.5';
+            const videoButton = document.getElementById('videoToggleButton');
+            if (videoButton) {
+                videoButton.style.opacity = isVideoEnabled ? '1' : '0.5';
+            }
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) {
+                localVideo.style.display = isVideoEnabled ? 'block' : 'none';
+            }
         }
     }
 }
@@ -1802,13 +1752,16 @@ function stopCallTimer() {
         clearInterval(callTimer);
         callTimer = null;
     }
+    callSeconds = 0;
 }
 
 function updateCallTimer() {
     const minutes = Math.floor(callSeconds / 60);
     const seconds = callSeconds % 60;
-    document.getElementById('callTimer').textContent = 
-        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const timerElement = document.getElementById('callTimer');
+    if (timerElement) {
+        timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
     callSeconds++;
 }
 
