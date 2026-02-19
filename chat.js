@@ -1532,11 +1532,12 @@ async function startCall(callId, isVideo) {
         });
 
         if (isVideo) {
-            document.getElementById('videoContainer').style.display = 'block';
+            document.getElementById('activeCallContainer').style.display = 'block';
             document.getElementById('audioOnlyContainer').style.display = 'none';
             const localVideo = document.getElementById('localVideo');
             localVideo.srcObject = localStream;
         } else {
+            document.getElementById('activeCallContainer').style.display = 'block';
             document.getElementById('videoContainer').style.display = 'none';
             document.getElementById('audioOnlyContainer').style.display = 'flex';
             document.getElementById('audioAvatar').textContent = otherUser.username.charAt(0).toUpperCase();
@@ -1590,8 +1591,6 @@ async function startCall(callId, isVideo) {
             listenForAnswer(callId);
         }
 
-        document.getElementById('activeCallContainer').style.display = 'block';
-        
         startCallTimer();
         
     } catch (error) {
