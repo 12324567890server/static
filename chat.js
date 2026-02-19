@@ -91,6 +91,7 @@ let messageListener = null;
 let scrollPositions = {};
 let connectionId = null;
 
+// Звонки
 let localStream = null;
 let peerConnection = null;
 let currentCallId = null;
@@ -1380,6 +1381,8 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ========== ЗВОНКИ ==========
+
 function playRingtone() {
     try {
         if (navigator.vibrate) {
@@ -1391,10 +1394,7 @@ function playRingtone() {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const playBeep = () => {
             if (document.getElementById('incomingCallModal').style.display !== 'flex') {
-                if (vibrationInterval) {
-                    clearInterval(vibrationInterval);
-                    vibrationInterval = null;
-                }
+                stopRingtone();
                 return;
             }
             
@@ -1441,13 +1441,7 @@ function listenForIncomingCalls() {
                 if (change.type === 'modified') {
                     const callData = change.doc.data();
                     if (callData.status === 'ended' || callData.status === 'declined') {
-                        if (document.getElementById('incomingCallModal').style.display === 'flex') {
-                            document.getElementById('incomingCallModal').style.display = 'none';
-                            stopRingtone();
-                        }
-                        if (document.getElementById('activeCallContainer').style.display === 'block') {
-                            forceEndCall();
-                        }
+                        forceEndCall();
                     }
                 }
                 if (change.type === 'removed') {
@@ -1455,22 +1449,6 @@ function listenForIncomingCalls() {
                 }
             });
         });
-}
-
-function forceEndCall() {
-    stopRingtone();
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-    }
-    document.getElementById('activeCallContainer').style.display = 'none';
-    document.getElementById('incomingCallModal').style.display = 'none';
-    stopCallTimer();
-    currentCallId = null;
 }
 
 function showIncomingCall(callData, callId) {
@@ -1673,12 +1651,18 @@ async function startCall(callId, isVideo) {
         };
 
         peerConnection.oniceconnectionstatechange = () => {
-            if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
-                setTimeout(() => {
-                    if (peerConnection) {
-                        peerConnection.restartIce();
-                    }
-                }, 2000);
+            if (peerConnection.iceConnectionState === 'disconnected' || 
+                peerConnection.iceConnectionState === 'failed' ||
+                peerConnection.iceConnectionState === 'closed') {
+                forceEndCall();
+            }
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+            if (peerConnection.connectionState === 'disconnected' || 
+                peerConnection.connectionState === 'failed' ||
+                peerConnection.connectionState === 'closed') {
+                forceEndCall();
             }
         };
 
@@ -1745,18 +1729,32 @@ function listenForAnswer(callId) {
     });
 }
 
+function forceEndCall() {
+    stopRingtone();
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    document.getElementById('activeCallContainer').style.display = 'none';
+    document.getElementById('incomingCallModal').style.display = 'none';
+    stopCallTimer();
+    currentCallId = null;
+}
+
 async function endCall() {
     stopRingtone();
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
     }
-    
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
     }
-    
     if (currentCallId) {
         try {
             await db.collection('calls').doc(currentCallId).update({
@@ -1766,10 +1764,8 @@ async function endCall() {
         } catch (e) {}
         currentCallId = null;
     }
-    
     document.getElementById('activeCallContainer').style.display = 'none';
     document.getElementById('incomingCallModal').style.display = 'none';
-    
     stopCallTimer();
 }
 
