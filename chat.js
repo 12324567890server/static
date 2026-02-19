@@ -99,8 +99,7 @@ let callSeconds = 0;
 let incomingCallListener = null;
 let isMuted = false;
 let isVideoEnabled = true;
-let forceEndCallTimer = null;
-let callStatusListener = null;
+let callEndTimeout = null;
 
 const STUN_SERVERS = {
     iceServers: [
@@ -211,11 +210,8 @@ function handleBeforeUnload() {
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
-    if (forceEndCallTimer) {
-        clearTimeout(forceEndCallTimer);
-    }
-    if (callStatusListener) {
-        callStatusListener();
+    if (callEndTimeout) {
+        clearTimeout(callEndTimeout);
     }
 }
 
@@ -706,10 +702,6 @@ function cleanupSubscriptions() {
     if (incomingCallListener) {
         incomingCallListener();
         incomingCallListener = null;
-    }
-    if (callStatusListener) {
-        callStatusListener();
-        callStatusListener = null;
     }
 }
 
@@ -1407,9 +1399,6 @@ function listenForIncomingCalls() {
                         forceEndCall();
                     }
                 }
-                if (change.type === 'removed') {
-                    forceEndCall();
-                }
             });
         });
 }
@@ -1417,18 +1406,15 @@ function listenForIncomingCalls() {
 function showIncomingCall(callData, callId) {
     currentCallId = callId;
     
-    const callerNameElement = document.getElementById('callerName');
-    const callerAvatarElement = document.getElementById('callerAvatar');
-    const callTypeElement = document.getElementById('callType');
+    const callerName = document.getElementById('callerName');
+    const callerAvatar = document.getElementById('callerAvatar');
+    const callType = document.getElementById('callType');
     const incomingModal = document.getElementById('incomingCallModal');
     
-    if (callerNameElement) callerNameElement.textContent = callData.callerName || 'Неизвестно';
-    if (callerAvatarElement) callerAvatarElement.textContent = (callData.callerName || 'U').charAt(0).toUpperCase();
-    if (callTypeElement) callTypeElement.textContent = callData.type === 'video' ? 'видеозвонок' : 'аудиозвонок';
-    
-    if (incomingModal) {
-        incomingModal.style.display = 'flex';
-    }
+    if (callerName) callerName.textContent = callData.callerName || 'Неизвестно';
+    if (callerAvatar) callerAvatar.textContent = (callData.callerName || 'U').charAt(0).toUpperCase();
+    if (callType) callType.textContent = callData.type === 'video' ? 'видеозвонок' : 'аудиозвонок';
+    if (incomingModal) incomingModal.style.display = 'flex';
 }
 
 async function initiateCall(isVideo) {
@@ -1439,9 +1425,6 @@ async function initiateCall(isVideo) {
 
     try {
         showLoading(true);
-        
-        let hasVideo = isVideo;
-        let hasAudio = true;
         
         try {
             localStream = await navigator.mediaDevices.getUserMedia({
@@ -1454,18 +1437,11 @@ async function initiateCall(isVideo) {
                     audio: true,
                     video: false
                 });
-                hasVideo = false;
+                isVideo = false;
             } catch (audioError) {
-                try {
-                    localStream = await navigator.mediaDevices.getUserMedia({
-                        audio: false,
-                        video: false
-                    });
-                    hasAudio = false;
-                    hasVideo = false;
-                } catch (emptyError) {
-                    localStream = null;
-                }
+                showLoading(false);
+                alert('Нет доступа к микрофону');
+                return;
             }
         }
 
@@ -1476,7 +1452,7 @@ async function initiateCall(isVideo) {
             callerName: currentUser.username,
             calleeId: currentChatUserId,
             status: 'ringing',
-            type: hasVideo ? 'video' : 'audio',
+            type: isVideo ? 'video' : 'audio',
             createdAt: new Date().toISOString()
         });
 
@@ -1501,11 +1477,7 @@ async function initiateCall(isVideo) {
 }
 
 function setupCallListener(callId) {
-    if (callStatusListener) {
-        callStatusListener();
-    }
-    
-    callStatusListener = db.collection('calls').doc(callId).onSnapshot(snapshot => {
+    db.collection('calls').doc(callId).onSnapshot(snapshot => {
         const data = snapshot.data();
         if (!data) {
             forceEndCall();
@@ -1572,8 +1544,8 @@ async function startCall(callId, isVideo) {
         const otherUserId = isCaller ? callData.calleeId : callData.callerId;
         
         const otherUser = await findUserById(otherUserId);
-        const participantElement = document.getElementById('callParticipant');
-        if (participantElement) participantElement.textContent = otherUser.username;
+        const participant = document.getElementById('callParticipant');
+        if (participant) participant.textContent = otherUser.username;
         
         if (!localStream) {
             try {
@@ -1589,14 +1561,8 @@ async function startCall(callId, isVideo) {
                     });
                     isVideo = false;
                 } catch (audioError) {
-                    try {
-                        localStream = await navigator.mediaDevices.getUserMedia({
-                            audio: false,
-                            video: false
-                        });
-                    } catch (emptyError) {
-                        localStream = null;
-                    }
+                    alert('Нет доступа к микрофону');
+                    return;
                 }
             }
         }
@@ -1609,38 +1575,34 @@ async function startCall(callId, isVideo) {
             });
         }
 
-        const activeCallContainer = document.getElementById('activeCallContainer');
+        const activeContainer = document.getElementById('activeCallContainer');
         const videoContainer = document.getElementById('videoContainer');
-        const audioOnlyContainer = document.getElementById('audioOnlyContainer');
+        const audioContainer = document.getElementById('audioOnlyContainer');
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const audioAvatar = document.getElementById('audioAvatar');
         
-        if (activeCallContainer) {
-            activeCallContainer.style.display = 'block';
-        }
+        if (activeContainer) activeContainer.style.display = 'block';
         
         if (isVideo && localStream && localStream.getVideoTracks().length > 0) {
             if (videoContainer) videoContainer.style.display = 'block';
-            if (audioOnlyContainer) audioOnlyContainer.style.display = 'none';
+            if (audioContainer) audioContainer.style.display = 'none';
             if (localVideo) {
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
             }
         } else {
             if (videoContainer) videoContainer.style.display = 'none';
-            if (audioOnlyContainer) audioOnlyContainer.style.display = 'flex';
+            if (audioContainer) audioContainer.style.display = 'flex';
             if (audioAvatar && otherUser) {
                 audioAvatar.textContent = otherUser.username.charAt(0).toUpperCase();
             }
         }
 
         peerConnection.ontrack = (event) => {
-            if (event.track.kind === 'video') {
-                if (remoteVideo) {
-                    remoteVideo.srcObject = event.streams[0];
-                    remoteVideo.style.display = 'block';
-                }
+            if (event.track.kind === 'video' && remoteVideo) {
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.style.display = 'block';
             }
         };
 
@@ -1660,14 +1622,6 @@ async function startCall(callId, isVideo) {
             if (peerConnection.iceConnectionState === 'disconnected' || 
                 peerConnection.iceConnectionState === 'failed' ||
                 peerConnection.iceConnectionState === 'closed') {
-                forceEndCall();
-            }
-        };
-
-        peerConnection.onconnectionstatechange = () => {
-            if (peerConnection.connectionState === 'disconnected' || 
-                peerConnection.connectionState === 'failed' ||
-                peerConnection.connectionState === 'closed') {
                 forceEndCall();
             }
         };
@@ -1740,11 +1694,11 @@ function listenForAnswer(callId) {
 }
 
 function forceEndCall() {
-    if (forceEndCallTimer) {
-        clearTimeout(forceEndCallTimer);
+    if (callEndTimeout) {
+        clearTimeout(callEndTimeout);
     }
     
-    forceEndCallTimer = setTimeout(() => {
+    callEndTimeout = setTimeout(() => {
         if (peerConnection) {
             peerConnection.close();
             peerConnection = null;
@@ -1755,21 +1709,21 @@ function forceEndCall() {
             localStream = null;
         }
         
-        const activeCallContainer = document.getElementById('activeCallContainer');
+        const activeContainer = document.getElementById('activeCallContainer');
         const incomingModal = document.getElementById('incomingCallModal');
         
-        if (activeCallContainer) activeCallContainer.style.display = 'none';
+        if (activeContainer) activeContainer.style.display = 'none';
         if (incomingModal) incomingModal.style.display = 'none';
         
         stopCallTimer();
         currentCallId = null;
-        forceEndCallTimer = null;
+        callEndTimeout = null;
     }, 500);
 }
 
 async function endCall() {
-    if (forceEndCallTimer) {
-        clearTimeout(forceEndCallTimer);
+    if (callEndTimeout) {
+        clearTimeout(callEndTimeout);
     }
     
     if (peerConnection) {
@@ -1792,10 +1746,10 @@ async function endCall() {
         currentCallId = null;
     }
     
-    const activeCallContainer = document.getElementById('activeCallContainer');
+    const activeContainer = document.getElementById('activeCallContainer');
     const incomingModal = document.getElementById('incomingCallModal');
     
-    if (activeCallContainer) activeCallContainer.style.display = 'none';
+    if (activeContainer) activeContainer.style.display = 'none';
     if (incomingModal) incomingModal.style.display = 'none';
     
     stopCallTimer();
@@ -1807,10 +1761,8 @@ function toggleMute() {
         if (audioTrack) {
             isMuted = !isMuted;
             audioTrack.enabled = !isMuted;
-            const muteButton = document.getElementById('muteButton');
-            if (muteButton) {
-                muteButton.style.opacity = isMuted ? '0.5' : '1';
-            }
+            const muteBtn = document.getElementById('muteButton');
+            if (muteBtn) muteBtn.style.opacity = isMuted ? '0.5' : '1';
         }
     }
 }
@@ -1821,14 +1773,10 @@ function toggleVideo() {
         if (videoTrack) {
             isVideoEnabled = !isVideoEnabled;
             videoTrack.enabled = isVideoEnabled;
-            const videoButton = document.getElementById('videoToggleButton');
-            if (videoButton) {
-                videoButton.style.opacity = isVideoEnabled ? '1' : '0.5';
-            }
+            const videoBtn = document.getElementById('videoToggleButton');
+            if (videoBtn) videoBtn.style.opacity = isVideoEnabled ? '1' : '0.5';
             const localVideo = document.getElementById('localVideo');
-            if (localVideo) {
-                localVideo.style.display = isVideoEnabled ? 'block' : 'none';
-            }
+            if (localVideo) localVideo.style.display = isVideoEnabled ? 'block' : 'none';
         }
     }
 }
@@ -1836,9 +1784,7 @@ function toggleVideo() {
 function startCallTimer() {
     callSeconds = 0;
     updateCallTimer();
-    if (callTimer) {
-        clearInterval(callTimer);
-    }
+    if (callTimer) clearInterval(callTimer);
     callTimer = setInterval(updateCallTimer, 1000);
 }
 
@@ -1853,9 +1799,9 @@ function stopCallTimer() {
 function updateCallTimer() {
     const minutes = Math.floor(callSeconds / 60);
     const seconds = callSeconds % 60;
-    const timerElement = document.getElementById('callTimer');
-    if (timerElement) {
-        timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const timer = document.getElementById('callTimer');
+    if (timer) {
+        timer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
     callSeconds++;
 }
