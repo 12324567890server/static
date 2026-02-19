@@ -99,8 +99,6 @@ let callSeconds = 0;
 let incomingCallListener = null;
 let isMuted = false;
 let isVideoEnabled = true;
-let ringtoneInterval = null;
-let vibrationInterval = null;
 
 const STUN_SERVERS = {
     iceServers: [
@@ -211,7 +209,6 @@ function handleBeforeUnload() {
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
-    stopRingtone();
 }
 
 async function updateOnlineStatus(isOnline) {
@@ -1392,16 +1389,6 @@ function listenForIncomingCalls() {
                     const callData = change.doc.data();
                     showIncomingCall(callData, change.doc.id);
                 }
-                if (change.type === 'modified') {
-                    const callData = change.doc.data();
-                    if (callData.status === 'answered') {
-                        stopRingtone();
-                        document.getElementById('incomingCallModal').style.display = 'none';
-                    } else if (callData.status === 'ended' || callData.status === 'declined') {
-                        stopRingtone();
-                        document.getElementById('incomingCallModal').style.display = 'none';
-                    }
-                }
             });
         });
 }
@@ -1414,13 +1401,6 @@ function showIncomingCall(callData, callId) {
     document.getElementById('callType').textContent = callData.type === 'video' ? 'видеозвонок' : 'аудиозвонок';
     
     document.getElementById('incomingCallModal').style.display = 'flex';
-}
-
-function stopRingtone() {
-    if (vibrationInterval) {
-        clearInterval(vibrationInterval);
-        vibrationInterval = null;
-    }
 }
 
 async function initiateCall(isVideo) {
@@ -1485,12 +1465,9 @@ async function initiateCall(isVideo) {
 function setupCallListener(callId) {
     db.collection('calls').doc(callId).onSnapshot(snapshot => {
         const data = snapshot.data();
-        if (!data) {
-            endCall();
-            return;
-        }
+        if (!data) return;
         
-        if (data.status === 'answered') {
+        if (data.status === 'answered' && data.calleeId === currentUser.uid) {
             document.getElementById('incomingCallModal').style.display = 'none';
             startCall(callId, data.type === 'video');
         } else if (data.status === 'declined' || data.status === 'ended') {
@@ -1607,14 +1584,6 @@ async function startCall(callId, isVideo) {
             }
         };
 
-        peerConnection.oniceconnectionstatechange = () => {
-            if (peerConnection.iceConnectionState === 'disconnected' || 
-                peerConnection.iceConnectionState === 'failed' ||
-                peerConnection.iceConnectionState === 'closed') {
-                endCall();
-            }
-        };
-
         if (isCaller) {
             const offer = await peerConnection.createOffer({
                 offerToReceiveAudio: true,
@@ -1662,10 +1631,8 @@ function listenForIceCandidates(callId, otherUserId) {
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
-                    try {
-                        const candidate = new RTCIceCandidate(change.doc.data().candidate);
-                        peerConnection.addIceCandidate(candidate);
-                    } catch (e) {}
+                    const candidate = new RTCIceCandidate(change.doc.data().candidate);
+                    peerConnection.addIceCandidate(candidate);
                 }
             });
         });
@@ -1675,9 +1642,7 @@ function listenForAnswer(callId) {
     db.collection('calls').doc(callId).onSnapshot(snapshot => {
         const data = snapshot.data();
         if (data && data.answer && !peerConnection.currentRemoteDescription) {
-            try {
-                peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            } catch (e) {}
+            peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
         }
     });
 }
@@ -1715,10 +1680,7 @@ function toggleMute() {
         if (audioTrack) {
             isMuted = !isMuted;
             audioTrack.enabled = !isMuted;
-            const muteButton = document.getElementById('muteButton');
-            if (muteButton) {
-                muteButton.style.opacity = isMuted ? '0.5' : '1';
-            }
+            document.getElementById('muteButton').style.opacity = isMuted ? '0.5' : '1';
         }
     }
 }
@@ -1729,14 +1691,7 @@ function toggleVideo() {
         if (videoTrack) {
             isVideoEnabled = !isVideoEnabled;
             videoTrack.enabled = isVideoEnabled;
-            const videoButton = document.getElementById('videoToggleButton');
-            if (videoButton) {
-                videoButton.style.opacity = isVideoEnabled ? '1' : '0.5';
-            }
-            const localVideo = document.getElementById('localVideo');
-            if (localVideo) {
-                localVideo.style.display = isVideoEnabled ? 'block' : 'none';
-            }
+            document.getElementById('videoToggleButton').style.opacity = isVideoEnabled ? '1' : '0.5';
         }
     }
 }
@@ -1752,16 +1707,13 @@ function stopCallTimer() {
         clearInterval(callTimer);
         callTimer = null;
     }
-    callSeconds = 0;
 }
 
 function updateCallTimer() {
     const minutes = Math.floor(callSeconds / 60);
     const seconds = callSeconds % 60;
-    const timerElement = document.getElementById('callTimer');
-    if (timerElement) {
-        timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
+    document.getElementById('callTimer').textContent = 
+        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     callSeconds++;
 }
 
