@@ -99,6 +99,8 @@ let callSeconds = 0;
 let incomingCallListener = null;
 let isMuted = false;
 let isVideoEnabled = true;
+let hasCamera = true;
+let hasMicrophone = true;
 
 const STUN_SERVERS = {
     iceServers: [
@@ -1412,6 +1414,9 @@ async function initiateCall(isVideo) {
     try {
         showLoading(true);
         
+        let hasVideo = isVideo;
+        let hasAudio = true;
+        
         try {
             localStream = await navigator.mediaDevices.getUserMedia({
                 audio: true,
@@ -1423,11 +1428,18 @@ async function initiateCall(isVideo) {
                     audio: true,
                     video: false
                 });
-                isVideo = false;
+                hasVideo = false;
             } catch (audioError) {
-                showLoading(false);
-                alert('Нет доступа к микрофону');
-                return;
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: false,
+                        video: false
+                    });
+                    hasAudio = false;
+                    hasVideo = false;
+                } catch (emptyError) {
+                    localStream = null;
+                }
             }
         }
 
@@ -1438,7 +1450,7 @@ async function initiateCall(isVideo) {
             callerName: currentUser.username,
             calleeId: currentChatUserId,
             status: 'ringing',
-            type: isVideo ? 'video' : 'audio',
+            type: hasVideo ? 'video' : 'audio',
             createdAt: new Date().toISOString()
         });
 
@@ -1540,28 +1552,37 @@ async function startCall(callId, isVideo) {
                     });
                     isVideo = false;
                 } catch (audioError) {
-                    alert('Нет доступа к микрофону');
-                    return;
+                    try {
+                        localStream = await navigator.mediaDevices.getUserMedia({
+                            audio: false,
+                            video: false
+                        });
+                    } catch (emptyError) {
+                        localStream = null;
+                    }
                 }
             }
         }
 
         peerConnection = new RTCPeerConnection(STUN_SERVERS);
 
-        localStream.getTracks().forEach(track => {
-            peerConnection.addTrack(track, localStream);
-        });
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+        }
 
-        if (isVideo) {
-            document.getElementById('activeCallContainer').style.display = 'block';
+        document.getElementById('activeCallContainer').style.display = 'block';
+        
+        if (isVideo && localStream && localStream.getVideoTracks().length > 0) {
             document.getElementById('videoContainer').style.display = 'block';
             document.getElementById('audioOnlyContainer').style.display = 'none';
             const localVideo = document.getElementById('localVideo');
             if (localVideo) {
                 localVideo.srcObject = localStream;
+                localVideo.style.display = 'block';
             }
         } else {
-            document.getElementById('activeCallContainer').style.display = 'block';
             document.getElementById('videoContainer').style.display = 'none';
             document.getElementById('audioOnlyContainer').style.display = 'flex';
             document.getElementById('audioAvatar').textContent = otherUser.username.charAt(0).toUpperCase();
@@ -1572,6 +1593,7 @@ async function startCall(callId, isVideo) {
                 const remoteVideo = document.getElementById('remoteVideo');
                 if (remoteVideo) {
                     remoteVideo.srcObject = event.streams[0];
+                    remoteVideo.style.display = 'block';
                 }
             }
         };
