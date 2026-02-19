@@ -1697,6 +1697,13 @@ function updateCallTimer() {
     callSeconds++;
 }
 
+window.initiateCall = initiateCall;
+window.answerCall = answerCall;
+window.declineCall = declineCall;
+window.endCall = endCall;
+window.toggleMute = toggleMute;
+window.toggleVideo = toggleVideo;
+
 window.fixStatus = async function() {
     if (!currentUser) {
         alert('Сначала войдите');
