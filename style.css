@@ -1092,101 +1092,6 @@ body {
     font-weight: bold;
 }
 
-.nexus-call-active {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: #000;
-    z-index: 9000;
-}
-
-.nexus-video-grid {
-    width: 100%;
-    height: 100%;
-    position: relative;
-}
-
-.nexus-video-remote {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.nexus-video-local {
-    position: absolute;
-    bottom: 100px;
-    right: 20px;
-    width: 120px;
-    height: 160px;
-    object-fit: cover;
-    border-radius: 12px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-}
-
-.nexus-audio-only {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, #1a0f2e, #0d0820);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.nexus-audio-avatar {
-    width: 150px;
-    height: 150px;
-    background: linear-gradient(135deg, #6a2be2, #9b4dff);
-    border-radius: 50px;
-    transform: rotate(45deg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 60px;
-    font-weight: bold;
-    color: white;
-    animation: nexusPulse 2s infinite;
-    position: relative;
-}
-
-.nexus-audio-avatar::before {
-    content: '';
-    position: absolute;
-    inset: -5px;
-    border-radius: 55px;
-    background: linear-gradient(135deg, #b19cd9, #6a2be2);
-    opacity: 0.5;
-    z-index: -1;
-    animation: nexusGlow 2s infinite;
-}
-
-.nexus-call-controls {
-    position: absolute;
-    bottom: 30px;
-    left: 0;
-    width: 100%;
-    text-align: center;
-}
-
-.nexus-timer {
-    color: white;
-    font-size: 18px;
-    margin-bottom: 10px;
-}
-
-.nexus-participant {
-    color: white;
-    font-size: 16px;
-    margin-bottom: 20px;
-}
-
-.nexus-controls-row {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-}
-
 .nexus-control-btn {
     width: 50px;
     height: 50px;
@@ -1255,4 +1160,4 @@ body {
     .message {
         max-width: 85%;
     }
-    }
+}
