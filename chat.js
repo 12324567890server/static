@@ -101,6 +101,7 @@ let isMuted = false;
 let isVideoEnabled = true;
 let hasCamera = true;
 let hasMicrophone = true;
+let forceEndCallTimer = null;
 
 const STUN_SERVERS = {
     iceServers: [
@@ -210,6 +211,9 @@ function handleBeforeUnload() {
     }
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
+    }
+    if (forceEndCallTimer) {
+        clearTimeout(forceEndCallTimer);
     }
 }
 
@@ -1391,6 +1395,15 @@ function listenForIncomingCalls() {
                     const callData = change.doc.data();
                     showIncomingCall(callData, change.doc.id);
                 }
+                if (change.type === 'modified') {
+                    const callData = change.doc.data();
+                    if (callData.status === 'ended' || callData.status === 'declined') {
+                        forceEndCall();
+                    }
+                }
+                if (change.type === 'removed') {
+                    forceEndCall();
+                }
             });
         });
 }
@@ -1477,13 +1490,16 @@ async function initiateCall(isVideo) {
 function setupCallListener(callId) {
     db.collection('calls').doc(callId).onSnapshot(snapshot => {
         const data = snapshot.data();
-        if (!data) return;
+        if (!data) {
+            forceEndCall();
+            return;
+        }
         
         if (data.status === 'answered') {
             document.getElementById('incomingCallModal').style.display = 'none';
             startCall(callId, data.type === 'video');
         } else if (data.status === 'declined' || data.status === 'ended') {
-            endCall();
+            forceEndCall();
         }
     });
 }
@@ -1608,6 +1624,22 @@ async function startCall(callId, isVideo) {
             }
         };
 
+        peerConnection.oniceconnectionstatechange = () => {
+            if (peerConnection.iceConnectionState === 'disconnected' || 
+                peerConnection.iceConnectionState === 'failed' ||
+                peerConnection.iceConnectionState === 'closed') {
+                forceEndCall();
+            }
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+            if (peerConnection.connectionState === 'disconnected' || 
+                peerConnection.connectionState === 'failed' ||
+                peerConnection.connectionState === 'closed') {
+                forceEndCall();
+            }
+        };
+
         if (isCaller) {
             const offer = await peerConnection.createOffer({
                 offerToReceiveAudio: true,
@@ -1655,8 +1687,10 @@ function listenForIceCandidates(callId, otherUserId) {
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
-                    const candidate = new RTCIceCandidate(change.doc.data().candidate);
-                    peerConnection.addIceCandidate(candidate);
+                    try {
+                        const candidate = new RTCIceCandidate(change.doc.data().candidate);
+                        peerConnection.addIceCandidate(candidate);
+                    } catch (e) {}
                 }
             });
         });
@@ -1666,12 +1700,43 @@ function listenForAnswer(callId) {
     db.collection('calls').doc(callId).onSnapshot(snapshot => {
         const data = snapshot.data();
         if (data && data.answer && !peerConnection.currentRemoteDescription) {
-            peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            try {
+                peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } catch (e) {}
         }
     });
 }
 
+function forceEndCall() {
+    if (forceEndCallTimer) {
+        clearTimeout(forceEndCallTimer);
+    }
+    
+    forceEndCallTimer = setTimeout(() => {
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+        
+        document.getElementById('activeCallContainer').style.display = 'none';
+        document.getElementById('incomingCallModal').style.display = 'none';
+        
+        stopCallTimer();
+        currentCallId = null;
+        forceEndCallTimer = null;
+    }, 500);
+}
+
 async function endCall() {
+    if (forceEndCallTimer) {
+        clearTimeout(forceEndCallTimer);
+    }
+    
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
@@ -1704,7 +1769,10 @@ function toggleMute() {
         if (audioTrack) {
             isMuted = !isMuted;
             audioTrack.enabled = !isMuted;
-            document.getElementById('muteButton').style.opacity = isMuted ? '0.5' : '1';
+            const muteButton = document.getElementById('muteButton');
+            if (muteButton) {
+                muteButton.style.opacity = isMuted ? '0.5' : '1';
+            }
         }
     }
 }
@@ -1715,7 +1783,14 @@ function toggleVideo() {
         if (videoTrack) {
             isVideoEnabled = !isVideoEnabled;
             videoTrack.enabled = isVideoEnabled;
-            document.getElementById('videoToggleButton').style.opacity = isVideoEnabled ? '1' : '0.5';
+            const videoButton = document.getElementById('videoToggleButton');
+            if (videoButton) {
+                videoButton.style.opacity = isVideoEnabled ? '1' : '0.5';
+            }
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) {
+                localVideo.style.display = isVideoEnabled ? 'block' : 'none';
+            }
         }
     }
 }
@@ -1723,6 +1798,9 @@ function toggleVideo() {
 function startCallTimer() {
     callSeconds = 0;
     updateCallTimer();
+    if (callTimer) {
+        clearInterval(callTimer);
+    }
     callTimer = setInterval(updateCallTimer, 1000);
 }
 
@@ -1731,13 +1809,16 @@ function stopCallTimer() {
         clearInterval(callTimer);
         callTimer = null;
     }
+    callSeconds = 0;
 }
 
 function updateCallTimer() {
     const minutes = Math.floor(callSeconds / 60);
     const seconds = callSeconds % 60;
-    document.getElementById('callTimer').textContent = 
-        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const timerElement = document.getElementById('callTimer');
+    if (timerElement) {
+        timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
     callSeconds++;
 }
 
