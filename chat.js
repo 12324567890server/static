@@ -123,10 +123,7 @@ async function createCallsCollection() {
             initialized: true,
             timestamp: new Date().toISOString()
         });
-        console.log('Коллекция calls создана');
-    } catch (error) {
-        console.log('Ошибка создания calls:', error);
-    }
+    } catch (error) {}
 }
 
 function init() {
@@ -1415,10 +1412,16 @@ async function initiateCall(isVideo) {
     try {
         showLoading(true);
         
-        localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: isVideo
-        });
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: isVideo
+            });
+        } catch (mediaError) {
+            showLoading(false);
+            alert('Ошибка доступа к микрофону/камере. Разрешите доступ в браузере.');
+            return;
+        }
 
         currentCallId = [currentUser.uid, currentChatUserId].sort().join('_') + '_' + Date.now();
 
@@ -1432,12 +1435,22 @@ async function initiateCall(isVideo) {
         });
 
         setupCallListener(currentCallId);
-        
         showLoading(false);
+        
+        setTimeout(() => {
+            if (currentCallId) {
+                db.collection('calls').doc(currentCallId).get().then(doc => {
+                    if (doc.exists && doc.data().status === 'ringing') {
+                        endCall();
+                        alert('Абонент не ответил');
+                    }
+                });
+            }
+        }, 30000);
         
     } catch (error) {
         showLoading(false);
-        alert('Не удалось получить доступ к камере/микрофону');
+        alert('Ошибка при звонке: ' + error.message);
     }
 }
 
@@ -1557,7 +1570,6 @@ async function startCall(callId, isVideo) {
                 }
             });
         } else {
-            const callData = callDoc.data();
             if (callData.offer) {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer));
                 const answer = await peerConnection.createAnswer();
