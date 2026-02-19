@@ -1515,7 +1515,8 @@ function setupCallListener(callId) {
         }
         
         if (data.status === 'answered') {
-            document.getElementById('incomingCallModal').style.display = 'none';
+            const incomingModal = document.getElementById('incomingCallModal');
+            if (incomingModal) incomingModal.style.display = 'none';
             startCall(callId, data.type === 'video');
         } else if (data.status === 'declined' || data.status === 'ended') {
             forceEndCall();
@@ -1532,7 +1533,8 @@ async function answerCall() {
             answeredAt: new Date().toISOString()
         });
         
-        document.getElementById('incomingCallModal').style.display = 'none';
+        const incomingModal = document.getElementById('incomingCallModal');
+        if (incomingModal) incomingModal.style.display = 'none';
         
         const callDoc = await db.collection('calls').doc(currentCallId).get();
         const callData = callDoc.data();
@@ -1552,7 +1554,8 @@ async function declineCall() {
             status: 'declined'
         });
         
-        document.getElementById('incomingCallModal').style.display = 'none';
+        const incomingModal = document.getElementById('incomingCallModal');
+        if (incomingModal) incomingModal.style.display = 'none';
         currentCallId = null;
         
     } catch (error) {
@@ -1571,7 +1574,8 @@ async function startCall(callId, isVideo) {
         const otherUserId = isCaller ? callData.calleeId : callData.callerId;
         
         const otherUser = await findUserById(otherUserId);
-        document.getElementById('callParticipant').textContent = otherUser.username;
+        const participantElement = document.getElementById('callParticipant');
+        if (participantElement) participantElement.textContent = otherUser.username;
         
         if (!localStream) {
             try {
