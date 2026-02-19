@@ -1467,7 +1467,7 @@ function setupCallListener(callId) {
         const data = snapshot.data();
         if (!data) return;
         
-        if (data.status === 'answered' && data.calleeId === currentUser.uid) {
+        if (data.status === 'answered') {
             document.getElementById('incomingCallModal').style.display = 'none';
             startCall(callId, data.type === 'video');
         } else if (data.status === 'declined' || data.status === 'ended') {
@@ -1554,13 +1554,15 @@ async function startCall(callId, isVideo) {
 
         if (isVideo) {
             document.getElementById('activeCallContainer').style.display = 'block';
+            document.getElementById('videoContainer').style.display = 'block';
+            document.getElementById('audioOnlyContainer').style.display = 'none';
             const localVideo = document.getElementById('localVideo');
             if (localVideo) {
                 localVideo.srcObject = localStream;
-                localVideo.style.display = 'block';
             }
         } else {
             document.getElementById('activeCallContainer').style.display = 'block';
+            document.getElementById('videoContainer').style.display = 'none';
             document.getElementById('audioOnlyContainer').style.display = 'flex';
             document.getElementById('audioAvatar').textContent = otherUser.username.charAt(0).toUpperCase();
         }
