@@ -111,40 +111,6 @@ let callTimeoutId = null;
 let isCallActive = false;
 let callParticipantName = '';
 
-const ICE_SERVERS = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:stun.ekiga.net' },
-        { urls: 'stun:stun.ideasip.com' },
-        { urls: 'stun:stun.schlund.de' },
-        { urls: 'stun:stun.stunprotocol.org:3478' },
-        { urls: 'stun:stun.voiparound.com' },
-        { urls: 'stun:stun.voipbuster.com' },
-        { urls: 'stun:stun.voipstunt.com' },
-        { urls: 'stun:stun.voxgratia.org' },
-        {
-            urls: 'turn:numb.viagenie.ca',
-            credential: 'muazkh',
-            username: 'webrtc@live.com'
-        },
-        {
-            urls: 'turn:192.158.29.39:3478?transport=udp',
-            credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=',
-            username: '28224511:1379330808'
-        },
-        {
-            urls: 'turn:192.158.29.39:3478?transport=tcp',
-            credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=',
-            username: '28224511:1379330808'
-        }
-    ],
-    iceCandidatePoolSize: 10
-};
-
 document.addEventListener('DOMContentLoaded', function() {
     init();
 });
@@ -360,6 +326,7 @@ async function checkUser() {
                 setupTypingListener();
                 listenForIncomingCalls();
                 createCallsCollection();
+                cleanupStaleCalls();
             } else {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -1173,6 +1140,7 @@ async function login() {
         setupTypingListener();
         listenForIncomingCalls();
         createCallsCollection();
+        cleanupStaleCalls();
           
     } catch (e) {
         showError(elements.loginError, 'Ошибка при входе');
@@ -1420,6 +1388,20 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+async function cleanupStaleCalls() {
+    try {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const snapshot = await db.collection('calls')
+            .where('createdAt', '<', fiveMinutesAgo)
+            .where('status', 'in', ['ringing', 'answered'])
+            .get();
+        
+        snapshot.forEach(doc => {
+            doc.ref.update({ status: 'ended', endedAt: new Date().toISOString() });
+        });
+    } catch (e) {}
+}
+
 function listenForIncomingCalls() {
     if (!currentUser) return;
     
@@ -1493,10 +1475,13 @@ async function initiateCall(isVideo) {
                 isVideo = false;
             } catch (audioError) {
                 showLoading(false);
-                alert('Нет доступа к микрофону. Проверьте разрешения.');
+                alert('Нет доступа к микрофону');
                 return;
             }
         }
+
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo) localVideo.srcObject = localStream;
 
         const activeCalls = await db.collection('calls')
             .where('calleeId', '==', currentChatUserId)
@@ -1638,8 +1623,10 @@ async function startCall(callId, isVideo) {
         const participantEl = document.getElementById('callParticipant');
         if (participantEl) participantEl.textContent = callParticipantName;
         
+        callSeconds = 0;
         const timerEl = document.getElementById('callTimer');
         if (timerEl) timerEl.textContent = '00:00';
+        startCallTimer();
         
         if (!localStream) {
             try {
@@ -1662,7 +1649,17 @@ async function startCall(callId, isVideo) {
             }
         }
 
-        peerConnection = new RTCPeerConnection(ICE_SERVERS);
+        const peerConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+            ]
+        };
+        
+        peerConnection = new RTCPeerConnection(peerConfig);
 
         localStream.getTracks().forEach(track => {
             peerConnection.addTrack(track, localStream);
@@ -1675,34 +1672,21 @@ async function startCall(callId, isVideo) {
         const remoteVideo = document.getElementById('remoteVideo');
         const audioAvatar = document.getElementById('audioAvatar');
         
-        if (activeContainer) {
-            activeContainer.style.display = 'block';
-            activeContainer.style.visibility = 'visible';
+        if (activeContainer) activeContainer.style.display = 'block';
+        
+        if (localVideo && localStream) {
+            localVideo.srcObject = localStream;
         }
         
         if (isVideo && localStream.getVideoTracks().length > 0) {
-            if (videoContainer) {
-                videoContainer.style.display = 'block';
-                videoContainer.style.visibility = 'visible';
-            }
-            if (audioContainer) {
-                audioContainer.style.display = 'none';
-            }
-            if (localVideo) {
-                localVideo.srcObject = localStream;
-                localVideo.style.display = 'block';
-            }
+            if (videoContainer) videoContainer.style.display = 'block';
+            if (audioContainer) audioContainer.style.display = 'none';
+            if (localVideo) localVideo.style.display = 'block';
         } else {
-            if (videoContainer) {
-                videoContainer.style.display = 'none';
-            }
-            if (audioContainer) {
-                audioContainer.style.display = 'flex';
-                audioContainer.style.visibility = 'visible';
-            }
+            if (videoContainer) videoContainer.style.display = 'none';
+            if (audioContainer) audioContainer.style.display = 'flex';
             if (audioAvatar && otherUser) {
                 audioAvatar.textContent = otherUser.username.charAt(0).toUpperCase();
-                audioAvatar.style.display = 'flex';
             }
         }
 
