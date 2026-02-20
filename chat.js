@@ -33,7 +33,6 @@ const elements = {
     chatsList: document.getElementById('chatsList'),
     searchChats: document.getElementById('searchChats'),
     chatsMenuBtn: document.getElementById('chatsMenuBtn'),
-    newChatBtn: document.getElementById('newChatBtn'),
     findFriendsCircleBtn: document.getElementById('findFriendsCircleBtn'),
     backToChats: document.getElementById('backToChats'),
     chatWithUser: document.getElementById('chatWithUser'),
@@ -389,11 +388,6 @@ function showChats() {
     elements.chatsScreen.style.display = 'flex';
     elements.chatScreen.style.display = 'none';
     elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;
-    
-    const callButtons = document.querySelector('.call-header-buttons');
-    if (callButtons) {
-        callButtons.style.display = 'none';
-    }
 }
 
 async function showChat(username) {
@@ -413,11 +407,6 @@ async function showChat(username) {
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
         elements.messageInput.value = '';
-        
-        const callButtons = document.querySelector('.call-header-buttons');
-        if (callButtons) {
-            callButtons.style.display = 'none';
-        }
           
         await loadMessages(user.uid);
         setupTypingDetection();
@@ -511,12 +500,6 @@ function setupEventListeners() {
         }
     });
 
-    elements.newChatBtn.addEventListener('click', () => {
-        elements.newChatUsername.value = '';
-        elements.newChatError.style.display = 'none';
-        showModal('newChatModal');
-    });
-
     elements.findFriendsCircleBtn.addEventListener('click', () => {
         elements.searchUsername.value = '';
         elements.searchResults.innerHTML = '';
@@ -535,11 +518,6 @@ function setupEventListeners() {
             const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
             db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
             typingTimer = null;
-        }
-        
-        const callButtons = document.querySelector('.call-header-buttons');
-        if (callButtons) {
-            callButtons.style.display = 'none';
         }
         
         currentChatWith = null;
@@ -574,8 +552,6 @@ function setupEventListeners() {
             sendMessage();
         }
     });
-
-    elements.startChatBtn.addEventListener('click', startNewChat);
 
     document.querySelectorAll('.close-modal').forEach(btn => {
         btn.addEventListener('click', e => {
@@ -1001,36 +977,6 @@ async function markMessagesAsRead(userId) {
 function updateTitle() {
     const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
     document.title = totalUnread ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
-}
-
-async function startNewChat() {
-    const username = elements.newChatUsername.value.trim();
-    if (!username) {
-        showError(elements.newChatError, 'Введите имя пользователя');
-        return;
-    }
-      
-    if (username === currentUser.username) {
-        showError(elements.newChatError, 'Нельзя начать чат с самим собой');
-        return;
-    }
-
-    showLoading(true);
-    try {
-        const user = await findUserByUsername(username);
-
-        if (!user) {
-            showError(elements.newChatError, 'Пользователь не найден');
-            return;
-        }
-
-        hideModal('newChatModal');
-        await showChat(username);
-    } catch (e) {
-        showError(elements.newChatError, 'Ошибка при поиске пользователя');
-    } finally {
-        showLoading(false);
-    }
 }
 
 async function login() {
