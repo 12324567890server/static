@@ -91,7 +91,6 @@ let heartbeatInterval = null;
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let messageListener = null;
 let connectionId = null;
-
 let mediaRecorder = null;
 let audioChunks = [];
 let recordingTimer = null;
@@ -541,9 +540,7 @@ function setupEventListeners() {
     elements.closeMenu.addEventListener('click', closeMenu);
 
     document.addEventListener('click', e => {
-        if (!elements.sideMenu.contains(e.target) &&   
-            !elements.chatsMenuBtn.contains(e.target) &&
-            elements.sideMenu.classList.contains('show')) {
+        if (!elements.sideMenu.contains(e.target) && !elements.chatsMenuBtn.contains(e.target) && elements.sideMenu.classList.contains('show')) {
             closeMenu();
         }
     });
@@ -585,17 +582,14 @@ function setupEventListeners() {
     });
 
     elements.saveProfileBtn.addEventListener('click', editProfile);
-
     elements.searchBtn.addEventListener('click', searchUsers);
     elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
-
     elements.contactsBtn.addEventListener('click', () => {
         loadContacts();
         showModal('contactsModal');
     });
 
     elements.logoutBtn.addEventListener('click', logout);
-
     elements.sendMessageBtn.addEventListener('click', sendMessage);
       
     elements.messageInput.addEventListener('keypress', e => {
@@ -1022,9 +1016,7 @@ function displayChats() {
     let filteredChats = chats;
       
     if (searchTerm) {
-        filteredChats = chats.filter(chat =>   
-            chat.username.toLowerCase().includes(searchTerm)
-        );
+        filteredChats = chats.filter(chat => chat.username.toLowerCase().includes(searchTerm));
     }
       
     const sortedChats = [...filteredChats].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
