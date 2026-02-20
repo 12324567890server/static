@@ -25,6 +25,7 @@ try {
 }
 
 const db = firebase.firestore();
+const storage = firebase.storage();
 
 const elements = {
     loginScreen: document.getElementById('loginScreen'),
@@ -40,6 +41,9 @@ const elements = {
     privateMessages: document.getElementById('privateMessages'),
     messageInput: document.getElementById('messageInput'),
     sendMessageBtn: document.getElementById('sendMessageBtn'),
+    voiceMessageBtn: document.getElementById('voiceMessageBtn'),
+    voiceRecordingIndicator: document.getElementById('voiceRecordingIndicator'),
+    voiceTimer: document.getElementById('voiceTimer'),
     loginUsername: document.getElementById('loginUsername'),
     loginButton: document.getElementById('loginButton'),
     loginError: document.getElementById('loginError'),
@@ -74,17 +78,26 @@ let chats = [];
 let unreadCounts = {};
 let onlineUsers = new Map();
 let typingUsers = new Map();
+let voiceRecordingUsers = new Map();
 let typingTimeouts = new Map();
 let messagesUnsubscribe = null;
 let chatsUnsubscribe = null;
 let usersUnsubscribe = null;
 let typingUnsubscribe = null;
+let voiceUnsubscribe = null;
 let heartbeatInterval = null;
 let lastReadTime = {};
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let messageListener = null;
 let scrollPositions = {};
 let connectionId = null;
+
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingTimer = null;
+let recordingSeconds = 0;
+let isRecording = false;
+let recordingStartTime = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     init();
@@ -166,6 +179,9 @@ function handleVisibilityChange() {
 function handleBeforeUnload() {
     if (currentUser && connectionId) {
         removeConnection();
+    }
+    if (isRecording) {
+        stopRecording();
     }
 }
 
@@ -281,6 +297,7 @@ async function checkUser() {
                 loadChats();
                 startHeartbeat();
                 setupTypingListener();
+                setupVoiceListener();
             } else {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -293,6 +310,41 @@ async function checkUser() {
     } finally {
         showLoading(false);
     }
+}
+
+function setupVoiceListener() {
+    if (voiceUnsubscribe) {
+        voiceUnsubscribe();
+    }
+    
+    voiceUnsubscribe = db.collection('voiceRecording').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added' || change.type === 'modified') {
+                const data = change.doc.data();
+                if (data.userId !== currentUser?.uid) {
+                    voiceRecordingUsers.set(data.userId, {
+                        isRecording: true,
+                        chatId: data.chatId
+                    });
+                    
+                    if (currentChatUserId === data.userId && data.chatId.includes(currentUser.uid)) {
+                        showVoiceRecordingIndicator();
+                    }
+                    
+                    displayChats();
+                }
+            } else if (change.type === 'removed') {
+                const data = change.doc.data();
+                voiceRecordingUsers.delete(data.userId);
+                
+                if (currentChatUserId === data.userId) {
+                    hideVoiceRecordingIndicator();
+                }
+                
+                displayChats();
+            }
+        });
+    });
 }
 
 function setupTypingListener() {
@@ -311,7 +363,9 @@ function setupTypingListener() {
                     });
                     
                     if (currentChatUserId === data.userId && data.chatId.includes(currentUser.uid)) {
-                        showTypingIndicator();
+                        if (!voiceRecordingUsers.has(data.userId)) {
+                            showTypingIndicator();
+                        }
                     }
                     
                     displayChats();
@@ -321,7 +375,9 @@ function setupTypingListener() {
                 typingUsers.delete(data.userId);
                 
                 if (currentChatUserId === data.userId) {
-                    hideTypingIndicator();
+                    if (!voiceRecordingUsers.has(data.userId)) {
+                        hideTypingIndicator();
+                    }
                 }
                 
                 displayChats();
@@ -371,6 +427,20 @@ function hideTypingIndicator() {
     updateChatStatus();
 }
 
+function showVoiceRecordingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    
+    statusElement.innerHTML = '<span class="voice-recording-animation">🎤 Записывает голосовое сообщение<span>.</span><span>.</span><span>.</span></span>';
+    statusElement.style.color = '#ff7d7d';
+}
+
+function hideVoiceRecordingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    updateChatStatus();
+}
+
 function showLogin() {
     stopHeartbeat();
     cleanupSubscriptions();
@@ -403,6 +473,9 @@ async function showChat(username) {
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
         elements.messageInput.value = '';
+        elements.sendMessageBtn.style.display = 'none';
+        elements.voiceMessageBtn.style.display = 'flex';
+        elements.voiceRecordingIndicator.style.display = 'none';
           
         await loadMessages(user.uid);
         setupTypingDetection();
@@ -419,6 +492,9 @@ async function showChat(username) {
         
         if (typingUsers.has(user.uid)) {
             showTypingIndicator();
+        }
+        if (voiceRecordingUsers.has(user.uid)) {
+            showVoiceRecordingIndicator();
         }
           
     } catch (e) {
@@ -516,6 +592,10 @@ function setupEventListeners() {
             typingTimer = null;
         }
         
+        if (isRecording) {
+            stopRecording();
+        }
+        
         currentChatWith = null;
         currentChatUserId = null;
         isChatActive = false;
@@ -549,6 +629,20 @@ function setupEventListeners() {
         }
     });
 
+    elements.messageInput.addEventListener('focus', () => {
+        elements.sendMessageBtn.style.display = 'flex';
+        elements.voiceMessageBtn.style.display = 'none';
+    });
+
+    elements.messageInput.addEventListener('blur', () => {
+        if (!elements.messageInput.value.trim()) {
+            elements.sendMessageBtn.style.display = 'none';
+            elements.voiceMessageBtn.style.display = 'flex';
+        }
+    });
+
+    setupVoiceButton();
+
     document.querySelectorAll('.close-modal').forEach(btn => {
         btn.addEventListener('click', e => {
             const modal = e.target.closest('.modal');
@@ -572,6 +666,154 @@ function setupEventListeners() {
     });
 
     elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+}
+
+function setupVoiceButton() {
+    const voiceBtn = elements.voiceMessageBtn;
+    if (!voiceBtn) return;
+
+    if (isMobile) {
+        voiceBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startRecording();
+        });
+
+        voiceBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopRecording();
+        });
+
+        voiceBtn.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            stopRecording();
+        });
+    } else {
+        voiceBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startRecording();
+        });
+
+        voiceBtn.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            stopRecording();
+        });
+
+        voiceBtn.addEventListener('mouseleave', (e) => {
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+    }
+}
+
+async function startRecording() {
+    if (!currentChatUserId || !currentUser) return;
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            await sendVoiceMessage(audioBlob);
+            stream.getTracks().forEach(track => track.stop());
+        };
+        
+        mediaRecorder.start();
+        isRecording = true;
+        recordingStartTime = Date.now();
+        
+        elements.voiceRecordingIndicator.style.display = 'flex';
+        elements.sendMessageBtn.style.display = 'none';
+        elements.voiceMessageBtn.style.display = 'none';
+        
+        recordingSeconds = 0;
+        updateVoiceTimer();
+        recordingTimer = setInterval(updateVoiceTimer, 1000);
+        
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        await db.collection('voiceRecording').doc(chatId + '_' + currentUser.uid).set({
+            userId: currentUser.uid,
+            chatId: chatId,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        alert('Не удалось получить доступ к микрофону');
+    }
+}
+
+async function stopRecording() {
+    if (!isRecording || !mediaRecorder) return;
+    
+    if (mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    
+    isRecording = false;
+    
+    elements.voiceRecordingIndicator.style.display = 'none';
+    elements.voiceMessageBtn.style.display = 'flex';
+    
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+    
+    if (currentChatUserId) {
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        await db.collection('voiceRecording').doc(chatId + '_' + currentUser.uid).delete();
+    }
+}
+
+function updateVoiceTimer() {
+    if (!isRecording) return;
+    
+    recordingSeconds++;
+    const minutes = Math.floor(recordingSeconds / 60);
+    const seconds = recordingSeconds % 60;
+    elements.voiceTimer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+async function sendVoiceMessage(audioBlob) {
+    if (!currentChatUserId || !currentUser) return;
+    
+    showLoading(true);
+    
+    try {
+        const fileName = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
+        const storageRef = storage.ref().child(`voice_messages/${currentUser.uid}/${fileName}`);
+        
+        await storageRef.put(audioBlob);
+        const voiceUrl = await storageRef.getDownloadURL();
+        
+        const participantsArray = [currentUser.uid, currentChatUserId].sort();
+        const chatId = participantsArray.join('_');
+        
+        await db.collection('messages').add({
+            chat_id: chatId,
+            participants: participantsArray,
+            sender: currentUser.uid,
+            receiver: currentChatUserId,
+            message: '🎤 Голосовое сообщение',
+            voice_url: voiceUrl,
+            voice_duration: recordingSeconds,
+            type: 'voice',
+            read: false,
+            created_at: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        alert('Не удалось отправить голосовое сообщение');
+    } finally {
+        showLoading(false);
+    }
 }
 
 function closeMenu() {
@@ -628,6 +870,10 @@ function cleanupSubscriptions() {
     if (typingUnsubscribe) {
         typingUnsubscribe();
         typingUnsubscribe = null;
+    }
+    if (voiceUnsubscribe) {
+        voiceUnsubscribe();
+        voiceUnsubscribe = null;
     }
 }
 
@@ -696,6 +942,11 @@ function stopHeartbeat() {
 
 function updateChatStatus() {
     if (!currentChatUserId || !elements.chatStatus) return;
+    
+    if (voiceRecordingUsers.has(currentChatUserId)) {
+        showVoiceRecordingIndicator();
+        return;
+    }
     
     if (typingUsers.has(currentChatUserId)) {
         showTypingIndicator();
@@ -773,9 +1024,10 @@ async function loadChats() {
                 chatsMap.set(otherUserId, {
                     userId: otherUserId,
                     username: otherUsername,
-                    lastMessage: msg.message,
+                    lastMessage: msg.type === 'voice' ? '🎤 Голосовое сообщение' : msg.message,
                     lastTime: msg.created_at,
-                    isMyMessage: msg.sender === currentUser.uid
+                    isMyMessage: msg.sender === currentUser.uid,
+                    type: msg.type || 'text'
                 });
             }
               
@@ -820,12 +1072,15 @@ function displayChats() {
         const userStatus = onlineUsers.get(chat.userId);
         const isOnline = userStatus?.is_online === true;
         const isTyping = typingUsers.has(chat.userId);
+        const isRecording = voiceRecordingUsers.has(chat.userId);
         const unreadCount = unreadCounts[chat.userId] || 0;
         const timeString = formatMessageTime(chat.lastTime);
         const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
         let displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
         
-        if (isTyping) {
+        if (isRecording) {
+            displayMessage = '<span class="voice-recording-animation-small">🎤 Записывает голосовое<span>.</span><span>.</span><span>.</span></span>';
+        } else if (isTyping) {
             displayMessage = '<span class="typing-animation-small">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
         } else {
             displayMessage = escapeHtml(messagePrefix + displayMessage);
@@ -838,7 +1093,7 @@ function displayChats() {
                     ${escapeHtml(chat.username)}
                     <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>
                 </div>
-                <div class="chat-last-message ${isTyping ? 'typing-message' : ''}">${displayMessage}</div>
+                <div class="chat-last-message ${isTyping ? 'typing-message' : ''} ${isRecording ? 'voice-message' : ''}">${displayMessage}</div>
                 <div class="chat-time">${timeString}</div>
             </div>
             ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
@@ -894,16 +1149,61 @@ function displayMessage(msg, isMyMessage, msgId) {
     }
       
     const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
-      
-    messageElement.innerHTML = `
-        <div class="message-content">
-            <div class="text">${escapeHtml(msg.message)}</div>
-            <div class="time">${timeString} ${statusSymbol}</div>
-        </div>
-    `;
-      
+    
+    let contentHtml = '';
+    
+    if (msg.type === 'voice' && msg.voice_url) {
+        const duration = msg.voice_duration || 0;
+        const minutes = Math.floor(duration / 60);
+        const seconds = duration % 60;
+        const durationText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        contentHtml = `
+            <div class="message-content voice-message-content">
+                <div class="voice-message">
+                    <button class="play-voice-btn" onclick="playVoiceMessage('${msg.voice_url}', this)">
+                        <span class="play-icon">▶</span>
+                    </button>
+                    <div class="voice-wave">
+                        <div class="voice-progress" style="width: 0%"></div>
+                    </div>
+                    <span class="voice-duration">${durationText}</span>
+                </div>
+                <div class="time">${timeString} ${statusSymbol}</div>
+            </div>
+        `;
+    } else {
+        contentHtml = `
+            <div class="message-content">
+                <div class="text">${escapeHtml(msg.message)}</div>
+                <div class="time">${timeString} ${statusSymbol}</div>
+            </div>
+        `;
+    }
+    
+    messageElement.innerHTML = contentHtml;
     elements.privateMessages.appendChild(messageElement);
 }
+
+window.playVoiceMessage = function(url, button) {
+    const audio = new Audio(url);
+    const messageElement = button.closest('.voice-message');
+    const progressBar = messageElement.querySelector('.voice-progress');
+    
+    audio.play();
+    
+    audio.ontimeupdate = () => {
+        const progress = (audio.currentTime / audio.duration) * 100;
+        progressBar.style.width = progress + '%';
+    };
+    
+    audio.onended = () => {
+        progressBar.style.width = '0%';
+        button.innerHTML = '<span class="play-icon">▶</span>';
+    };
+    
+    button.innerHTML = '<span class="play-icon">⏸</span>';
+};
 
 function scrollToBottom() {
     if (elements.privateMessages) {
@@ -923,6 +1223,8 @@ async function sendMessage() {
       
     const messageText = elements.messageInput.value.trim();
     elements.messageInput.value = '';
+    elements.sendMessageBtn.style.display = 'none';
+    elements.voiceMessageBtn.style.display = 'flex';
     
     const participantsArray = [currentUser.uid, currentChatUserId].sort();
     const chatId = participantsArray.join('_');
@@ -934,6 +1236,7 @@ async function sendMessage() {
             sender: currentUser.uid,
             receiver: currentChatUserId,
             message: messageText,
+            type: 'text',
             read: false,
             created_at: new Date().toISOString()
         });
@@ -1028,6 +1331,7 @@ async function login() {
         loadChats();
         startHeartbeat();
         setupTypingListener();
+        setupVoiceListener();
           
     } catch (e) {
         showError(elements.loginError, 'Ошибка при входе');
@@ -1219,6 +1523,10 @@ async function logout() {
         await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
         typingTimer = null;
     }
+    
+    if (isRecording) {
+        await stopRecording();
+    }
       
     try {
         await removeConnection();
@@ -1233,6 +1541,7 @@ async function logout() {
     isChatActive = false;
     onlineUsers.clear();
     typingUsers.clear();
+    voiceRecordingUsers.clear();
     unreadCounts = {};
     scrollPositions = {};
     showLogin();
