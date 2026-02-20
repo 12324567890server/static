@@ -640,10 +640,11 @@ function setupVoiceButton() {
         e.preventDefault();
         e.stopPropagation();
         elements.voiceRecordingIndicator.style.display = 'flex';
+        elements.voiceTimer.textContent = '0:00';
         pressTimer = setTimeout(() => {
             isLongPress = true;
             startRecording();
-        }, 150);
+        }, 200);
     });
 
     voiceBtn.addEventListener('touchend', (e) => {
@@ -654,6 +655,7 @@ function setupVoiceButton() {
             stopRecording();
             isLongPress = false;
         }
+        elements.voiceRecordingIndicator.style.display = 'none';
     });
 
     voiceBtn.addEventListener('touchcancel', (e) => {
@@ -664,22 +666,26 @@ function setupVoiceButton() {
             stopRecording();
             isLongPress = false;
         }
+        elements.voiceRecordingIndicator.style.display = 'none';
     });
 
     voiceBtn.addEventListener('mousedown', (e) => {
         e.preventDefault();
         elements.voiceRecordingIndicator.style.display = 'flex';
+        elements.voiceTimer.textContent = '0:00';
         startRecording();
     });
 
     voiceBtn.addEventListener('mouseup', (e) => {
         e.preventDefault();
         stopRecording();
+        elements.voiceRecordingIndicator.style.display = 'none';
     });
 
     voiceBtn.addEventListener('mouseleave', (e) => {
         if (isRecording) {
             stopRecording();
+            elements.voiceRecordingIndicator.style.display = 'none';
         }
     });
 }
@@ -692,27 +698,21 @@ async function startRecording() {
         
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
+        recordingSeconds = 0;
+        isRecording = true;
         
         mediaRecorder.ondataavailable = event => {
             audioChunks.push(event.data);
         };
         
-        mediaRecorder.onstop = async () => {
-            if (audioChunks.length > 0) {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                await sendVoiceMessage(audioBlob);
-            }
-            stream.getTracks().forEach(track => track.stop());
-        };
-        
         mediaRecorder.start();
-        isRecording = true;
-        recordingSeconds = 0;
         
-        elements.voiceRecordingIndicator.style.display = 'flex';
-        
-        updateVoiceTimer();
-        recordingTimer = setInterval(updateVoiceTimer, 1000);
+        recordingTimer = setInterval(() => {
+            recordingSeconds++;
+            const minutes = Math.floor(recordingSeconds / 60);
+            const seconds = recordingSeconds % 60;
+            elements.voiceTimer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
         
         const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
         await db.collection('voiceRecording').doc(chatId + '_' + currentUser.uid).set({
@@ -724,6 +724,7 @@ async function startRecording() {
     } catch (error) {
         alert('Не удалось получить доступ к микрофону');
         elements.voiceRecordingIndicator.style.display = 'none';
+        isRecording = false;
     }
 }
 
@@ -736,8 +737,6 @@ async function stopRecording() {
     
     isRecording = false;
     
-    elements.voiceRecordingIndicator.style.display = 'none';
-    
     if (recordingTimer) {
         clearInterval(recordingTimer);
         recordingTimer = null;
@@ -747,19 +746,10 @@ async function stopRecording() {
         const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
         await db.collection('voiceRecording').doc(chatId + '_' + currentUser.uid).delete();
     }
-}
-
-function updateVoiceTimer() {
-    if (!isRecording) return;
     
-    recordingSeconds++;
-    const minutes = Math.floor(recordingSeconds / 60);
-    const seconds = recordingSeconds % 60;
-    elements.voiceTimer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
-async function sendVoiceMessage(audioBlob) {
-    if (!currentChatUserId || !currentUser) return;
+    if (recordingSeconds < 1) return;
+    
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
     
     showLoading(true);
     
