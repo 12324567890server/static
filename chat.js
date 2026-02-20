@@ -636,20 +636,19 @@ function setupVoiceButton() {
     let pressTimer;
     let isLongPress = false;
 
-    voiceBtn.addEventListener('pointerdown', (e) => {
+    voiceBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
+        elements.voiceRecordingIndicator.style.display = 'flex';
         pressTimer = setTimeout(() => {
             isLongPress = true;
             startRecording();
         }, 150);
     });
 
-    voiceBtn.addEventListener('pointerup', (e) => {
+    voiceBtn.addEventListener('touchend', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
         clearTimeout(pressTimer);
         if (isLongPress) {
             stopRecording();
@@ -657,20 +656,11 @@ function setupVoiceButton() {
         }
     });
 
-    voiceBtn.addEventListener('pointercancel', (e) => {
+    voiceBtn.addEventListener('touchcancel', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
         clearTimeout(pressTimer);
         if (isLongPress) {
-            stopRecording();
-            isLongPress = false;
-        }
-    });
-
-    voiceBtn.addEventListener('pointerleave', (e) => {
-        if (isLongPress) {
-            clearTimeout(pressTimer);
             stopRecording();
             isLongPress = false;
         }
@@ -678,6 +668,7 @@ function setupVoiceButton() {
 
     voiceBtn.addEventListener('mousedown', (e) => {
         e.preventDefault();
+        elements.voiceRecordingIndicator.style.display = 'flex';
         startRecording();
     });
 
@@ -732,6 +723,7 @@ async function startRecording() {
         
     } catch (error) {
         alert('Не удалось получить доступ к микрофону');
+        elements.voiceRecordingIndicator.style.display = 'none';
     }
 }
 
