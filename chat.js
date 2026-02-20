@@ -1,1073 +1,1572 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
+(function() {
+if (typeof firebase === 'undefined') {
+    document.addEventListener('DOMContentLoaded', function() {
+        alert('Ошибка загрузки Firebase. Пожалуйста, обновите страницу.');
+    });
+    return;
 }
 
-html, body {
-    overscroll-behavior-y: none;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
+const firebaseConfig = {
+    apiKey: "AIzaSyCVdthLC_AX8EI5lKsL-6UOpP7B01dIjQ8",
+    authDomain: "speednexusrus.firebaseapp.com",
+    projectId: "speednexusrus",
+    storageBucket: "speednexusrus.firebasestorage.app",
+    messagingSenderId: "524449944041",
+    appId: "1:524449944041:web:362f4343ed1507ec2d3b78"
+};
+
+try {
+    firebase.initializeApp(firebaseConfig);
+} catch (error) {
+    document.addEventListener('DOMContentLoaded', function() {
+        alert('Ошибка подключения к серверу. Пожалуйста, обновите страницу.');
+    });
+    return;
 }
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    background: #2d1b69;
-    color: #ffffff;
+const db = firebase.firestore();
+
+const supabaseUrl = 'https://bncysgnqsgpdpuupzgqj.supabase.co';
+const supabaseKey = 'sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR';
+const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+const elements = {
+    loginScreen: document.getElementById('loginScreen'),
+    chatsScreen: document.getElementById('chatsScreen'),
+    chatScreen: document.getElementById('chatScreen'),
+    chatsList: document.getElementById('chatsList'),
+    searchChats: document.getElementById('searchChats'),
+    chatsMenuBtn: document.getElementById('chatsMenuBtn'),
+    findFriendsCircleBtn: document.getElementById('findFriendsCircleBtn'),
+    backToChats: document.getElementById('backToChats'),
+    chatWithUser: document.getElementById('chatWithUser'),
+    chatStatus: document.getElementById('chatStatus'),
+    privateMessages: document.getElementById('privateMessages'),
+    messageInput: document.getElementById('messageInput'),
+    sendMessageBtn: document.getElementById('sendMessageBtn'),
+    voiceMessageBtn: document.getElementById('voiceMessageBtn'),
+    voiceRecordingIndicator: document.getElementById('voiceRecordingIndicator'),
+    voiceTimer: document.getElementById('voiceTimer'),
+    loginUsername: document.getElementById('loginUsername'),
+    loginButton: document.getElementById('loginButton'),
+    loginError: document.getElementById('loginError'),
+    sideMenu: document.getElementById('sideMenu'),
+    closeMenu: document.getElementById('closeMenu'),
+    currentUsernameDisplay: document.getElementById('currentUsernameDisplay'),
+    userAvatar: document.getElementById('userAvatar'),
+    userStatusDisplay: document.getElementById('userStatusDisplay'),
+    loadingOverlay: document.getElementById('loadingOverlay'),
+    editProfileBtn: document.getElementById('editProfileBtn'),
+    contactsBtn: document.getElementById('contactsBtn'),
+    logoutBtn: document.getElementById('logoutBtn'),
+    editProfileModal: document.getElementById('editProfileModal'),
+    editUsername: document.getElementById('editUsername'),
+    saveProfileBtn: document.getElementById('saveProfileBtn'),
+    editUsernameError: document.getElementById('editUsernameError'),
+    findFriendsModal: document.getElementById('findFriendsModal'),
+    searchUsername: document.getElementById('searchUsername'),
+    searchBtn: document.getElementById('searchBtn'),
+    searchResults: document.getElementById('searchResults'),
+    contactsModal: document.getElementById('contactsModal'),
+    contactsList: document.getElementById('contactsList'),
+    chatsTitle: document.getElementById('chatsTitle')
+};
+
+let currentUser = null;
+let currentChatWith = null;
+let currentChatUserId = null;
+let isChatActive = false;
+let isPageVisible = true;
+let chats = [];
+let unreadCounts = {};
+let onlineUsers = new Map();
+let typingUsers = new Map();
+let voiceRecordingUsers = new Map();
+let messagesUnsubscribe = null;
+let chatsUnsubscribe = null;
+let usersUnsubscribe = null;
+let typingUnsubscribe = null;
+let voiceUnsubscribe = null;
+let heartbeatInterval = null;
+let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+let messageListener = null;
+let connectionId = null;
+
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingTimer = null;
+let recordingSeconds = 0;
+let isRecording = false;
+let typingTimer = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    init();
+});
+
+function init() {
+    checkUser();
+    setupEventListeners();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    setInterval(cleanupOldConnections, 3000);
 }
 
-.login-screen {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    padding: 20px;
-    background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
-    position: relative;
-    overflow: hidden;
+async function cleanupOldConnections() {
+    try {
+        const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
+        const usersSnapshot = await db.collection('users').get();
+        
+        for (const userDoc of usersSnapshot.docs) {
+            const userId = userDoc.id;
+            
+            const activeConnections = await db.collection('users')
+                .doc(userId)
+                .collection('connections')
+                .where('is_online', '==', true)
+                .where('last_seen', '>', threeSecondsAgo)
+                .get();
+            
+            const shouldBeOnline = !activeConnections.empty;
+            const currentStatus = userDoc.data().is_online;
+            
+            if (currentStatus !== shouldBeOnline) {
+                await db.collection('users').doc(userId).update({
+                    is_online: shouldBeOnline,
+                    last_check: new Date().toISOString()
+                });
+            }
+            
+            const deadConnections = await db.collection('users')
+                .doc(userId)
+                .collection('connections')
+                .where('is_online', '==', true)
+                .where('last_seen', '<', threeSecondsAgo)
+                .get();
+            
+            deadConnections.forEach(doc => {
+                doc.ref.update({ is_online: false });
+            });
+        }
+    } catch (e) {}
 }
 
-.login-container {
-    background: rgba(45, 27, 105, 0.9);
-    border-radius: 20px;
-    padding: 35px 25px;
-    width: 100%;
-    max-width: 380px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(123, 44, 255, 0.3);
-}
-
-.login-header h1 {
-    font-size: 30px;
-    background: linear-gradient(135deg, #b19cd9 0%, #d8bfd8 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-weight: 800;
-    text-align: center;
-    margin-bottom: 25px;
-}
-
-.login-input {
-    width: 100%;
-    padding: 14px 18px;
-    border-radius: 12px;
-    border: 2px solid rgba(177, 156, 217, 0.5);
-    background: rgba(74, 44, 140, 0.7);
-    color: #ffffff;
-    font-size: 15px;
-    margin-bottom: 15px;
-    outline: none;
-}
-
-.login-input:focus {
-    border-color: #b19cd9;
-    box-shadow: 0 0 0 3px rgba(177, 156, 217, 0.3);
-}
-
-.login-btn {
-    width: 100%;
-    padding: 14px;
-    border-radius: 12px;
-    border: none;
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    color: white;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.login-btn:active {
-    transform: scale(0.98);
-}
-
-.error-message {
-    color: #ff7d7d;
-    font-size: 13px;
-    margin-bottom: 15px;
-    text-align: center;
-    min-height: 20px;
-    display: none;
-}
-
-.chats-screen {
-    display: none;
-    flex-direction: column;
-    height: 100vh;
-    background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
-    position: relative;
-    overflow: hidden;
-}
-
-.chats-header {
-    background: linear-gradient(135deg, #6a0dad 0%, #8a2be2 100%);
-    padding: 12px 20px;
-    flex-shrink: 0;
-}
-
-.header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.chats-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: white;
-}
-
-.menu-btn {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 24px;
-    cursor: pointer;
-    padding: 8px;
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.search-input {
-    width: 100%;
-    padding: 12px 15px;
-    border-radius: 10px;
-    border: none;
-    background: rgba(177, 156, 217, 0.2);
-    color: white;
-    font-size: 14px;
-    margin-top: 10px;
-    outline: none;
-}
-
-.search-input::placeholder {
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.chats-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 12px 0;
-    -webkit-overflow-scrolling: touch;
-    background: rgba(45, 27, 105, 0.5);
-}
-
-.chats-list::-webkit-scrollbar {
-    width: 5px;
-}
-
-.chats-list::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-}
-
-.chats-list::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-    border-radius: 10px;
-}
-
-.chat-item {
-    display: flex;
-    align-items: center;
-    padding: 14px 20px;
-    border-bottom: 1px solid rgba(177, 156, 217, 0.2);
-    cursor: pointer;
-    transition: background 0.2s;
-    position: relative;
-    background: rgba(74, 44, 140, 0.3);
-}
-
-.chat-item:active {
-    background: rgba(177, 156, 217, 0.2);
-}
-
-.chat-avatar {
-    width: 45px;
-    height: 45px;
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: bold;
-    color: white;
-    margin-right: 15px;
-    flex-shrink: 0;
-    position: relative;
-}
-
-.chat-avatar.online::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 12px;
-    height: 12px;
-    background: #4CAF50;
-    border: 2px solid #2d1b69;
-    border-radius: 50%;
-}
-
-.chat-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.chat-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.chat-status-text {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.chat-status-text.online {
-    color: #b19cd9;
-    font-weight: 500;
-}
-
-.chat-last-message {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.8);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.typing-message {
-    color: #b19cd9;
-}
-
-.voice-message {
-    color: #ff7d7d;
-}
-
-.typing-animation span, .voice-recording-animation span {
-    animation: blink 1.4s infinite;
-    animation-fill-mode: both;
-}
-
-.typing-animation span:nth-child(2), .voice-recording-animation span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.typing-animation span:nth-child(3), .voice-recording-animation span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-.typing-animation-small span, .voice-recording-animation-small span {
-    animation: blink 1.4s infinite;
-    animation-fill-mode: both;
-}
-
-.typing-animation-small span:nth-child(2), .voice-recording-animation-small span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.typing-animation-small span:nth-child(3), .voice-recording-animation-small span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes blink {
-    0%, 100% { opacity: 0.2; }
-    50% { opacity: 1; }
-}
-
-.chat-time {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
-    margin-top: 3px;
-}
-
-.unread-badge {
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    color: white;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px 8px;
-    border-radius: 10px;
-    min-width: 20px;
-    text-align: center;
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-.action-buttons {
-    position: fixed;
-    bottom: 25px;
-    right: 25px;
-    display: flex;
-    flex-direction: column-reverse;
-    align-items: flex-end;
-    gap: 12px;
-    z-index: 100;
-}
-
-.find-friends-circle-btn {
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    border: none;
-    color: white;
-    cursor: pointer;
-    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.find-friends-circle-btn:active {
-    transform: scale(0.95);
-}
-
-.find-friends-icon {
-    width: 24px;
-    height: 24px;
-    display: inline-block;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>');
-}
-
-.chat-screen {
-    display: none;
-    flex-direction: column;
-    height: 100vh;
-    background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
-    position: relative;
-    overflow: hidden;
-}
-
-.chat-header {
-    background: linear-gradient(135deg, #6a0dad 0%, #8a2be2 100%);
-    padding: 12px 20px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-}
-
-.back-btn {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 24px;
-    cursor: pointer;
-    padding: 6px;
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.back-btn:active {
-    opacity: 0.7;
-}
-
-.chat-header-info {
-    flex: 1;
-    text-align: center;
-    padding: 0 8px;
-}
-
-.chat-username {
-    font-size: 17px;
-    font-weight: 600;
-    color: white;
-    margin-bottom: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.chat-status {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.9);
-    height: 17px;
-    min-height: 17px;
-}
-
-.private-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 18px;
-    background: linear-gradient(180deg, #2d1b69 0%, #3d237d 100%);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    -webkit-overflow-scrolling: touch;
-}
-
-.private-messages::-webkit-scrollbar {
-    width: 5px;
-}
-
-.private-messages::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-}
-
-.private-messages::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-    border-radius: 10px;
-}
-
-.message {
-    max-width: 80%;
-    min-width: 55px;
-    animation: messageAppear 0.2s ease-out forwards;
-    opacity: 0;
-    transform: translateY(10px);
-}
-
-@keyframes messageAppear {
-    to {
-        opacity: 1;
-        transform: translateY(0);
+function handleVisibilityChange() {
+    isPageVisible = !document.hidden;
+    if (currentUser && connectionId) {
+        updateOnlineStatus(!document.hidden);
     }
 }
 
-.message.me {
-    align-self: flex-end;
-}
-
-.message.other {
-    align-self: flex-start;
-}
-
-.message-content {
-    padding: 10px 14px;
-    border-radius: 18px;
-    line-height: 1.4;
-    word-wrap: break-word;
-    font-size: 14px;
-}
-
-.message.me .message-content {
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    color: white;
-    border-bottom-right-radius: 5px;
-}
-
-.message.other .message-content {
-    background: rgba(74, 44, 140, 0.7);
-    color: #ffffff;
-    border: 1px solid rgba(177, 156, 217, 0.3);
-    border-bottom-left-radius: 5px;
-}
-
-.voice-message-content {
-    padding: 8px 12px !important;
-}
-
-.voice-message {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 180px;
-}
-
-.play-voice-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 14px;
-    flex-shrink: 0;
-}
-
-.play-voice-btn:active {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.play-icon {
-    font-size: 14px;
-}
-
-.voice-wave {
-    flex: 1;
-    height: 30px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 15px;
-    position: relative;
-    overflow: hidden;
-}
-
-.voice-progress {
-    position: absolute;
-    left: 0;
-    top: 0;
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #b19cd9, #d8bfd8);
-    border-radius: 15px;
-    transition: width 0.1s linear;
-}
-
-.voice-duration {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.7);
-    min-width: 35px;
-    text-align: right;
-}
-
-.message .time {
-    font-size: 10px;
-    text-align: right;
-    opacity: 0.7;
-    margin-top: 4px;
-}
-
-.message-input-container {
-    display: flex;
-    gap: 10px;
-    padding: 12px 20px;
-    background: rgba(45, 27, 105, 0.8);
-    border-top: 1px solid rgba(177, 156, 217, 0.3);
-    flex-shrink: 0;
-    position: relative;
-    align-items: center;
-}
-
-.message-input {
-    flex: 1;
-    padding: 12px 15px;
-    border-radius: 25px;
-    border: 2px solid rgba(177, 156, 217, 0.5);
-    background: rgba(74, 44, 140, 0.7);
-    color: #ffffff;
-    font-size: 14px;
-    outline: none;
-    min-height: 44px;
-}
-
-.message-input:focus {
-    border-color: #b19cd9;
-}
-
-.message-buttons {
-    display: flex;
-    gap: 8px;
-}
-
-.action-btn {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
-    transition: transform 0.2s;
-    flex-shrink: 0;
-}
-
-.action-btn:active {
-    transform: scale(0.95);
-}
-
-.send-icon {
-    width: 24px;
-    height: 24px;
-    display: inline-block;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><polygon points="2,3 22,12 2,21 8,12 2,3"/></svg>');
-}
-
-.voice-icon {
-    width: 24px;
-    height: 24px;
-    display: inline-block;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>');
-}
-
-.voice-recording-indicator {
-    position: absolute;
-    right: 20px;
-    bottom: calc(100% + 10px);
-    background: rgba(255, 125, 125, 0.9);
-    border-radius: 30px;
-    padding: 8px 16px;
-    display: none;
-    align-items: center;
-    gap: 10px;
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    animation: slideUp 0.3s ease;
-    z-index: 10;
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
+function handleBeforeUnload() {
+    if (currentUser && connectionId) {
+        removeConnection();
     }
-    to {
-        opacity: 1;
-        transform: translateY(0);
+    if (isRecording) {
+        stopRecording();
     }
 }
 
-.recording-dot {
-    width: 12px;
-    height: 12px;
-    background: #ff0000;
-    border-radius: 50%;
-    animation: pulse 1.5s infinite;
+async function updateOnlineStatus(isOnline) {
+    if (!currentUser || !connectionId) return;
+    
+    try {
+        const now = new Date().toISOString();
+        
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .collection('connections')
+            .doc(connectionId)
+            .set({
+                connection_id: connectionId,
+                is_online: isOnline,
+                last_seen: now,
+                device: isMobile ? 'mobile' : 'desktop'
+            });
+        
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .update({
+                is_online: isOnline,
+                last_seen: now
+            });
+    } catch (e) {}
 }
 
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.5;
-        transform: scale(1.2);
-    }
+async function createConnection() {
+    if (!currentUser) return;
+    
+    try {
+        const now = new Date().toISOString();
+        
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .collection('connections')
+            .doc(connectionId)
+            .set({
+                connection_id: connectionId,
+                created_at: now,
+                last_seen: now,
+                is_online: true,
+                device: isMobile ? 'mobile' : 'desktop'
+            });
+        
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .set({
+                uid: currentUser.uid,
+                username: currentUser.username,
+                is_online: true,
+                last_seen: now
+            }, { merge: true });
+    } catch (e) {}
 }
 
-#voiceTimer {
-    font-weight: bold;
-    color: white;
-    font-size: 14px;
+async function removeConnection() {
+    if (!currentUser || !connectionId) return;
+    
+    try {
+        const now = new Date().toISOString();
+        
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .collection('connections')
+            .doc(connectionId)
+            .update({
+                is_online: false,
+                last_seen: now
+            });
+        
+        const activeConnections = await db.collection('users')
+            .doc(currentUser.uid)
+            .collection('connections')
+            .where('is_online', '==', true)
+            .get();
+        
+        if (activeConnections.empty) {
+            await db.collection('users')
+                .doc(currentUser.uid)
+                .update({
+                    is_online: false,
+                    last_seen: now
+                });
+        }
+    } catch (e) {}
 }
 
-.recording-text {
-    font-size: 12px;
-    color: white;
-}
-
-.icon {
-    width: 24px;
-    height: 24px;
-    display: inline-block;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-}
-
-.menu-icon {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>');
-}
-
-.edit-icon {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>');
-}
-
-.contacts-icon {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-1 .05 1.16.84 2 1.87 2 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>');
-}
-
-.logout-icon {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>');
-}
-
-.side-menu {
-    position: fixed;
-    top: 0;
-    right: -300px;
-    width: 280px;
-    height: 100%;
-    background: rgba(45, 27, 105, 0.95);
-    z-index: 2000;
-    transition: right 0.3s ease;
-    border-left: 1px solid rgba(177, 156, 217, 0.3);
-    display: none;
-    backdrop-filter: blur(10px);
-}
-
-.side-menu.show {
-    right: 0;
-}
-
-.side-menu-header {
-    padding: 18px 15px;
-    background: linear-gradient(135deg, #6a0dad 0%, #8a2be2 100%);
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.user-avatar {
-    width: 45px;
-    height: 45px;
-    background: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    font-weight: bold;
-    color: #8a2be2;
-}
-
-.user-info h4 {
-    color: white;
-    font-size: 16px;
-    margin-bottom: 3px;
-}
-
-.user-status {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.close-menu-btn {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 26px;
-    cursor: pointer;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.side-menu-content {
-    padding: 18px 15px;
-}
-
-.side-menu-btn {
-    width: 100%;
-    padding: 14px;
-    background: rgba(74, 44, 140, 0.5);
-    border: 1px solid rgba(177, 156, 217, 0.3);
-    border-radius: 12px;
-    color: #ffffff;
-    font-size: 14px;
-    cursor: pointer;
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 10px;
-}
-
-.side-menu-btn:active {
-    background: rgba(177, 156, 217, 0.2);
-}
-
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    z-index: 3000;
-    padding: 15px;
-}
-
-.modal-content {
-    background: rgba(45, 27, 105, 0.95);
-    border-radius: 16px;
-    width: 100%;
-    max-width: 380px;
-    max-height: 90vh;
-    overflow: hidden;
-    border: 1px solid rgba(177, 156, 217, 0.3);
-    animation: modalAppear 0.3s ease;
-    backdrop-filter: blur(10px);
-}
-
-.modal-header {
-    padding: 16px 18px;
-    background: linear-gradient(135deg, #6a0dad 0%, #8a2be2 100%);
-    color: white;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.modal-header h3 {
-    font-size: 17px;
-    font-weight: 600;
-}
-
-.close-modal {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 26px;
-    cursor: pointer;
-    width: 34px;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-body {
-    padding: 18px;
-    overflow-y: auto;
-    max-height: calc(90vh - 65px);
-    -webkit-overflow-scrolling: touch;
-}
-
-.modal-body::-webkit-scrollbar {
-    width: 5px;
-}
-
-.modal-body::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-}
-
-.modal-body::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-    border-radius: 10px;
-}
-
-.modal-input {
-    width: 100%;
-    padding: 13px 16px;
-    border-radius: 12px;
-    border: 2px solid rgba(177, 156, 217, 0.5);
-    background: rgba(74, 44, 140, 0.7);
-    color: #ffffff;
-    font-size: 14px;
-    outline: none;
-    margin-bottom: 15px;
-}
-
-.modal-input:focus {
-    border-color: #b19cd9;
-}
-
-.modal-btn {
-    width: 100%;
-    padding: 14px;
-    border-radius: 12px;
-    border: none;
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    color: white;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.modal-btn:active {
-    transform: scale(0.98);
-}
-
-.search-results {
-    margin-top: 18px;
-    max-height: 300px;
-    overflow-y: auto;
-}
-
-.user-result {
-    background: rgba(74, 44, 140, 0.5);
-    border-radius: 12px;
-    padding: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    cursor: pointer;
-    border: 1px solid rgba(177, 156, 217, 0.3);
-}
-
-.user-result:active {
-    background: rgba(177, 156, 217, 0.2);
-}
-
-.user-result-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.user-result-avatar {
-    width: 34px;
-    height: 34px;
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
-    font-weight: bold;
-    color: white;
-    position: relative;
-}
-
-.user-result-avatar.online::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    right: -2px;
-    width: 9px;
-    height: 9px;
-    background: #4CAF50;
-    border: 2px solid #2d1b69;
-    border-radius: 50%;
-}
-
-.user-result-name {
-    color: #ffffff;
-    font-weight: 500;
-    font-size: 14px;
-}
-
-.contacts-list {
-    max-height: 280px;
-    overflow-y: auto;
-}
-
-.contact-item {
-    background: rgba(74, 44, 140, 0.5);
-    border-radius: 12px;
-    padding: 12px;
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
-    cursor: pointer;
-    border: 1px solid rgba(177, 156, 217, 0.3);
-}
-
-.contact-avatar {
-    width: 34px;
-    height: 34px;
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
-    font-weight: bold;
-    color: white;
-    margin-right: 10px;
-    position: relative;
-}
-
-.contact-avatar.online::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    right: -2px;
-    width: 9px;
-    height: 9px;
-    background: #4CAF50;
-    border: 2px solid #2d1b69;
-    border-radius: 50%;
-}
-
-.contact-name {
-    color: #ffffff;
-    font-weight: 500;
-    font-size: 14px;
-}
-
-.loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    z-index: 4000;
-    backdrop-filter: blur(3px);
-}
-
-.spinner {
-    width: 45px;
-    height: 45px;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    border-radius: 50%;
-    border-top-color: #b19cd9;
-    animation: spin 1s ease-in-out infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-@keyframes modalAppear {
-    from {
-        opacity: 0;
-        transform: translateY(-20px) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
+async function checkUser() {
+    showLoading(true);
+    try {
+        const saved = localStorage.getItem('speednexus_user');
+        if (saved) {
+            const userData = JSON.parse(saved);
+            const userDoc = await db.collection('users').doc(userData.uid).get();
+              
+            if (userDoc.exists) {
+                currentUser = {
+                    uid: userDoc.id,
+                    username: userDoc.data().username
+                };
+                  
+                connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                  
+                await createConnection();
+                await updateOnlineStatus(true);
+                  
+                showChats();
+                updateUI();
+                setupRealtimeSubscriptions();
+                loadChats();
+                startHeartbeat();
+                setupTypingListener();
+                setupVoiceListener();
+            } else {
+                localStorage.removeItem('speednexus_user');
+                showLogin();
+            }
+        } else {
+            showLogin();
+        }
+    } catch (e) {
+        showLogin();
+    } finally {
+        showLoading(false);
     }
 }
 
-@media (max-width: 480px) {
-    .action-buttons {
-        bottom: 15px;
-        right: 15px;
-        gap: 10px;
+function setupVoiceListener() {
+    if (voiceUnsubscribe) {
+        voiceUnsubscribe();
     }
     
-    .find-friends-circle-btn {
-        width: 48px;
-        height: 48px;
+    voiceUnsubscribe = db.collection('voiceRecording').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added' || change.type === 'modified') {
+                const data = change.doc.data();
+                if (data.userId !== currentUser?.uid) {
+                    voiceRecordingUsers.set(data.userId, {
+                        isRecording: true,
+                        chatId: data.chatId
+                    });
+                    
+                    if (currentChatUserId === data.userId && data.chatId.includes(currentUser.uid)) {
+                        showVoiceRecordingIndicator();
+                    }
+                    
+                    displayChats();
+                }
+            } else if (change.type === 'removed') {
+                const data = change.doc.data();
+                voiceRecordingUsers.delete(data.userId);
+                
+                if (currentChatUserId === data.userId) {
+                    hideVoiceRecordingIndicator();
+                }
+                
+                displayChats();
+            }
+        });
+    });
+}
+
+function setupTypingListener() {
+    if (typingUnsubscribe) {
+        typingUnsubscribe();
     }
     
-    .message {
-        max-width: 85%;
-    }
+    typingUnsubscribe = db.collection('typing').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added' || change.type === 'modified') {
+                const data = change.doc.data();
+                if (data.userId !== currentUser?.uid) {
+                    typingUsers.set(data.userId, {
+                        isTyping: true,
+                        chatId: data.chatId
+                    });
+                    
+                    if (currentChatUserId === data.userId && data.chatId.includes(currentUser.uid)) {
+                        if (!voiceRecordingUsers.has(data.userId)) {
+                            showTypingIndicator();
+                        }
+                    }
+                    
+                    displayChats();
+                }
+            } else if (change.type === 'removed') {
+                const data = change.doc.data();
+                typingUsers.delete(data.userId);
+                
+                if (currentChatUserId === data.userId) {
+                    if (!voiceRecordingUsers.has(data.userId)) {
+                        hideTypingIndicator();
+                    }
+                }
+                
+                displayChats();
+            }
+        });
+    });
+}
+
+function setupTypingDetection() {
+    if (!currentChatUserId) return;
     
-    .voice-recording-indicator {
-        right: 10px;
-        padding: 6px 12px;
-    }
+    elements.messageInput.addEventListener('input', () => {
+        if (!currentChatUserId) return;
+        
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        
+        if (typingTimer) {
+            clearTimeout(typingTimer);
+        } else {
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).set({
+                userId: currentUser.uid,
+                chatId: chatId,
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        typingTimer = setTimeout(() => {
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+            typingTimer = null;
+        }, 3000);
+    });
+}
+
+function showTypingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
     
-    .recording-text {
-        display: none;
+    statusElement.innerHTML = '<span class="typing-animation">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
+    statusElement.style.color = '#b19cd9';
+}
+
+function hideTypingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    updateChatStatus();
+}
+
+function showVoiceRecordingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    
+    statusElement.innerHTML = '<span class="voice-recording-animation">🎤 Записывает голосовое сообщение<span>.</span><span>.</span><span>.</span></span>';
+    statusElement.style.color = '#ff7d7d';
+}
+
+function hideVoiceRecordingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    updateChatStatus();
+}
+
+function showLogin() {
+    stopHeartbeat();
+    cleanupSubscriptions();
+    elements.loginScreen.style.display = 'flex';
+    elements.chatsScreen.style.display = 'none';
+    elements.chatScreen.style.display = 'none';
+}
+
+function showChats() {
+    elements.loginScreen.style.display = 'none';
+    elements.chatsScreen.style.display = 'flex';
+    elements.chatScreen.style.display = 'none';
+    elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;
+}
+
+async function showChat(username) {
+    showLoading(true);
+    try {
+        const user = await findUserByUsername(username);
+        if (!user) {
+            return;
+        }
+
+        currentChatWith = username;
+        currentChatUserId = user.uid;
+        isChatActive = true;
+          
+        elements.chatWithUser.textContent = username;
+        elements.chatsScreen.style.display = 'none';
+        elements.chatScreen.style.display = 'flex';
+        elements.privateMessages.innerHTML = '';
+        elements.messageInput.value = '';
+          
+        await loadMessages(user.uid);
+        setupTypingDetection();
+          
+        setTimeout(() => {
+            if (isChatActive && isPageVisible) {
+                markMessagesAsRead(user.uid);
+            }
+        }, 1500);
+          
+        updateChatStatus();
+        scrollToBottom();
+        setupMessageListener(user.uid);
+        
+        if (typingUsers.has(user.uid)) {
+            showTypingIndicator();
+        }
+        if (voiceRecordingUsers.has(user.uid)) {
+            showVoiceRecordingIndicator();
+        }
+          
+    } catch (e) {
+    } finally {
+        showLoading(false);
     }
 }
+
+function setupMessageListener(userId) {
+    if (messageListener) {
+        messageListener();
+    }
+
+    messageListener = db.collection('messages')
+        .where('chat_id', '==', [currentUser.uid, userId].sort().join('_'))
+        .orderBy('created_at')
+        .onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const msg = change.doc.data();
+                    const msgId = change.doc.id;
+                      
+                    if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
+                        const isMyMessage = (msg.sender === currentUser.uid);
+                        displayMessage(msg, isMyMessage, msgId);
+                          
+                        if (isChatActive && currentChatUserId === userId) {
+                            scrollToBottom();
+                              
+                            if (!isMyMessage && !msg.read) {
+                                markMessagesAsRead(userId);
+                            }
+                        }
+                    }
+                } else if (change.type === 'modified') {
+                    const msg = change.doc.data();
+                    const msgId = change.doc.id;
+                    const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
+                    
+                    if (messageElement && msg.read) {
+                        const timeElement = messageElement.querySelector('.time');
+                        if (timeElement && messageElement.classList.contains('me')) {
+                            timeElement.textContent = timeElement.textContent.replace('✓', '✓✓');
+                        }
+                    }
+                }
+            });
+        });
+}
+
+function updateUI() {
+    if (currentUser) {
+        elements.currentUsernameDisplay.textContent = currentUser.username;
+        elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
+        elements.userStatusDisplay.textContent = 'на связи';
+    }
+}
+
+function setupEventListeners() {
+    elements.loginButton.addEventListener('click', login);
+    elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
+
+    elements.chatsMenuBtn.addEventListener('click', () => {
+        elements.sideMenu.style.display = 'block';
+        setTimeout(() => elements.sideMenu.classList.add('show'), 10);
+    });
+
+    elements.closeMenu.addEventListener('click', closeMenu);
+
+    document.addEventListener('click', e => {
+        if (!elements.sideMenu.contains(e.target) &&   
+            !elements.chatsMenuBtn.contains(e.target) &&
+            elements.sideMenu.classList.contains('show')) {
+            closeMenu();
+        }
+    });
+
+    elements.findFriendsCircleBtn.addEventListener('click', () => {
+        elements.searchUsername.value = '';
+        elements.searchResults.innerHTML = '';
+        showModal('findFriendsModal');
+        setTimeout(() => searchUsers(), 100);
+    });
+
+    elements.backToChats.addEventListener('click', () => {
+        if (messageListener) {
+            messageListener();
+            messageListener = null;
+        }
+        
+        if (typingTimer) {
+            clearTimeout(typingTimer);
+            const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+            typingTimer = null;
+        }
+        
+        if (isRecording) {
+            stopRecording();
+        }
+        
+        currentChatWith = null;
+        currentChatUserId = null;
+        isChatActive = false;
+        showChats();
+    });
+
+    elements.editProfileBtn.addEventListener('click', () => {
+        elements.editUsername.value = currentUser?.username || '';
+        elements.editUsernameError.style.display = 'none';
+        showModal('editProfileModal');
+    });
+
+    elements.saveProfileBtn.addEventListener('click', editProfile);
+
+    elements.searchBtn.addEventListener('click', searchUsers);
+    elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
+
+    elements.contactsBtn.addEventListener('click', () => {
+        loadContacts();
+        showModal('contactsModal');
+    });
+
+    elements.logoutBtn.addEventListener('click', logout);
+
+    elements.sendMessageBtn.addEventListener('click', sendMessage);
+      
+    elements.messageInput.addEventListener('keypress', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    setupVoiceButton();
+
+    document.querySelectorAll('.close-modal').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const modal = e.target.closest('.modal');
+            if (modal) hideModal(modal.id);
+        });
+    });
+
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', e => {
+            if (e.target === modal) hideModal(modal.id);
+        });
+    });
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+            if (elements.sideMenu.classList.contains('show')) {
+                closeMenu();
+            }
+        }
+    });
+
+    elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+}
+
+function setupVoiceButton() {
+    const voiceBtn = elements.voiceMessageBtn;
+    if (!voiceBtn) return;
+
+    if (isMobile) {
+        voiceBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startRecording();
+        });
+
+        voiceBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopRecording();
+        });
+
+        voiceBtn.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            stopRecording();
+        });
+    } else {
+        voiceBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startRecording();
+        });
+
+        voiceBtn.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            stopRecording();
+        });
+
+        voiceBtn.addEventListener('mouseleave', (e) => {
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+    }
+}
+
+async function startRecording() {
+    if (!currentChatUserId || !currentUser) return;
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = async () => {
+            if (audioChunks.length > 0) {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                await sendVoiceMessage(audioBlob);
+            }
+            stream.getTracks().forEach(track => track.stop());
+        };
+        
+        mediaRecorder.start();
+        isRecording = true;
+        recordingSeconds = 0;
+        
+        elements.voiceRecordingIndicator.style.display = 'flex';
+        
+        updateVoiceTimer();
+        recordingTimer = setInterval(updateVoiceTimer, 1000);
+        
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        await db.collection('voiceRecording').doc(chatId + '_' + currentUser.uid).set({
+            userId: currentUser.uid,
+            chatId: chatId,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        alert('Не удалось получить доступ к микрофону');
+    }
+}
+
+async function stopRecording() {
+    if (!isRecording || !mediaRecorder) return;
+    
+    if (mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    
+    isRecording = false;
+    
+    elements.voiceRecordingIndicator.style.display = 'none';
+    
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+    
+    if (currentChatUserId) {
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        await db.collection('voiceRecording').doc(chatId + '_' + currentUser.uid).delete();
+    }
+}
+
+function updateVoiceTimer() {
+    if (!isRecording) return;
+    
+    recordingSeconds++;
+    const minutes = Math.floor(recordingSeconds / 60);
+    const seconds = recordingSeconds % 60;
+    elements.voiceTimer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+async function sendVoiceMessage(audioBlob) {
+    if (!currentChatUserId || !currentUser) return;
+    
+    showLoading(true);
+    
+    try {
+        const fileName = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
+        
+        const { data, error } = await supabase.storage
+            .from('voice-messages')
+            .upload(fileName, audioBlob, {
+                contentType: 'audio/webm'
+            });
+        
+        if (error) throw error;
+        
+        const { data: urlData } = supabase.storage
+            .from('voice-messages')
+            .getPublicUrl(fileName);
+        
+        const voiceUrl = urlData.publicUrl;
+        
+        const participantsArray = [currentUser.uid, currentChatUserId].sort();
+        const chatId = participantsArray.join('_');
+        
+        await db.collection('messages').add({
+            chat_id: chatId,
+            participants: participantsArray,
+            sender: currentUser.uid,
+            receiver: currentChatUserId,
+            message: '🎤 Голосовое сообщение',
+            voice_url: voiceUrl,
+            voice_duration: recordingSeconds,
+            type: 'voice',
+            read: false,
+            created_at: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        alert('Не удалось отправить голосовое сообщение');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function closeMenu() {
+    elements.sideMenu.classList.remove('show');
+    setTimeout(() => elements.sideMenu.style.display = 'none', 300);
+}
+
+function showLoading(show) {
+    elements.loadingOverlay.style.display = show ? 'flex' : 'none';
+}
+
+function showModal(id) {
+    document.getElementById(id).style.display = 'flex';
+}
+
+function hideModal(id) {
+    document.getElementById(id).style.display = 'none';
+}
+
+function showError(element, message) {
+    element.textContent = message;
+    element.style.display = 'block';
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+function cleanupSubscriptions() {
+    if (messagesUnsubscribe) {
+        messagesUnsubscribe();
+        messagesUnsubscribe = null;
+    }
+    if (chatsUnsubscribe) {
+        chatsUnsubscribe();
+        chatsUnsubscribe = null;
+    }
+    if (usersUnsubscribe) {
+        usersUnsubscribe();
+        usersUnsubscribe = null;
+    }
+    if (messageListener) {
+        messageListener();
+        messageListener = null;
+    }
+    if (typingUnsubscribe) {
+        typingUnsubscribe();
+        typingUnsubscribe = null;
+    }
+    if (voiceUnsubscribe) {
+        voiceUnsubscribe();
+        voiceUnsubscribe = null;
+    }
+}
+
+function setupRealtimeSubscriptions() {
+    cleanupSubscriptions();
+
+    if (!currentUser) return;
+
+    usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'modified' || change.type === 'added') {
+                const userData = change.doc.data();
+                onlineUsers.set(change.doc.id, {
+                    username: userData.username,
+                    is_online: userData.is_online === true
+                });
+                
+                if (currentChatUserId === change.doc.id) {
+                    currentChatWith = userData.username;
+                    elements.chatWithUser.textContent = userData.username;
+                }
+                
+                if (currentUser && change.doc.id === currentUser.uid) {
+                    currentUser.username = userData.username;
+                    localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+                    updateUI();
+                    elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
+                }
+            } else if (change.type === 'removed') {
+                onlineUsers.delete(change.doc.id);
+            }
+        });
+          
+        if (currentChatWith) {
+            updateChatStatus();
+        }
+        displayChats();
+        updateSearchResultsWithStatus();
+        updateContactsWithStatus();
+    });
+
+    chatsUnsubscribe = db.collection('messages')
+        .where('participants', 'array-contains', currentUser.uid)
+        .orderBy('created_at', 'desc')
+        .onSnapshot(() => {
+            loadChats();
+        });
+}
+
+function startHeartbeat() {
+    stopHeartbeat();
+      
+    heartbeatInterval = setInterval(() => {
+        if (currentUser && connectionId && navigator.onLine && !document.hidden) {
+            updateOnlineStatus(true);
+        }
+    }, 5000);
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+function updateChatStatus() {
+    if (!currentChatUserId || !elements.chatStatus) return;
+    
+    if (voiceRecordingUsers.has(currentChatUserId)) {
+        showVoiceRecordingIndicator();
+        return;
+    }
+    
+    if (typingUsers.has(currentChatUserId)) {
+        showTypingIndicator();
+        return;
+    }
+    
+    const user = onlineUsers.get(currentChatUserId);
+    const isOnline = user?.is_online === true;
+      
+    if (isOnline) {
+        elements.chatStatus.textContent = 'на связи';
+        elements.chatStatus.style.color = '#4CAF50';
+    } else {
+        elements.chatStatus.textContent = 'был(а) недавно';
+        elements.chatStatus.style.color = 'rgba(255,255,255,0.5)';
+    }
+}
+
+async function findUserByUsername(username) {
+    const snapshot = await db.collection('users').where('username', '==', username).get();
+    if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        return {
+            uid: doc.id,
+            username: doc.data().username
+        };
+    }
+    return null;
+}
+
+async function findUserById(userId) {
+    const doc = await db.collection('users').doc(userId).get();
+    if (doc.exists) {
+        return {
+            uid: doc.id,
+            username: doc.data().username
+        };
+    }
+    return null;
+}
+
+async function loadChats() {
+    if (!currentUser) return;
+      
+    try {
+        const snapshot = await db.collection('messages')
+            .where('participants', 'array-contains', currentUser.uid)
+            .orderBy('created_at', 'desc')
+            .get();
+
+        const chatsMap = new Map();
+        const newUnreadCounts = {};
+
+        const promises = snapshot.docs.map(async (doc) => {
+            const msg = doc.data();
+            const otherUserId = msg.sender === currentUser.uid ? msg.receiver : msg.sender;
+              
+            let otherUsername = onlineUsers.get(otherUserId)?.username;
+            if (!otherUsername) {
+                const user = await findUserById(otherUserId);
+                if (user) {
+                    otherUsername = user.username;
+                } else {
+                    otherUsername = otherUserId;
+                }
+            }
+              
+            return { msg, otherUserId, otherUsername };
+        });
+
+        const results = await Promise.all(promises);
+          
+        results.forEach(({ msg, otherUserId, otherUsername }) => {
+            if (!chatsMap.has(otherUserId) || new Date(msg.created_at) > new Date(chatsMap.get(otherUserId).lastTime)) {
+                chatsMap.set(otherUserId, {
+                    userId: otherUserId,
+                    username: otherUsername,
+                    lastMessage: msg.type === 'voice' ? '🎤 Голосовое сообщение' : msg.message,
+                    lastTime: msg.created_at,
+                    isMyMessage: msg.sender === currentUser.uid,
+                    type: msg.type || 'text'
+                });
+            }
+              
+            if (msg.receiver === currentUser.uid && !msg.read) {
+                newUnreadCounts[otherUserId] = (newUnreadCounts[otherUserId] || 0) + 1;
+            }
+        });
+
+        chats = Array.from(chatsMap.values());
+        unreadCounts = newUnreadCounts;
+        displayChats();
+        updateTitle();
+    } catch (e) {}
+}
+
+function displayChats() {
+    if (!elements.chatsList) return;
+      
+    const searchTerm = elements.searchChats.value.toLowerCase();
+    let filteredChats = chats;
+      
+    if (searchTerm) {
+        filteredChats = chats.filter(chat =>   
+            chat.username.toLowerCase().includes(searchTerm)
+        );
+    }
+      
+    const sortedChats = [...filteredChats].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+      
+    elements.chatsList.innerHTML = '';
+      
+    if (sortedChats.length === 0) {
+        elements.chatsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px 20px;">Нет чатов</div>';
+        return;
+    }
+
+    sortedChats.forEach(chat => {
+        const div = document.createElement('div');
+        div.className = 'chat-item';
+        div.onclick = () => showChat(chat.username);
+          
+        const userStatus = onlineUsers.get(chat.userId);
+        const isOnline = userStatus?.is_online === true;
+        const isTyping = typingUsers.has(chat.userId);
+        const isRecording = voiceRecordingUsers.has(chat.userId);
+        const unreadCount = unreadCounts[chat.userId] || 0;
+        const timeString = formatMessageTime(chat.lastTime);
+        const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
+        let displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
+        
+        if (isRecording) {
+            displayMessage = '<span class="voice-recording-animation-small">🎤 Записывает голосовое<span>.</span><span>.</span><span>.</span></span>';
+        } else if (isTyping) {
+            displayMessage = '<span class="typing-animation-small">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
+        } else {
+            displayMessage = escapeHtml(messagePrefix + displayMessage);
+        }
+          
+        div.innerHTML = `
+            <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
+            <div class="chat-info">
+                <div class="chat-name">
+                    ${escapeHtml(chat.username)}
+                    <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>
+                </div>
+                <div class="chat-last-message ${isTyping ? 'typing-message' : ''} ${isRecording ? 'voice-message' : ''}">${displayMessage}</div>
+                <div class="chat-time">${timeString}</div>
+            </div>
+            ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
+        `;
+          
+        elements.chatsList.appendChild(div);
+    });
+}
+
+function filterChats(searchTerm) {
+    displayChats();
+}
+
+async function loadMessages(userId) {
+    if (!userId || !currentUser) return;
+      
+    try {
+        const snapshot = await db.collection('messages')
+            .where('chat_id', '==', [currentUser.uid, userId].sort().join('_'))
+            .orderBy('created_at')
+            .get();
+
+        elements.privateMessages.innerHTML = '';
+        snapshot.forEach(doc => {
+            const msg = doc.data();
+            const isMyMessage = (msg.sender === currentUser.uid);
+            displayMessage(msg, isMyMessage, doc.id);
+        });
+          
+        scrollToBottom();
+    } catch (e) {}
+}
+
+function displayMessage(msg, isMyMessage, msgId) {
+    const messageElement = document.createElement('div');
+    messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
+    messageElement.dataset.messageId = msgId;
+      
+    let timeString = '';
+    if (msg.created_at) {
+        try {
+            const messageDate = new Date(msg.created_at);
+            if (!isNaN(messageDate.getTime())) {
+                timeString = messageDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            } else {
+                timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            }
+        } catch (e) {
+            timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        }
+    } else {
+        timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+      
+    const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
+    
+    let contentHtml = '';
+    
+    if (msg.type === 'voice' && msg.voice_url) {
+        const duration = msg.voice_duration || 0;
+        const minutes = Math.floor(duration / 60);
+        const seconds = duration % 60;
+        const durationText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        contentHtml = `
+            <div class="message-content voice-message-content">
+                <div class="voice-message">
+                    <button class="play-voice-btn" onclick="playVoiceMessage('${msg.voice_url}', this)">
+                        <span class="play-icon">▶</span>
+                    </button>
+                    <div class="voice-wave">
+                        <div class="voice-progress" style="width: 0%"></div>
+                    </div>
+                    <span class="voice-duration">${durationText}</span>
+                </div>
+                <div class="time">${timeString} ${statusSymbol}</div>
+            </div>
+        `;
+    } else {
+        contentHtml = `
+            <div class="message-content">
+                <div class="text">${escapeHtml(msg.message)}</div>
+                <div class="time">${timeString} ${statusSymbol}</div>
+            </div>
+        `;
+    }
+    
+    messageElement.innerHTML = contentHtml;
+    elements.privateMessages.appendChild(messageElement);
+}
+
+window.playVoiceMessage = function(url, button) {
+    const audio = new Audio(url);
+    const messageElement = button.closest('.voice-message');
+    const progressBar = messageElement.querySelector('.voice-progress');
+    
+    audio.play();
+    
+    audio.ontimeupdate = () => {
+        const progress = (audio.currentTime / audio.duration) * 100;
+        progressBar.style.width = progress + '%';
+    };
+    
+    audio.onended = () => {
+        progressBar.style.width = '0%';
+        button.innerHTML = '<span class="play-icon">▶</span>';
+    };
+    
+    button.innerHTML = '<span class="play-icon">⏸</span>';
+};
+
+function scrollToBottom() {
+    if (elements.privateMessages) {
+        elements.privateMessages.scrollTop = elements.privateMessages.scrollHeight;
+    }
+}
+
+async function sendMessage() {
+    if (!currentChatUserId || !currentUser || !elements.messageInput.value.trim()) return;
+    
+    if (typingTimer) {
+        clearTimeout(typingTimer);
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+        typingTimer = null;
+    }
+      
+    const messageText = elements.messageInput.value.trim();
+    elements.messageInput.value = '';
+    
+    const participantsArray = [currentUser.uid, currentChatUserId].sort();
+    const chatId = participantsArray.join('_');
+      
+    try {
+        await db.collection('messages').add({
+            chat_id: chatId,
+            participants: participantsArray,
+            sender: currentUser.uid,
+            receiver: currentChatUserId,
+            message: messageText,
+            type: 'text',
+            read: false,
+            created_at: new Date().toISOString()
+        });
+    } catch (e) {}
+}
+
+async function markMessagesAsRead(userId) {
+    if (!userId || !currentUser || !isChatActive || !isPageVisible) return;
+    
+    try {
+        const snapshot = await db.collection('messages')
+            .where('receiver', '==', currentUser.uid)
+            .where('sender', '==', userId)
+            .where('read', '==', false)
+            .get();
+
+        if (!snapshot.empty) {
+            const batch = db.batch();
+            snapshot.forEach(doc => {
+                batch.update(doc.ref, { 
+                    read: true,
+                    read_at: new Date().toISOString()
+                });
+            });
+            
+            await batch.commit();
+            
+            if (unreadCounts[userId]) {
+                delete unreadCounts[userId];
+                updateTitle();
+                displayChats();
+            }
+        }
+    } catch (e) {}
+}
+
+function updateTitle() {
+    const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+    document.title = totalUnread ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
+}
+
+async function login() {
+    const username = elements.loginUsername.value.trim();
+    if (!username || username.length < 3) {
+        showError(elements.loginError, 'Минимум 3 символа');
+        return;
+    }
+
+    if (username.length > 15) {
+        showError(elements.loginError, 'Максимум 15 символов');
+        return;
+    }
+
+    showLoading(true);
+    try {
+        const existingUser = await findUserByUsername(username);
+        const now = new Date().toISOString();
+          
+        if (existingUser) {
+            currentUser = {
+                uid: existingUser.uid,
+                username: existingUser.username
+            };
+            
+            await db.collection('users').doc(currentUser.uid).update({
+                is_online: true,
+                last_seen: now
+            });
+        } else {
+            const uid = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            
+            await db.collection('users').doc(uid).set({
+                uid: uid,
+                username: username,
+                is_online: true,
+                last_seen: now,
+                created_at: now
+            });
+
+            currentUser = { uid, username };
+        }
+
+        connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+          
+        await createConnection();
+          
+        localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+          
+        showChats();
+        updateUI();
+        setupRealtimeSubscriptions();
+        loadChats();
+        startHeartbeat();
+        setupTypingListener();
+        setupVoiceListener();
+          
+    } catch (e) {
+        showError(elements.loginError, 'Ошибка при входе');
+        localStorage.removeItem('speednexus_user');
+        currentUser = null;
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function editProfile() {
+    const newUsername = elements.editUsername.value.trim();
+    if (!newUsername || newUsername.length < 3) {
+        showError(elements.editUsernameError, 'Минимум 3 символа');
+        return;
+    }
+      
+    if (newUsername.length > 15) {
+        showError(elements.editUsernameError, 'Максимум 15 символов');
+        return;
+    }
+      
+    if (newUsername === currentUser.username) {
+        hideModal('editProfileModal');
+        return;
+    }
+
+    showLoading(true);
+    try {
+        const existingUser = await findUserByUsername(newUsername);
+
+        if (existingUser && existingUser.uid !== currentUser.uid) {
+            showError(elements.editUsernameError, 'Имя пользователя уже занято');
+            return;
+        }
+
+        await db.collection('users').doc(currentUser.uid).update({
+            username: newUsername
+        });
+
+        hideModal('editProfileModal');
+        
+    } catch (e) {
+        showError(elements.editUsernameError, 'Ошибка при изменении профиля');
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function searchUsers() {
+    const searchTerm = elements.searchUsername.value.trim();
+      
+    try {
+        const snapshot = await db.collection('users').get();
+        const users = [];
+          
+        snapshot.forEach(doc => {
+            const user = doc.data();
+            if (!searchTerm || user.username.toLowerCase().includes(searchTerm.toLowerCase())) {
+                if (user.username !== currentUser?.username) {
+                    users.push(user);
+                }
+            }
+        });
+
+        elements.searchResults.innerHTML = '';
+          
+        if (users.length === 0) {
+            elements.searchResults.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Пользователи не найдены</div>';
+            return;
+        }
+
+        users.forEach(user => {
+            const userElement = document.createElement('div');
+            userElement.className = 'user-result';
+            userElement.onclick = () => {
+                hideModal('findFriendsModal');
+                showChat(user.username);
+            };
+              
+            const isOnline = onlineUsers.get(user.uid)?.is_online === true;
+              
+            userElement.innerHTML = `
+                <div class="user-result-info">
+                    <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
+                    <div>
+                        <div class="user-result-name">${escapeHtml(user.username)}</div>
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
+                    </div>
+                </div>
+            `;
+              
+            elements.searchResults.appendChild(userElement);
+        });
+    } catch (e) {
+        elements.searchResults.innerHTML = '<div style="color: #ff7d7d; text-align: center;">Ошибка при поиске</div>';
+    }
+}
+
+function updateSearchResultsWithStatus() {
+    const searchResults = document.querySelectorAll('.user-result');
+    searchResults.forEach(result => {
+        const nameElement = result.querySelector('.user-result-name');
+        if (nameElement) {
+            const username = nameElement.textContent;
+            findUserByUsername(username).then(user => {
+                if (user) {
+                    const isOnline = onlineUsers.get(user.uid)?.is_online === true;
+                    const avatarElement = result.querySelector('.user-result-avatar');
+                    const statusElement = result.querySelector('div[style*="font-size: 12px"]');
+                      
+                    if (avatarElement) {
+                        avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
+                    }
+                    if (statusElement) {
+                        statusElement.textContent = isOnline ? 'на связи' : 'без связи';
+                    }
+                }
+            });
+        }
+    });
+}
+
+function updateContactsWithStatus() {
+    const contactsItems = document.querySelectorAll('.contact-item');
+    contactsItems.forEach(item => {
+        const nameElement = item.querySelector('.contact-name');
+        if (nameElement) {
+            const username = nameElement.textContent;
+            findUserByUsername(username).then(user => {
+                if (user) {
+                    const isOnline = onlineUsers.get(user.uid)?.is_online === true;
+                    const avatarElement = item.querySelector('.contact-avatar');
+                    const statusElement = item.querySelector('div[style*="font-size: 12px"]');
+                      
+                    if (avatarElement) {
+                        avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
+                    }
+                    if (statusElement) {
+                        statusElement.textContent = isOnline ? 'на связи' : 'без связи';
+                    }
+                }
+            });
+        }
+    });
+}
+
+function loadContacts() {
+    const contacts = JSON.parse(localStorage.getItem('speednexus_contacts') || '[]');
+    elements.contactsList.innerHTML = '';
+      
+    if (contacts.length === 0) {
+        elements.contactsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Нет контактов</div>';
+        return;
+    }
+
+    contacts.forEach(contact => {
+        const contactElement = document.createElement('div');
+        contactElement.className = 'contact-item';
+        contactElement.onclick = () => {
+            hideModal('contactsModal');
+            showChat(contact.username);
+        };
+          
+        findUserByUsername(contact.username).then(user => {
+            const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
+              
+            contactElement.innerHTML = `
+                <div class="contact-info">
+                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
+                    <div>
+                        <div class="contact-name">${escapeHtml(contact.username)}</div>
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
+                    </div>
+                </div>
+            `;
+        });
+          
+        elements.contactsList.appendChild(contactElement);
+    });
+}
+
+async function logout() {
+    showLoading(true);
+    
+    if (typingTimer) {
+        clearTimeout(typingTimer);
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+        typingTimer = null;
+    }
+    
+    if (isRecording) {
+        await stopRecording();
+    }
+      
+    try {
+        await removeConnection();
+    } catch (e) {}
+      
+    localStorage.removeItem('speednexus_user');
+    stopHeartbeat();
+    cleanupSubscriptions();
+    currentUser = null;
+    currentChatWith = null;
+    currentChatUserId = null;
+    isChatActive = false;
+    onlineUsers.clear();
+    typingUsers.clear();
+    voiceRecordingUsers.clear();
+    unreadCounts = {};
+    showLogin();
+    showLoading(false);
+}
+
+function formatMessageTime(timestamp) {
+    if (!timestamp) return '';
+      
+    try {
+        const messageDate = new Date(timestamp);
+        if (isNaN(messageDate.getTime())) return '';
+          
+        const now = new Date();
+        const diffMs = now - messageDate;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'только что';
+        if (diffMins < 60) return `${diffMins} мин`;
+        if (diffHours < 24) return `${diffHours} ч`;
+        if (diffDays === 1) return 'вчера';
+        if (diffDays < 7) return `${diffDays} дн`;
+          
+        return messageDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    } catch (e) {
+        return '';
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+window.fixStatus = async function() {
+    if (!currentUser) {
+        alert('Сначала войдите');
+        return;
+    }
+    
+    try {
+        await db.collection('users')
+            .doc(currentUser.uid)
+            .set({
+                uid: currentUser.uid,
+                username: currentUser.username,
+                is_online: true,
+                last_seen: new Date().toISOString()
+            }, { merge: true });
+        
+        alert('Статус обновлен!');
+    } catch (e) {}
+};
+
+})();
