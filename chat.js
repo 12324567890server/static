@@ -159,7 +159,7 @@ async function updateUserStatus(userId) {
 function handleVisibilityChange() {
     isPageVisible = !document.hidden;
     if (currentUser && connectionId) {
-        updateOnlineStatus(true);
+        updateOnlineStatus(!document.hidden);
     }
 }
 
@@ -181,24 +181,15 @@ async function updateOnlineStatus(isOnline) {
             .doc(connectionId)
             .set({
                 connection_id: connectionId,
-                is_online: true,
+                is_online: isOnline,
                 last_seen: now,
                 device: isMobile ? 'mobile' : 'desktop'
             });
         
-        const activeConnections = await db.collection('users')
-            .doc(currentUser.uid)
-            .collection('connections')
-            .where('is_online', '==', true)
-            .where('last_seen', '>', new Date(Date.now() - 5000).toISOString())
-            .get();
-        
-        const reallyOnline = !activeConnections.empty;
-        
         await db.collection('users')
             .doc(currentUser.uid)
             .update({
-                is_online: reallyOnline,
+                is_online: isOnline,
                 last_seen: now
             });
     } catch (e) {}
@@ -690,10 +681,10 @@ function startHeartbeat() {
     stopHeartbeat();
       
     heartbeatInterval = setInterval(() => {
-        if (currentUser && connectionId && navigator.onLine) {
+        if (currentUser && connectionId && navigator.onLine && !document.hidden) {
             updateOnlineStatus(true);
         }
-    }, 3000);
+    }, 5000);
 }
 
 function stopHeartbeat() {
