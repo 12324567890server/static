@@ -99,12 +99,12 @@ function init() {
     setupEventListeners();
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
-    setInterval(cleanupOldConnections, 3000);
+    setInterval(cleanupOldConnections, 5000);
 }
 
 async function cleanupOldConnections() {
     try {
-        const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
+        const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
         const usersSnapshot = await db.collection('users').get();
         
         for (const userDoc of usersSnapshot.docs) {
@@ -114,7 +114,7 @@ async function cleanupOldConnections() {
                 .doc(userId)
                 .collection('connections')
                 .where('is_online', '==', true)
-                .where('last_seen', '>', threeSecondsAgo)
+                .where('last_seen', '>', fiveSecondsAgo)
                 .get();
             
             const shouldBeOnline = !activeConnections.empty;
@@ -131,7 +131,7 @@ async function cleanupOldConnections() {
                 .doc(userId)
                 .collection('connections')
                 .where('is_online', '==', true)
-                .where('last_seen', '<', threeSecondsAgo)
+                .where('last_seen', '<', fiveSecondsAgo)
                 .get();
             
             deadConnections.forEach(doc => {
@@ -143,12 +143,12 @@ async function cleanupOldConnections() {
 
 async function updateUserStatus(userId) {
     try {
-        const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
+        const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
         const connectionsSnapshot = await db.collection('users')
             .doc(userId)
             .collection('connections')
             .where('is_online', '==', true)
-            .where('last_seen', '>', threeSecondsAgo)
+            .where('last_seen', '>', fiveSecondsAgo)
             .get();
 
         const isOnline = !connectionsSnapshot.empty;
@@ -190,10 +190,19 @@ async function updateOnlineStatus(isOnline) {
                 device: isMobile ? 'mobile' : 'desktop'
             });
         
+        const activeConnections = await db.collection('users')
+            .doc(currentUser.uid)
+            .collection('connections')
+            .where('is_online', '==', true)
+            .where('last_seen', '>', new Date(Date.now() - 5000).toISOString())
+            .get();
+        
+        const reallyOnline = !activeConnections.empty;
+        
         await db.collection('users')
             .doc(currentUser.uid)
             .update({
-                is_online: isOnline,
+                is_online: reallyOnline,
                 last_seen: now
             });
     } catch (e) {}
@@ -685,10 +694,10 @@ function startHeartbeat() {
     stopHeartbeat();
       
     heartbeatInterval = setInterval(() => {
-        if (currentUser && connectionId && navigator.onLine && !document.hidden) {
+        if (currentUser && connectionId && navigator.onLine) {
             updateOnlineStatus(true);
         }
-    }, 5000);
+    }, 3000);
 }
 
 function stopHeartbeat() {
@@ -957,10 +966,16 @@ async function markMessagesAsRead(userId) {
         if (!snapshot.empty) {
             const batch = db.batch();
             snapshot.forEach(doc => {
-                batch.update(doc.ref, { 
-                    read: true,
-                    read_at: new Date().toISOString()
-                });
+                const msgData = doc.data();
+                const msgTime = new Date(msgData.created_at).getTime();
+                const now = Date.now();
+                
+                if (now - msgTime > 2000) {
+                    batch.update(doc.ref, { 
+                        read: true,
+                        read_at: new Date().toISOString()
+                    });
+                }
             });
             
             await batch.commit();
