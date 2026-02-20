@@ -1390,9 +1390,9 @@ function escapeHtml(text) {
 
 async function cleanupStaleCalls() {
     try {
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
         const snapshot = await db.collection('calls')
-            .where('createdAt', '<', fiveMinutesAgo)
+            .where('createdAt', '<', thirtySecondsAgo)
             .where('status', 'in', ['ringing', 'answered'])
             .get();
         
@@ -1409,20 +1409,30 @@ function listenForIncomingCalls() {
         incomingCallListener();
     }
     
+    cleanupStaleCalls();
+    
     incomingCallListener = db.collection('calls')
         .where('calleeId', '==', currentUser.uid)
         .where('status', '==', 'ringing')
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
-                    if (peerConnection || isCallActive) {
-                        db.collection('calls').doc(change.doc.id).update({
-                            status: 'busy'
-                        });
-                        return;
-                    }
-                    const callData = change.doc.data();
-                    showIncomingCall(callData, change.doc.id);
+                    db.collection('calls').doc(change.doc.id).get().then(doc => {
+                        const callData = doc.data();
+                        const callAge = Date.now() - new Date(callData.createdAt).getTime();
+                        
+                        if (callAge > 30000) {
+                            doc.ref.update({ status: 'ended' });
+                            return;
+                        }
+                        
+                        if (peerConnection || isCallActive) {
+                            doc.ref.update({ status: 'busy' });
+                            return;
+                        }
+                        
+                        showIncomingCall(callData, change.doc.id);
+                    });
                 }
             });
         });
@@ -1431,6 +1441,12 @@ function listenForIncomingCalls() {
 function showIncomingCall(callData, callId) {
     if (isCallActive || peerConnection) {
         db.collection('calls').doc(callId).update({ status: 'busy' });
+        return;
+    }
+    
+    const callAge = Date.now() - new Date(callData.createdAt).getTime();
+    if (callAge > 30000) {
+        db.collection('calls').doc(callId).update({ status: 'ended' });
         return;
     }
     
@@ -1869,7 +1885,7 @@ function forceEndCall() {
             
             db.collection('calls').doc(callId).get().then(doc => {
                 if (doc.exists && (doc.data().status === 'ringing' || doc.data().status === 'answered')) {
-                    db.collection('calls').doc(callId).update({
+                    doc.ref.update({
                         status: 'ended',
                         endedAt: new Date().toISOString()
                     }).catch(e => {});
