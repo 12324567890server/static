@@ -633,22 +633,47 @@ function setupVoiceButton() {
     const voiceBtn = elements.voiceMessageBtn;
     if (!voiceBtn) return;
 
-    voiceBtn.addEventListener('touchstart', (e) => {
+    let pressTimer;
+    let isLongPress = false;
+
+    voiceBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        startRecording();
+        
+        pressTimer = setTimeout(() => {
+            isLongPress = true;
+            startRecording();
+        }, 150);
     });
 
-    voiceBtn.addEventListener('touchend', (e) => {
+    voiceBtn.addEventListener('pointerup', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        stopRecording();
+        
+        clearTimeout(pressTimer);
+        if (isLongPress) {
+            stopRecording();
+            isLongPress = false;
+        }
     });
 
-    voiceBtn.addEventListener('touchcancel', (e) => {
+    voiceBtn.addEventListener('pointercancel', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        stopRecording();
+        
+        clearTimeout(pressTimer);
+        if (isLongPress) {
+            stopRecording();
+            isLongPress = false;
+        }
+    });
+
+    voiceBtn.addEventListener('pointerleave', (e) => {
+        if (isLongPress) {
+            clearTimeout(pressTimer);
+            stopRecording();
+            isLongPress = false;
+        }
     });
 
     voiceBtn.addEventListener('mousedown', (e) => {
