@@ -27,7 +27,6 @@ body {
     height: 100vh;
     padding: 20px;
     background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
-    overscroll-behavior-y: none;
     position: relative;
     overflow: hidden;
 }
@@ -101,7 +100,6 @@ body {
     flex-direction: column;
     height: 100vh;
     background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
-    overscroll-behavior-y: none;
     position: relative;
     overflow: hidden;
 }
@@ -160,12 +158,10 @@ body {
     padding: 12px 0;
     -webkit-overflow-scrolling: touch;
     background: rgba(45, 27, 105, 0.5);
-    overscroll-behavior-y: contain;
 }
 
 .chats-list::-webkit-scrollbar {
     width: 5px;
-    height: 5px;
 }
 
 .chats-list::-webkit-scrollbar-track {
@@ -358,7 +354,6 @@ body {
     flex-direction: column;
     height: 100vh;
     background: linear-gradient(135deg, #2d1b69 0%, #4a2c8c 100%);
-    overscroll-behavior-y: none;
     position: relative;
     overflow: hidden;
 }
@@ -411,7 +406,6 @@ body {
     color: rgba(255, 255, 255, 0.9);
     height: 17px;
     min-height: 17px;
-    transition: all 0.3s ease;
 }
 
 .private-messages {
@@ -423,7 +417,6 @@ body {
     flex-direction: column;
     gap: 10px;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
 }
 
 .private-messages::-webkit-scrollbar {
@@ -579,7 +572,12 @@ body {
     border-color: #b19cd9;
 }
 
-.send-btn, .voice-btn {
+.message-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.action-btn {
     width: 48px;
     height: 48px;
     border-radius: 50%;
@@ -596,11 +594,7 @@ body {
     flex-shrink: 0;
 }
 
-.voice-btn {
-    background: linear-gradient(135deg, #ff7d7d 0%, #ff5252 100%);
-}
-
-.send-btn:active, .voice-btn:active {
+.action-btn:active {
     transform: scale(0.95);
 }
 
@@ -631,7 +625,7 @@ body {
     background: rgba(255, 125, 125, 0.9);
     border-radius: 30px;
     padding: 8px 16px;
-    display: flex;
+    display: none;
     align-items: center;
     gap: 10px;
     backdrop-filter: blur(5px);
