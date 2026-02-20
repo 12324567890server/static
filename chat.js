@@ -108,6 +108,8 @@ let iceCandidateListener = null;
 let answerListener = null;
 let callStartTime = null;
 let callTimeoutId = null;
+let isCallActive = false;
+let callParticipantName = '';
 
 const ICE_SERVERS = {
     iceServers: [
@@ -1431,7 +1433,7 @@ function listenForIncomingCalls() {
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
-                    if (peerConnection) {
+                    if (peerConnection || isCallActive) {
                         db.collection('calls').doc(change.doc.id).update({
                             status: 'busy'
                         });
@@ -1445,6 +1447,11 @@ function listenForIncomingCalls() {
 }
 
 function showIncomingCall(callData, callId) {
+    if (isCallActive || peerConnection) {
+        db.collection('calls').doc(callId).update({ status: 'busy' });
+        return;
+    }
+    
     currentCallId = callId;
     
     const callerName = document.getElementById('callerName');
@@ -1464,7 +1471,7 @@ async function initiateCall(isVideo) {
         return;
     }
 
-    if (peerConnection) {
+    if (peerConnection || isCallActive) {
         alert('Звонок уже активен');
         return;
     }
@@ -1610,10 +1617,10 @@ async function declineCall() {
 }
 
 async function startCall(callId, isVideo) {
-    if (currentCallId !== callId) {
-        currentCallId = callId;
-    }
+    if (!callId) return;
     
+    currentCallId = callId;
+    isCallActive = true;
     remoteDescriptionSet = false;
     pendingIceCandidates = [];
     reconnectAttempts = 0;
@@ -1626,8 +1633,13 @@ async function startCall(callId, isVideo) {
         const otherUserId = isCaller ? callData.calleeId : callData.callerId;
         
         const otherUser = await findUserById(otherUserId);
-        const participant = document.getElementById('callParticipant');
-        if (participant) participant.textContent = otherUser ? otherUser.username : 'Пользователь';
+        callParticipantName = otherUser ? otherUser.username : 'Пользователь';
+        
+        const participantEl = document.getElementById('callParticipant');
+        if (participantEl) participantEl.textContent = callParticipantName;
+        
+        const timerEl = document.getElementById('callTimer');
+        if (timerEl) timerEl.textContent = '00:00';
         
         if (!localStream) {
             try {
@@ -1663,26 +1675,41 @@ async function startCall(callId, isVideo) {
         const remoteVideo = document.getElementById('remoteVideo');
         const audioAvatar = document.getElementById('audioAvatar');
         
-        if (activeContainer) activeContainer.style.display = 'block';
+        if (activeContainer) {
+            activeContainer.style.display = 'block';
+            activeContainer.style.visibility = 'visible';
+        }
         
         if (isVideo && localStream.getVideoTracks().length > 0) {
-            if (videoContainer) videoContainer.style.display = 'block';
-            if (audioContainer) audioContainer.style.display = 'none';
+            if (videoContainer) {
+                videoContainer.style.display = 'block';
+                videoContainer.style.visibility = 'visible';
+            }
+            if (audioContainer) {
+                audioContainer.style.display = 'none';
+            }
             if (localVideo) {
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
             }
         } else {
-            if (videoContainer) videoContainer.style.display = 'none';
-            if (audioContainer) audioContainer.style.display = 'flex';
+            if (videoContainer) {
+                videoContainer.style.display = 'none';
+            }
+            if (audioContainer) {
+                audioContainer.style.display = 'flex';
+                audioContainer.style.visibility = 'visible';
+            }
             if (audioAvatar && otherUser) {
                 audioAvatar.textContent = otherUser.username.charAt(0).toUpperCase();
+                audioAvatar.style.display = 'flex';
             }
         }
 
         peerConnection.ontrack = (event) => {
             if (remoteVideo && event.streams && event.streams[0]) {
                 remoteVideo.srcObject = event.streams[0];
+                remoteVideo.style.display = 'block';
                 if (videoContainer) videoContainer.style.display = 'block';
                 if (audioContainer) audioContainer.style.display = 'none';
             }
@@ -1691,53 +1718,28 @@ async function startCall(callId, isVideo) {
         peerConnection.onicecandidate = async (event) => {
             if (event.candidate) {
                 try {
-                    const candidateData = {
+                    await db.collection('calls').doc(callId).collection('ice').add({
                         candidate: event.candidate.toJSON(),
                         sender: currentUser.uid,
                         timestamp: new Date().toISOString()
-                    };
-                    
-                    await db.collection('calls').doc(callId).collection('ice').add(candidateData);
-                    
-                    const snapshot = await db.collection('calls').doc(callId).collection('ice')
-                        .orderBy('timestamp')
-                        .get();
-                    
-                    if (snapshot.size > 50) {
-                        const docs = snapshot.docs;
-                        for (let i = 0; i < docs.length - 30; i++) {
-                            await docs[i].ref.delete();
-                        }
-                    }
+                    });
                 } catch (e) {}
             }
         };
 
         peerConnection.oniceconnectionstatechange = () => {
-            if (peerConnection.iceConnectionState === 'disconnected') {
+            if (peerConnection.iceConnectionState === 'connected') {
+                reconnectAttempts = 0;
+                startCallTimer();
+            } else if (peerConnection.iceConnectionState === 'disconnected') {
                 if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     reconnectAttempts++;
-                    setTimeout(() => {
-                        if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
-                            peerConnection.restartIce();
-                        }
-                    }, 2000);
                 }
             } else if (peerConnection.iceConnectionState === 'failed') {
                 if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     reconnectAttempts++;
                     peerConnection.restartIce();
                 } else {
-                    forceEndCall();
-                }
-            } else if (peerConnection.iceConnectionState === 'connected') {
-                reconnectAttempts = 0;
-            }
-        };
-
-        peerConnection.onconnectionstatechange = () => {
-            if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'closed') {
-                if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
                     forceEndCall();
                 }
             }
@@ -1752,10 +1754,8 @@ async function startCall(callId, isVideo) {
             .onSnapshot(snapshot => {
                 snapshot.docChanges().forEach(change => {
                     if (change.type === 'added') {
-                        const candidateData = change.doc.data().candidate;
                         try {
-                            const candidate = new RTCIceCandidate(candidateData);
-                            
+                            const candidate = new RTCIceCandidate(change.doc.data().candidate);
                             if (remoteDescriptionSet) {
                                 peerConnection.addIceCandidate(candidate).catch(e => {});
                             } else {
@@ -1814,7 +1814,7 @@ async function startCall(callId, isVideo) {
             
             answerListener = db.collection('calls').doc(callId).onSnapshot(snapshot => {
                 const data = snapshot.data();
-                if (data && data.answer && peerConnection && !peerConnection.currentRemoteDescription && peerConnection.signalingState !== 'stable') {
+                if (data && data.answer && peerConnection && !peerConnection.currentRemoteDescription) {
                     try {
                         peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer)).then(() => {
                             remoteDescriptionSet = true;
@@ -1881,6 +1881,7 @@ function forceEndCall() {
         if (currentCallId) {
             const callId = currentCallId;
             currentCallId = null;
+            isCallActive = false;
             
             db.collection('calls').doc(callId).get().then(doc => {
                 if (doc.exists && (doc.data().status === 'ringing' || doc.data().status === 'answered')) {
@@ -1950,6 +1951,7 @@ async function endCall() {
             });
         } catch (e) {}
         currentCallId = null;
+        isCallActive = false;
     }
     
     pendingIceCandidates = [];
@@ -2002,9 +2004,12 @@ function stopCallTimer() {
         callTimer = null;
     }
     callSeconds = 0;
+    const timer = document.getElementById('callTimer');
+    if (timer) timer.textContent = '00:00';
 }
 
 function updateCallTimer() {
+    if (!isCallActive) return;
     const minutes = Math.floor(callSeconds / 60);
     const seconds = callSeconds % 60;
     const timer = document.getElementById('callTimer');
