@@ -1046,7 +1046,23 @@ body {
     }
 }
 
-@media (max-width: 480px) {
+.voice-btn {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.voice-btn:active {
+    transform: scale(0.95);
+    opacity: 0.9;
+}
+
+@media (max-width: 768px) {
     .action-buttons {
         bottom: 15px;
         right: 15px;
@@ -1069,5 +1085,10 @@ body {
     
     .recording-text {
         display: none;
+    }
+    
+    .voice-btn {
+        width: 52px;
+        height: 52px;
     }
 }
