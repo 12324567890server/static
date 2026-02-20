@@ -633,38 +633,39 @@ function setupVoiceButton() {
     const voiceBtn = elements.voiceMessageBtn;
     if (!voiceBtn) return;
 
-    if (isMobile) {
-        voiceBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            startRecording();
-        });
+    voiceBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        startRecording();
+    });
 
-        voiceBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
+    voiceBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        stopRecording();
+    });
+
+    voiceBtn.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        stopRecording();
+    });
+
+    voiceBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startRecording();
+    });
+
+    voiceBtn.addEventListener('mouseup', (e) => {
+        e.preventDefault();
+        stopRecording();
+    });
+
+    voiceBtn.addEventListener('mouseleave', (e) => {
+        if (isRecording) {
             stopRecording();
-        });
-
-        voiceBtn.addEventListener('touchcancel', (e) => {
-            e.preventDefault();
-            stopRecording();
-        });
-    } else {
-        voiceBtn.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            startRecording();
-        });
-
-        voiceBtn.addEventListener('mouseup', (e) => {
-            e.preventDefault();
-            stopRecording();
-        });
-
-        voiceBtn.addEventListener('mouseleave', (e) => {
-            if (isRecording) {
-                stopRecording();
-            }
-        });
-    }
+        }
+    });
 }
 
 async function startRecording() {
