@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 </head>
 <body>
     <div id="loginScreen" class="login-screen">
@@ -53,9 +54,16 @@
         
         <div class="message-input-container">
             <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off" maxlength="1000">
-            <button id="sendMessageBtn" class="send-btn">
+            <button id="sendMessageBtn" class="send-btn" style="display: none;">
                 <span class="send-icon"></span>
             </button>
+            <button id="voiceMessageBtn" class="voice-btn">
+                <span class="voice-icon"></span>
+            </button>
+            <div id="voiceRecordingIndicator" class="voice-recording-indicator" style="display: none;">
+                <span class="recording-dot"></span>
+                <span id="voiceTimer">0:00</span>
+            </div>
         </div>
     </div>
 
