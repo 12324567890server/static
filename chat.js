@@ -62,10 +62,6 @@ const elements = {
     searchResults: document.getElementById('searchResults'),
     contactsModal: document.getElementById('contactsModal'),
     contactsList: document.getElementById('contactsList'),
-    newChatModal: document.getElementById('newChatModal'),
-    newChatUsername: document.getElementById('newChatUsername'),
-    startChatBtn: document.getElementById('startChatBtn'),
-    newChatError: document.getElementById('newChatError'),
     chatsTitle: document.getElementById('chatsTitle')
 };
 
