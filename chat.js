@@ -18,13 +18,6 @@ const firebaseConfig = {
 let app;
 let db;
 let supabase;
-let audioContext;
-let analyser;
-let microphone;
-let javascriptNode;
-let canvasContext;
-let canvasWidth = 200;
-let canvasHeight = 50;
 
 try {
     app = firebase.initializeApp(firebaseConfig);
@@ -57,7 +50,6 @@ const elements = {
     voiceMessageBtn: document.getElementById('voiceMessageBtn'),
     voiceRecordingIndicator: document.getElementById('voiceRecordingIndicator'),
     voiceTimer: document.getElementById('voiceTimer'),
-    voiceWaves: document.getElementById('voiceWaves'),
     loginUsername: document.getElementById('loginUsername'),
     loginButton: document.getElementById('loginButton'),
     loginError: document.getElementById('loginError'),
@@ -642,41 +634,25 @@ function setupVoiceButton() {
     if (!voiceBtn) return;
 
     let pressTimer;
-    let isLongPress = false;
 
     voiceBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
-        e.stopPropagation();
         elements.voiceRecordingIndicator.style.display = 'flex';
         elements.voiceTimer.textContent = '0:00';
-        startVoiceVisualization();
         pressTimer = setTimeout(() => {
-            isLongPress = true;
             startRecording();
-        }, 150);
+        }, 200);
     });
 
     voiceBtn.addEventListener('touchend', (e) => {
         e.preventDefault();
-        e.stopPropagation();
         clearTimeout(pressTimer);
-        stopVoiceVisualization();
-        if (isLongPress) {
-            stopRecording();
-            isLongPress = false;
-        }
-        elements.voiceRecordingIndicator.style.display = 'none';
+        stopRecording();
     });
 
     voiceBtn.addEventListener('touchcancel', (e) => {
         e.preventDefault();
-        e.stopPropagation();
         clearTimeout(pressTimer);
-        stopVoiceVisualization();
-        if (isLongPress) {
-            stopRecording();
-            isLongPress = false;
-        }
         elements.voiceRecordingIndicator.style.display = 'none';
     });
 
@@ -684,89 +660,19 @@ function setupVoiceButton() {
         e.preventDefault();
         elements.voiceRecordingIndicator.style.display = 'flex';
         elements.voiceTimer.textContent = '0:00';
-        startVoiceVisualization();
         startRecording();
     });
 
     voiceBtn.addEventListener('mouseup', (e) => {
         e.preventDefault();
-        stopVoiceVisualization();
         stopRecording();
-        elements.voiceRecordingIndicator.style.display = 'none';
     });
 
     voiceBtn.addEventListener('mouseleave', (e) => {
         if (isRecording) {
-            stopVoiceVisualization();
             stopRecording();
-            elements.voiceRecordingIndicator.style.display = 'none';
         }
     });
-}
-
-async function startVoiceVisualization() {
-    if (!elements.voiceWaves) return;
-    
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        microphone = audioContext.createMediaStreamSource(stream);
-        javascriptNode = audioContext.createScriptProcessor(256, 1, 1);
-        
-        analyser.smoothingTimeConstant = 0.3;
-        analyser.fftSize = 1024;
-        
-        microphone.connect(analyser);
-        analyser.connect(javascriptNode);
-        javascriptNode.connect(audioContext.destination);
-        
-        canvasContext = elements.voiceWaves.getContext('2d');
-        
-        javascriptNode.onaudioprocess = function() {
-            if (!isRecording) return;
-            
-            let array = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(array);
-            
-            canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
-            
-            let step = Math.floor(array.length / 30);
-            let bars = [];
-            
-            for (let i = 0; i < 30; i++) {
-                let value = array[i * step] / 128;
-                bars.push(value);
-            }
-            
-            canvasContext.fillStyle = '#ff7d7d';
-            
-            for (let i = 0; i < bars.length; i++) {
-                let barHeight = bars[i] * 30;
-                let x = i * 6;
-                let y = canvasHeight - barHeight;
-                canvasContext.fillRect(x, y, 3, barHeight);
-            }
-        };
-    } catch (e) {}
-}
-
-function stopVoiceVisualization() {
-    if (javascriptNode) {
-        javascriptNode.disconnect();
-        javascriptNode = null;
-    }
-    if (microphone) {
-        microphone.disconnect();
-        microphone = null;
-    }
-    if (audioContext) {
-        audioContext.close();
-        audioContext = null;
-    }
-    if (canvasContext) {
-        canvasContext.clearRect(0, 0, canvasWidth, canvasHeight);
-    }
 }
 
 async function startRecording() {
@@ -820,6 +726,8 @@ async function stopRecording() {
         clearInterval(recordingTimer);
         recordingTimer = null;
     }
+    
+    elements.voiceRecordingIndicator.style.display = 'none';
     
     if (currentChatUserId) {
         const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
