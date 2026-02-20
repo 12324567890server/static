@@ -50,14 +50,6 @@
                 <div id="chatWithUser" class="chat-username">-</div>
                 <div id="chatStatus" class="chat-status">без связи</div>
             </div>
-            <div class="call-header-buttons">
-                <button class="custom-call-btn" onclick="window.initiateCall(false)">
-                    <div class="btn-icon-audio"></div>
-                </button>
-                <button class="custom-call-btn" onclick="window.initiateCall(true)">
-                    <div class="btn-icon-video"></div>
-                </button>
-            </div>
         </div>
         
         <div id="privateMessages" class="private-messages"></div>
@@ -67,49 +59,6 @@
             <button id="sendMessageBtn" class="send-btn">
                 <span class="send-icon"></span>
             </button>
-        </div>
-    </div>
-
-    <div id="incomingCallModal" class="nexus-modal" style="display: none;">
-        <div class="nexus-call-card">
-            <div class="nexus-avatar-circle">
-                <div class="nexus-avatar-inner initials" id="callerAvatar">U</div>
-            </div>
-            <div class="nexus-caller-name" id="callerName">Загрузка...</div>
-            <div class="nexus-call-type" id="callType">аудиозвонок</div>
-            <div class="nexus-action-row">
-                <button class="nexus-btn nexus-answer" onclick="window.answerCall()">
-                    <span class="btn-icon">✓</span>
-                </button>
-                <button class="nexus-btn nexus-decline" onclick="window.declineCall()">
-                    <span class="btn-icon">✕</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <div id="activeCallContainer" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10000;">
-        <div id="videoContainer" style="width: 100%; height: 100%; position: relative;">
-            <video id="remoteVideo" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
-            <video id="localVideo" autoplay playsinline muted style="position: absolute; bottom: 20px; right: 20px; width: 120px; height: 160px; object-fit: cover; border-radius: 12px; border: 2px solid white;"></video>
-        </div>
-        <div id="audioOnlyContainer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #1a0f2e, #0d0820); justify-content: center; align-items: center;">
-            <div id="audioAvatar" style="width: 150px; height: 150px; background: linear-gradient(135deg, #6a2be2, #9b4dff); border-radius: 50px; transform: rotate(45deg); display: flex; align-items: center; justify-content: center; font-size: 60px; color: white;">U</div>
-        </div>
-        <div style="position: absolute; bottom: 30px; left: 0; width: 100%; text-align: center;">
-            <div id="callTimer" style="color: white; font-size: 18px; margin-bottom: 10px;">00:00</div>
-            <div id="callParticipant" style="color: white; font-size: 16px; margin-bottom: 20px;"></div>
-            <div style="display: flex; justify-content: center; gap: 15px;">
-                <button id="muteButton" onclick="window.toggleMute()" class="nexus-control-btn">
-                    <div class="control-icon mute-icon"></div>
-                </button>
-                <button onclick="window.endCall()" class="nexus-control-btn end-call">
-                    <div class="control-icon end-icon"></div>
-                </button>
-                <button id="videoToggleButton" onclick="window.toggleVideo()" class="nexus-control-btn">
-                    <div class="control-icon video-icon"></div>
-                </button>
-            </div>
         </div>
     </div>
 
