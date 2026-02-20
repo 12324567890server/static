@@ -33,6 +33,7 @@ const elements = {
     chatsList: document.getElementById('chatsList'),
     searchChats: document.getElementById('searchChats'),
     chatsMenuBtn: document.getElementById('chatsMenuBtn'),
+    newChatBtn: document.getElementById('newChatBtn'),
     findFriendsCircleBtn: document.getElementById('findFriendsCircleBtn'),
     backToChats: document.getElementById('backToChats'),
     chatWithUser: document.getElementById('chatWithUser'),
@@ -90,21 +91,53 @@ let messageListener = null;
 let scrollPositions = {};
 let connectionId = null;
 
+let localStream = null;
+let peerConnection = null;
+let currentCallId = null;
+let callTimer = null;
+let callSeconds = 0;
+let incomingCallListener = null;
+let isMuted = false;
+let isVideoEnabled = true;
+let callEndTimeout = null;
+
+const STUN_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stun.services.mozilla.com' },
+        { urls: 'stun:stun.stunprotocol.org:3478' }
+    ],
+    iceCandidatePoolSize: 10
+};
+
 document.addEventListener('DOMContentLoaded', function() {
     init();
 });
+
+async function createCallsCollection() {
+    try {
+        await db.collection('calls').doc('_init').set({
+            initialized: true,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {}
+}
 
 function init() {
     checkUser();
     setupEventListeners();
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
-    setInterval(cleanupOldConnections, 5000);
+    setInterval(cleanupOldConnections, 3000);
 }
 
 async function cleanupOldConnections() {
     try {
-        const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
+        const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
         const usersSnapshot = await db.collection('users').get();
         
         for (const userDoc of usersSnapshot.docs) {
@@ -114,7 +147,7 @@ async function cleanupOldConnections() {
                 .doc(userId)
                 .collection('connections')
                 .where('is_online', '==', true)
-                .where('last_seen', '>', fiveSecondsAgo)
+                .where('last_seen', '>', threeSecondsAgo)
                 .get();
             
             const shouldBeOnline = !activeConnections.empty;
@@ -131,7 +164,7 @@ async function cleanupOldConnections() {
                 .doc(userId)
                 .collection('connections')
                 .where('is_online', '==', true)
-                .where('last_seen', '<', fiveSecondsAgo)
+                .where('last_seen', '<', threeSecondsAgo)
                 .get();
             
             deadConnections.forEach(doc => {
@@ -143,12 +176,12 @@ async function cleanupOldConnections() {
 
 async function updateUserStatus(userId) {
     try {
-        const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
+        const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
         const connectionsSnapshot = await db.collection('users')
             .doc(userId)
             .collection('connections')
             .where('is_online', '==', true)
-            .where('last_seen', '>', fiveSecondsAgo)
+            .where('last_seen', '>', threeSecondsAgo)
             .get();
 
         const isOnline = !connectionsSnapshot.empty;
@@ -163,13 +196,22 @@ async function updateUserStatus(userId) {
 function handleVisibilityChange() {
     isPageVisible = !document.hidden;
     if (currentUser && connectionId) {
-        updateOnlineStatus(true);
+        updateOnlineStatus(!document.hidden);
     }
 }
 
 function handleBeforeUnload() {
     if (currentUser && connectionId) {
         removeConnection();
+    }
+    if (peerConnection) {
+        peerConnection.close();
+    }
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+    }
+    if (callEndTimeout) {
+        clearTimeout(callEndTimeout);
     }
 }
 
@@ -185,24 +227,15 @@ async function updateOnlineStatus(isOnline) {
             .doc(connectionId)
             .set({
                 connection_id: connectionId,
-                is_online: true,
+                is_online: isOnline,
                 last_seen: now,
                 device: isMobile ? 'mobile' : 'desktop'
             });
         
-        const activeConnections = await db.collection('users')
-            .doc(currentUser.uid)
-            .collection('connections')
-            .where('is_online', '==', true)
-            .where('last_seen', '>', new Date(Date.now() - 5000).toISOString())
-            .get();
-        
-        const reallyOnline = !activeConnections.empty;
-        
         await db.collection('users')
             .doc(currentUser.uid)
             .update({
-                is_online: reallyOnline,
+                is_online: isOnline,
                 last_seen: now
             });
     } catch (e) {}
@@ -294,6 +327,8 @@ async function checkUser() {
                 loadChats();
                 startHeartbeat();
                 setupTypingListener();
+                listenForIncomingCalls();
+                createCallsCollection();
             } else {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -416,6 +451,11 @@ async function showChat(username) {
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
         elements.messageInput.value = '';
+        
+        const callButtons = document.querySelector('.call-header-buttons');
+        if (callButtons) {
+            callButtons.style.display = 'flex';
+        }
           
         await loadMessages(user.uid);
         setupTypingDetection();
@@ -509,6 +549,12 @@ function setupEventListeners() {
         }
     });
 
+    elements.newChatBtn.addEventListener('click', () => {
+        elements.newChatUsername.value = '';
+        elements.newChatError.style.display = 'none';
+        showModal('newChatModal');
+    });
+
     elements.findFriendsCircleBtn.addEventListener('click', () => {
         elements.searchUsername.value = '';
         elements.searchResults.innerHTML = '';
@@ -529,6 +575,15 @@ function setupEventListeners() {
             typingTimer = null;
         }
         
+        const callButtons = document.querySelector('.call-header-buttons');
+        if (callButtons) {
+            callButtons.style.display = 'none';
+        }
+        
+        if (peerConnection) {
+            endCall();
+        }
+          
         currentChatWith = null;
         currentChatUserId = null;
         isChatActive = false;
@@ -561,6 +616,8 @@ function setupEventListeners() {
             sendMessage();
         }
     });
+
+    elements.startChatBtn.addEventListener('click', startNewChat);
 
     document.querySelectorAll('.close-modal').forEach(btn => {
         btn.addEventListener('click', e => {
@@ -642,6 +699,10 @@ function cleanupSubscriptions() {
         typingUnsubscribe();
         typingUnsubscribe = null;
     }
+    if (incomingCallListener) {
+        incomingCallListener();
+        incomingCallListener = null;
+    }
 }
 
 function setupRealtimeSubscriptions() {
@@ -692,12 +753,12 @@ function setupRealtimeSubscriptions() {
 
 function startHeartbeat() {
     stopHeartbeat();
-    
+      
     heartbeatInterval = setInterval(() => {
-        if (currentUser && connectionId && navigator.onLine) {
+        if (currentUser && connectionId && navigator.onLine && !document.hidden) {
             updateOnlineStatus(true);
         }
-    }, 3000);
+    }, 5000);
 }
 
 function stopHeartbeat() {
@@ -966,16 +1027,10 @@ async function markMessagesAsRead(userId) {
         if (!snapshot.empty) {
             const batch = db.batch();
             snapshot.forEach(doc => {
-                const msgData = doc.data();
-                const msgTime = new Date(msgData.created_at).getTime();
-                const now = Date.now();
-                
-                if (now - msgTime > 2000) {
-                    batch.update(doc.ref, { 
-                        read: true,
-                        read_at: new Date().toISOString()
-                    });
-                }
+                batch.update(doc.ref, { 
+                    read: true,
+                    read_at: new Date().toISOString()
+                });
             });
             
             await batch.commit();
@@ -992,6 +1047,36 @@ async function markMessagesAsRead(userId) {
 function updateTitle() {
     const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
     document.title = totalUnread ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
+}
+
+async function startNewChat() {
+    const username = elements.newChatUsername.value.trim();
+    if (!username) {
+        showError(elements.newChatError, 'Введите имя пользователя');
+        return;
+    }
+      
+    if (username === currentUser.username) {
+        showError(elements.newChatError, 'Нельзя начать чат с самим собой');
+        return;
+    }
+
+    showLoading(true);
+    try {
+        const user = await findUserByUsername(username);
+
+        if (!user) {
+            showError(elements.newChatError, 'Пользователь не найден');
+            return;
+        }
+
+        hideModal('newChatModal');
+        await showChat(username);
+    } catch (e) {
+        showError(elements.newChatError, 'Ошибка при поиске пользователя');
+    } finally {
+        showLoading(false);
+    }
 }
 
 async function login() {
@@ -1047,6 +1132,8 @@ async function login() {
         loadChats();
         startHeartbeat();
         setupTypingListener();
+        listenForIncomingCalls();
+        createCallsCollection();
           
     } catch (e) {
         showError(elements.loginError, 'Ошибка при входе');
@@ -1238,6 +1325,10 @@ async function logout() {
         await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
         typingTimer = null;
     }
+    
+    if (peerConnection) {
+        await endCall();
+    }
       
     try {
         await removeConnection();
@@ -1289,6 +1380,438 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+function listenForIncomingCalls() {
+    if (!currentUser) return;
+    
+    incomingCallListener = db.collection('calls')
+        .where('calleeId', '==', currentUser.uid)
+        .where('status', '==', 'ringing')
+        .onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const callData = change.doc.data();
+                    showIncomingCall(callData, change.doc.id);
+                }
+                if (change.type === 'modified') {
+                    const callData = change.doc.data();
+                    if (callData.status === 'ended' || callData.status === 'declined') {
+                        forceEndCall();
+                    }
+                }
+            });
+        });
+}
+
+function showIncomingCall(callData, callId) {
+    currentCallId = callId;
+    
+    const callerName = document.getElementById('callerName');
+    const callerAvatar = document.getElementById('callerAvatar');
+    const callType = document.getElementById('callType');
+    const incomingModal = document.getElementById('incomingCallModal');
+    
+    if (callerName) callerName.textContent = callData.callerName || 'Неизвестно';
+    if (callerAvatar) callerAvatar.textContent = (callData.callerName || 'U').charAt(0).toUpperCase();
+    if (callType) callType.textContent = callData.type === 'video' ? 'видеозвонок' : 'аудиозвонок';
+    if (incomingModal) incomingModal.style.display = 'flex';
+}
+
+async function initiateCall(isVideo) {
+    if (!currentChatUserId) {
+        alert('Сначала выберите чат');
+        return;
+    }
+
+    try {
+        showLoading(true);
+        
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: isVideo
+            });
+        } catch (mediaError) {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: false
+                });
+                isVideo = false;
+            } catch (audioError) {
+                showLoading(false);
+                alert('Нет доступа к микрофону');
+                return;
+            }
+        }
+
+        currentCallId = [currentUser.uid, currentChatUserId].sort().join('_') + '_' + Date.now();
+
+        await db.collection('calls').doc(currentCallId).set({
+            callerId: currentUser.uid,
+            callerName: currentUser.username,
+            calleeId: currentChatUserId,
+            status: 'ringing',
+            type: isVideo ? 'video' : 'audio',
+            createdAt: new Date().toISOString()
+        });
+
+        setupCallListener(currentCallId);
+        showLoading(false);
+        
+        setTimeout(() => {
+            if (currentCallId) {
+                db.collection('calls').doc(currentCallId).get().then(doc => {
+                    if (doc.exists && doc.data().status === 'ringing') {
+                        endCall();
+                        alert('Абонент не ответил');
+                    }
+                });
+            }
+        }, 30000);
+        
+    } catch (error) {
+        showLoading(false);
+        alert('Ошибка при звонке');
+    }
+}
+
+function setupCallListener(callId) {
+    db.collection('calls').doc(callId).onSnapshot(snapshot => {
+        const data = snapshot.data();
+        if (!data) {
+            forceEndCall();
+            return;
+        }
+        
+        if (data.status === 'answered') {
+            const incomingModal = document.getElementById('incomingCallModal');
+            if (incomingModal) incomingModal.style.display = 'none';
+            startCall(callId, data.type === 'video');
+        } else if (data.status === 'declined' || data.status === 'ended') {
+            forceEndCall();
+        }
+    });
+}
+
+async function answerCall() {
+    if (!currentCallId) return;
+    
+    try {
+        await db.collection('calls').doc(currentCallId).update({
+            status: 'answered',
+            answeredAt: new Date().toISOString()
+        });
+        
+        const incomingModal = document.getElementById('incomingCallModal');
+        if (incomingModal) incomingModal.style.display = 'none';
+        
+        const callDoc = await db.collection('calls').doc(currentCallId).get();
+        const callData = callDoc.data();
+        
+        await startCall(currentCallId, callData.type === 'video');
+        
+    } catch (error) {
+        alert('Ошибка при ответе на звонок');
+    }
+}
+
+async function declineCall() {
+    if (!currentCallId) return;
+    
+    try {
+        await db.collection('calls').doc(currentCallId).update({
+            status: 'declined'
+        });
+        
+        const incomingModal = document.getElementById('incomingCallModal');
+        if (incomingModal) incomingModal.style.display = 'none';
+        currentCallId = null;
+        
+    } catch (error) {
+        alert('Ошибка при отклонении звонка');
+    }
+}
+
+async function startCall(callId, isVideo) {
+    currentCallId = callId;
+    
+    try {
+        const callDoc = await db.collection('calls').doc(callId).get();
+        const callData = callDoc.data();
+        
+        const isCaller = callData.callerId === currentUser.uid;
+        const otherUserId = isCaller ? callData.calleeId : callData.callerId;
+        
+        const otherUser = await findUserById(otherUserId);
+        const participant = document.getElementById('callParticipant');
+        if (participant) participant.textContent = otherUser.username;
+        
+        if (!localStream) {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: isVideo
+                });
+            } catch (mediaError) {
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: false
+                    });
+                    isVideo = false;
+                } catch (audioError) {
+                    alert('Нет доступа к микрофону');
+                    return;
+                }
+            }
+        }
+
+        peerConnection = new RTCPeerConnection(STUN_SERVERS);
+
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+        }
+
+        const activeContainer = document.getElementById('activeCallContainer');
+        const videoContainer = document.getElementById('videoContainer');
+        const audioContainer = document.getElementById('audioOnlyContainer');
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const audioAvatar = document.getElementById('audioAvatar');
+        
+        if (activeContainer) activeContainer.style.display = 'block';
+        
+        if (isVideo && localStream && localStream.getVideoTracks().length > 0) {
+            if (videoContainer) videoContainer.style.display = 'block';
+            if (audioContainer) audioContainer.style.display = 'none';
+            if (localVideo) {
+                localVideo.srcObject = localStream;
+                localVideo.style.display = 'block';
+            }
+        } else {
+            if (videoContainer) videoContainer.style.display = 'none';
+            if (audioContainer) audioContainer.style.display = 'flex';
+            if (audioAvatar && otherUser) {
+                audioAvatar.textContent = otherUser.username.charAt(0).toUpperCase();
+            }
+        }
+
+        peerConnection.ontrack = (event) => {
+            if (event.track.kind === 'video' && remoteVideo) {
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.style.display = 'block';
+            }
+        };
+
+        peerConnection.onicecandidate = async (event) => {
+            if (event.candidate) {
+                try {
+                    await db.collection('calls').doc(callId).collection('ice').add({
+                        candidate: event.candidate.toJSON(),
+                        sender: currentUser.uid,
+                        timestamp: new Date().toISOString()
+                    });
+                } catch (e) {}
+            }
+        };
+
+        peerConnection.oniceconnectionstatechange = () => {
+            if (peerConnection.iceConnectionState === 'disconnected' || 
+                peerConnection.iceConnectionState === 'failed' ||
+                peerConnection.iceConnectionState === 'closed') {
+                forceEndCall();
+            }
+        };
+
+        if (isCaller) {
+            const offer = await peerConnection.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: isVideo
+            });
+            await peerConnection.setLocalDescription(offer);
+            
+            await db.collection('calls').doc(callId).update({
+                offer: {
+                    type: offer.type,
+                    sdp: offer.sdp
+                }
+            });
+        } else {
+            if (callData.offer) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                await db.collection('calls').doc(callId).update({
+                    answer: {
+                        type: answer.type,
+                        sdp: answer.sdp
+                    }
+                });
+            }
+        }
+
+        listenForIceCandidates(callId, isCaller ? callData.calleeId : callData.callerId);
+        
+        if (!isCaller && callData.offer) {
+            listenForAnswer(callId);
+        }
+
+        startCallTimer();
+        
+    } catch (error) {
+        alert('Ошибка при начале звонка');
+    }
+}
+
+function listenForIceCandidates(callId, otherUserId) {
+    db.collection('calls').doc(callId).collection('ice')
+        .where('sender', '==', otherUserId)
+        .onSnapshot(snapshot => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    try {
+                        const candidate = new RTCIceCandidate(change.doc.data().candidate);
+                        peerConnection.addIceCandidate(candidate);
+                    } catch (e) {}
+                }
+            });
+        });
+}
+
+function listenForAnswer(callId) {
+    db.collection('calls').doc(callId).onSnapshot(snapshot => {
+        const data = snapshot.data();
+        if (data && data.answer && !peerConnection.currentRemoteDescription) {
+            try {
+                peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } catch (e) {}
+        }
+    });
+}
+
+function forceEndCall() {
+    if (callEndTimeout) {
+        clearTimeout(callEndTimeout);
+    }
+    
+    callEndTimeout = setTimeout(() => {
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+        
+        const activeContainer = document.getElementById('activeCallContainer');
+        const incomingModal = document.getElementById('incomingCallModal');
+        
+        if (activeContainer) activeContainer.style.display = 'none';
+        if (incomingModal) incomingModal.style.display = 'none';
+        
+        stopCallTimer();
+        currentCallId = null;
+        callEndTimeout = null;
+    }, 500);
+}
+
+async function endCall() {
+    if (callEndTimeout) {
+        clearTimeout(callEndTimeout);
+    }
+    
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    if (currentCallId) {
+        try {
+            await db.collection('calls').doc(currentCallId).update({
+                status: 'ended',
+                endedAt: new Date().toISOString()
+            });
+        } catch (e) {}
+        currentCallId = null;
+    }
+    
+    const activeContainer = document.getElementById('activeCallContainer');
+    const incomingModal = document.getElementById('incomingCallModal');
+    
+    if (activeContainer) activeContainer.style.display = 'none';
+    if (incomingModal) incomingModal.style.display = 'none';
+    
+    stopCallTimer();
+}
+
+function toggleMute() {
+    if (localStream) {
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack) {
+            isMuted = !isMuted;
+            audioTrack.enabled = !isMuted;
+            const muteBtn = document.getElementById('muteButton');
+            if (muteBtn) muteBtn.style.opacity = isMuted ? '0.5' : '1';
+        }
+    }
+}
+
+function toggleVideo() {
+    if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+            isVideoEnabled = !isVideoEnabled;
+            videoTrack.enabled = isVideoEnabled;
+            const videoBtn = document.getElementById('videoToggleButton');
+            if (videoBtn) videoBtn.style.opacity = isVideoEnabled ? '1' : '0.5';
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) localVideo.style.display = isVideoEnabled ? 'block' : 'none';
+        }
+    }
+}
+
+function startCallTimer() {
+    callSeconds = 0;
+    updateCallTimer();
+    if (callTimer) clearInterval(callTimer);
+    callTimer = setInterval(updateCallTimer, 1000);
+}
+
+function stopCallTimer() {
+    if (callTimer) {
+        clearInterval(callTimer);
+        callTimer = null;
+    }
+    callSeconds = 0;
+}
+
+function updateCallTimer() {
+    const minutes = Math.floor(callSeconds / 60);
+    const seconds = callSeconds % 60;
+    const timer = document.getElementById('callTimer');
+    if (timer) {
+        timer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    callSeconds++;
+}
+
+window.initiateCall = initiateCall;
+window.answerCall = answerCall;
+window.declineCall = declineCall;
+window.endCall = endCall;
+window.toggleMute = toggleMute;
+window.toggleVideo = toggleVideo;
 
 window.fixStatus = async function() {
     if (!currentUser) {
