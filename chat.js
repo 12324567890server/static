@@ -25,7 +25,10 @@ try {
 }
 
 const db = firebase.firestore();
-const storage = firebase.storage();
+
+const supabaseUrl = 'https://bncysgnqsgpdpuupzgqj.supabase.co';
+const supabaseKey = 'sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR';
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 const elements = {
     loginScreen: document.getElementById('loginScreen'),
@@ -747,10 +750,20 @@ async function sendVoiceMessage(audioBlob) {
     
     try {
         const fileName = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
-        const storageRef = storage.ref().child(`voice_messages/${currentUser.uid}/${fileName}`);
         
-        await storageRef.put(audioBlob);
-        const voiceUrl = await storageRef.getDownloadURL();
+        const { data, error } = await supabase.storage
+            .from('voice-messages')
+            .upload(fileName, audioBlob, {
+                contentType: 'audio/webm'
+            });
+        
+        if (error) throw error;
+        
+        const { data: urlData } = supabase.storage
+            .from('voice-messages')
+            .getPublicUrl(fileName);
+        
+        const voiceUrl = urlData.publicUrl;
         
         const participantsArray = [currentUser.uid, currentChatUserId].sort();
         const chatId = participantsArray.join('_');
