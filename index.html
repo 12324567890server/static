@@ -53,16 +53,19 @@
         <div id="privateMessages" class="private-messages"></div>
         
         <div class="message-input-container">
-            <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off" maxlength="1000">
-            <button id="sendMessageBtn" class="send-btn" style="display: none;">
-                <span class="send-icon"></span>
-            </button>
-            <button id="voiceMessageBtn" class="voice-btn">
-                <span class="voice-icon"></span>
-            </button>
-            <div id="voiceRecordingIndicator" class="voice-recording-indicator" style="display: none;">
+            <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
+            <div class="message-buttons">
+                <button id="sendMessageBtn" class="action-btn send-btn">
+                    <span class="send-icon"></span>
+                </button>
+                <button id="voiceMessageBtn" class="action-btn voice-btn">
+                    <span class="voice-icon"></span>
+                </button>
+            </div>
+            <div id="voiceRecordingIndicator" class="voice-recording-indicator">
                 <span class="recording-dot"></span>
                 <span id="voiceTimer">0:00</span>
+                <span class="recording-text">Отпустите для отправки</span>
             </div>
         </div>
     </div>
@@ -135,7 +138,7 @@
         </div>
     </div>
 
-    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner"></div>
     </div>
 
