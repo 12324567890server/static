@@ -16,20 +16,22 @@ const firebaseConfig = {
 };
 
 let app;
+let db;
+let supabase;
+
 try {
     app = firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    
+    const supabaseUrl = 'https://bncysgnqsgpdpuupzgqj.supabase.co';
+    const supabaseKey = 'sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR';
+    supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 } catch (error) {
     document.addEventListener('DOMContentLoaded', function() {
         alert('Ошибка подключения к серверу. Пожалуйста, обновите страницу.');
     });
     return;
 }
-
-const db = firebase.firestore();
-
-const supabaseUrl = 'https://bncysgnqsgpdpuupzgqj.supabase.co';
-const supabaseKey = 'sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR';
-const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
 const elements = {
     loginScreen: document.getElementById('loginScreen'),
