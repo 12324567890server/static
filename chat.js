@@ -15,8 +15,9 @@ const firebaseConfig = {
     appId: "1:524449944041:web:362f4343ed1507ec2d3b78"
 };
 
+let app;
 try {
-    firebase.initializeApp(firebaseConfig);
+    app = firebase.initializeApp(firebaseConfig);
 } catch (error) {
     document.addEventListener('DOMContentLoaded', function() {
         alert('Ошибка подключения к серверу. Пожалуйста, обновите страницу.');
