@@ -79,17 +79,14 @@ let unreadCounts = {};
 let onlineUsers = new Map();
 let typingUsers = new Map();
 let voiceRecordingUsers = new Map();
-let typingTimeouts = new Map();
 let messagesUnsubscribe = null;
 let chatsUnsubscribe = null;
 let usersUnsubscribe = null;
 let typingUnsubscribe = null;
 let voiceUnsubscribe = null;
 let heartbeatInterval = null;
-let lastReadTime = {};
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let messageListener = null;
-let scrollPositions = {};
 let connectionId = null;
 
 let mediaRecorder = null;
@@ -97,7 +94,7 @@ let audioChunks = [];
 let recordingTimer = null;
 let recordingSeconds = 0;
 let isRecording = false;
-let recordingStartTime = null;
+let typingTimer = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     init();
@@ -147,25 +144,6 @@ async function cleanupOldConnections() {
                 doc.ref.update({ is_online: false });
             });
         }
-    } catch (e) {}
-}
-
-async function updateUserStatus(userId) {
-    try {
-        const threeSecondsAgo = new Date(Date.now() - 3000).toISOString();
-        const connectionsSnapshot = await db.collection('users')
-            .doc(userId)
-            .collection('connections')
-            .where('is_online', '==', true)
-            .where('last_seen', '>', threeSecondsAgo)
-            .get();
-
-        const isOnline = !connectionsSnapshot.empty;
-          
-        await db.collection('users').doc(userId).update({
-            is_online: isOnline,
-            last_check: new Date().toISOString()
-        });
     } catch (e) {}
 }
 
@@ -386,8 +364,6 @@ function setupTypingListener() {
     });
 }
 
-let typingTimer = null;
-
 function setupTypingDetection() {
     if (!currentChatUserId) return;
     
@@ -473,9 +449,6 @@ async function showChat(username) {
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
         elements.messageInput.value = '';
-        elements.sendMessageBtn.style.display = 'none';
-        elements.voiceMessageBtn.style.display = 'flex';
-        elements.voiceRecordingIndicator.style.display = 'none';
           
         await loadMessages(user.uid);
         setupTypingDetection();
@@ -629,18 +602,6 @@ function setupEventListeners() {
         }
     });
 
-    elements.messageInput.addEventListener('focus', () => {
-        elements.sendMessageBtn.style.display = 'flex';
-        elements.voiceMessageBtn.style.display = 'none';
-    });
-
-    elements.messageInput.addEventListener('blur', () => {
-        if (!elements.messageInput.value.trim()) {
-            elements.sendMessageBtn.style.display = 'none';
-            elements.voiceMessageBtn.style.display = 'flex';
-        }
-    });
-
     setupVoiceButton();
 
     document.querySelectorAll('.close-modal').forEach(btn => {
@@ -720,20 +681,19 @@ async function startRecording() {
         };
         
         mediaRecorder.onstop = async () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            await sendVoiceMessage(audioBlob);
+            if (audioChunks.length > 0) {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                await sendVoiceMessage(audioBlob);
+            }
             stream.getTracks().forEach(track => track.stop());
         };
         
         mediaRecorder.start();
         isRecording = true;
-        recordingStartTime = Date.now();
+        recordingSeconds = 0;
         
         elements.voiceRecordingIndicator.style.display = 'flex';
-        elements.sendMessageBtn.style.display = 'none';
-        elements.voiceMessageBtn.style.display = 'none';
         
-        recordingSeconds = 0;
         updateVoiceTimer();
         recordingTimer = setInterval(updateVoiceTimer, 1000);
         
@@ -759,7 +719,6 @@ async function stopRecording() {
     isRecording = false;
     
     elements.voiceRecordingIndicator.style.display = 'none';
-    elements.voiceMessageBtn.style.display = 'flex';
     
     if (recordingTimer) {
         clearInterval(recordingTimer);
@@ -1223,8 +1182,6 @@ async function sendMessage() {
       
     const messageText = elements.messageInput.value.trim();
     elements.messageInput.value = '';
-    elements.sendMessageBtn.style.display = 'none';
-    elements.voiceMessageBtn.style.display = 'flex';
     
     const participantsArray = [currentUser.uid, currentChatUserId].sort();
     const chatId = participantsArray.join('_');
@@ -1543,7 +1500,6 @@ async function logout() {
     typingUsers.clear();
     voiceRecordingUsers.clear();
     unreadCounts = {};
-    scrollPositions = {};
     showLogin();
     showLoading(false);
 }
