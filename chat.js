@@ -163,7 +163,7 @@ async function updateUserStatus(userId) {
 function handleVisibilityChange() {
     isPageVisible = !document.hidden;
     if (currentUser && connectionId) {
-        updateOnlineStatus(!document.hidden);
+        updateOnlineStatus(true);
     }
 }
 
@@ -185,7 +185,7 @@ async function updateOnlineStatus(isOnline) {
             .doc(connectionId)
             .set({
                 connection_id: connectionId,
-                is_online: isOnline,
+                is_online: true,
                 last_seen: now,
                 device: isMobile ? 'mobile' : 'desktop'
             });
@@ -692,7 +692,7 @@ function setupRealtimeSubscriptions() {
 
 function startHeartbeat() {
     stopHeartbeat();
-      
+    
     heartbeatInterval = setInterval(() => {
         if (currentUser && connectionId && navigator.onLine) {
             updateOnlineStatus(true);
