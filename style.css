@@ -254,33 +254,29 @@ body {
     color: #b19cd9;
 }
 
-.voice-message {
-    color: #ff7d7d;
-}
-
-.typing-animation span, .voice-recording-animation span {
+.typing-animation span {
     animation: blink 1.4s infinite;
     animation-fill-mode: both;
 }
 
-.typing-animation span:nth-child(2), .voice-recording-animation span:nth-child(2) {
+.typing-animation span:nth-child(2) {
     animation-delay: 0.2s;
 }
 
-.typing-animation span:nth-child(3), .voice-recording-animation span:nth-child(3) {
+.typing-animation span:nth-child(3) {
     animation-delay: 0.4s;
 }
 
-.typing-animation-small span, .voice-recording-animation-small span {
+.typing-animation-small span {
     animation: blink 1.4s infinite;
     animation-fill-mode: both;
 }
 
-.typing-animation-small span:nth-child(2), .voice-recording-animation-small span:nth-child(2) {
+.typing-animation-small span:nth-child(2) {
     animation-delay: 0.2s;
 }
 
-.typing-animation-small span:nth-child(3), .voice-recording-animation-small span:nth-child(3) {
+.typing-animation-small span:nth-child(3) {
     animation-delay: 0.4s;
 }
 
@@ -477,67 +473,6 @@ body {
     border-bottom-left-radius: 5px;
 }
 
-.voice-message-content {
-    padding: 8px 12px !important;
-}
-
-.voice-message {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 180px;
-}
-
-.play-voice-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 14px;
-    flex-shrink: 0;
-}
-
-.play-voice-btn:active {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.play-icon {
-    font-size: 14px;
-}
-
-.voice-wave {
-    flex: 1;
-    height: 30px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 15px;
-    position: relative;
-    overflow: hidden;
-}
-
-.voice-progress {
-    position: absolute;
-    left: 0;
-    top: 0;
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #b19cd9, #d8bfd8);
-    border-radius: 15px;
-    transition: width 0.1s linear;
-}
-
-.voice-duration {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.7);
-    min-width: 35px;
-    text-align: right;
-}
-
 .message .time {
     font-size: 10px;
     text-align: right;
@@ -572,12 +507,7 @@ body {
     border-color: #b19cd9;
 }
 
-.message-buttons {
-    display: flex;
-    gap: 8px;
-}
-
-.action-btn {
+.send-btn {
     width: 48px;
     height: 48px;
     border-radius: 50%;
@@ -594,7 +524,7 @@ body {
     flex-shrink: 0;
 }
 
-.action-btn:active {
+.send-btn:active {
     transform: scale(0.95);
 }
 
@@ -606,68 +536,6 @@ body {
     background-repeat: no-repeat;
     background-position: center;
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><polygon points="2,3 22,12 2,21 8,12 2,3"/></svg>');
-}
-
-.voice-icon {
-    width: 24px;
-    height: 24px;
-    display: inline-block;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>');
-}
-
-.voice-recording-indicator {
-    position: absolute;
-    right: 20px;
-    bottom: calc(100% + 10px);
-    background: rgba(255, 80, 80, 0.9);
-    border-radius: 30px;
-    padding: 8px 16px;
-    display: none;
-    align-items: center;
-    gap: 10px;
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    animation: slideUp 0.3s ease;
-    z-index: 10;
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.recording-dot {
-    width: 12px;
-    height: 12px;
-    background: #ffffff;
-    border-radius: 50%;
-    animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-    0% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(1.2); }
-    100% { opacity: 1; transform: scale(1); }
-}
-
-#voiceTimer {
-    font-weight: bold;
-    color: white;
-    font-size: 14px;
-}
-
-.recording-text {
-    font-size: 12px;
-    color: white;
 }
 
 .icon {
@@ -1041,22 +909,6 @@ body {
     }
 }
 
-.voice-btn {
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    -khtml-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-}
-
-.voice-btn:active {
-    transform: scale(0.95);
-    opacity: 0.9;
-}
-
 @media (max-width: 768px) {
     .action-buttons {
         bottom: 15px;
@@ -1073,17 +925,8 @@ body {
         max-width: 85%;
     }
     
-    .voice-recording-indicator {
-        right: 10px;
-        padding: 6px 12px;
-    }
-    
-    .recording-text {
-        display: none;
-    }
-    
-    .voice-btn {
+    .send-btn {
         width: 52px;
         height: 52px;
     }
-}
+    }
