@@ -84,216 +84,43 @@ let chats = [];
 let unreadCounts = {};
 let onlineUsers = new Map();
 let typingUsers = new Map();
-let voiceRecordingUsers = new Map();
 let messagesUnsubscribe = null;
 let chatsUnsubscribe = null;
 let usersUnsubscribe = null;
 let typingUnsubscribe = null;
-let voiceUnsubscribe = null;
 let heartbeatInterval = null;
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let messageListener = null;
 let connectionId = null;
+let typingTimer = null;
 
-class VoiceRecorder {
-    constructor() {
-        this.reset();
-    }
+// Простая функция для показа уведомлений
+function showToast(text) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 30px;
+        font-size: 14px;
+        z-index: 10000;
+        animation: fadeInOut 2s ease;
+    `;
+    toast.textContent = text;
+    document.body.appendChild(toast);
     
-    reset() {
-        this.isRecording = false;
-        this.isStarting = false;
-        this.duration = 0;
-        this.stream = null;
-        this.recorder = null;
-        this.chunks = [];
-        this.timerInterval = null;
-        this.chatId = null;
-        this.targetUserId = null;
-        this.startTime = 0;
-    }
-    
-    async start(targetUserId, chatId) {
-        if (this.isRecording || this.isStarting) return false;
-        
-        this.isStarting = true;
-        this.targetUserId = targetUserId;
-        this.chatId = chatId;
-        
-        try {
-            this.stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    channelCount: 1
-                }
-            });
-            
-            const mimeType = this.getSupportedMimeType();
-            
-            this.recorder = new MediaRecorder(this.stream, {
-                mimeType: mimeType,
-                audioBitsPerSecond: 128000
-            });
-            
-            this.chunks = [];
-            
-            this.recorder.ondataavailable = (e) => {
-                if (e.data.size > 0) {
-                    this.chunks.push(e.data);
-                }
-            };
-            
-            this.recorder.start();
-            this.isRecording = true;
-            this.isStarting = false;
-            this.startTime = Date.now();
-            
-            this.startTimer();
-            
-            await db.collection('voiceRecording').doc(this.chatId + '_' + currentUser.uid).set({
-                userId: currentUser.uid,
-                chatId: this.chatId,
-                timestamp: new Date().toISOString()
-            });
-            
-            if (navigator.vibrate) navigator.vibrate(50);
-            
-            return true;
-            
-        } catch (error) {
-            this.cleanup();
-            return false;
-        }
-    }
-    
-    async stop() {
-        if (!this.isRecording || !this.recorder) return null;
-        
-        return new Promise((resolve) => {
-            const finalDuration = Math.floor((Date.now() - this.startTime) / 1000);
-            
-            this.recorder.onstop = async () => {
-                if (this.timerInterval) {
-                    clearInterval(this.timerInterval);
-                    this.timerInterval = null;
-                }
-                
-                if (finalDuration < 1) {
-                    this.cleanup();
-                    resolve(null);
-                    return;
-                }
-                
-                const blob = new Blob(this.chunks, { type: 'audio/webm' });
-                const fileName = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
-                
-                try {
-                    const { error } = await supabase.storage
-                        .from('voice-messages')
-                        .upload(fileName, blob, {
-                            contentType: 'audio/webm',
-                            cacheControl: '3600'
-                        });
-                    
-                    if (error) throw error;
-                    
-                    const { data: urlData } = supabase.storage
-                        .from('voice-messages')
-                        .getPublicUrl(fileName);
-                    
-                    await db.collection('messages').add({
-                        chat_id: this.chatId,
-                        participants: [currentUser.uid, this.targetUserId].sort(),
-                        sender: currentUser.uid,
-                        receiver: this.targetUserId,
-                        message: '🎤 Голосовое сообщение',
-                        voice_url: urlData.publicUrl,
-                        voice_duration: finalDuration,
-                        type: 'voice',
-                        read: false,
-                        created_at: new Date().toISOString()
-                    });
-                    
-                    if (navigator.vibrate) navigator.vibrate(100);
-                    
-                    resolve(finalDuration);
-                    
-                } catch (error) {
-                    resolve(null);
-                }
-                
-                this.cleanup();
-            };
-            
-            this.recorder.stop();
-            this.stream.getTracks().forEach(track => track.stop());
-        });
-    }
-    
-    cancel() {
-        if (this.recorder && this.isRecording) {
-            this.recorder.stop();
-        }
-        this.cleanup();
-        if (navigator.vibrate) navigator.vibrate(200);
-    }
-    
-    startTimer() {
-        this.timerInterval = setInterval(() => {
-            if (this.isRecording) {
-                const seconds = Math.floor((Date.now() - this.startTime) / 1000);
-                
-                if (seconds >= 300) {
-                    this.stop();
-                    return;
-                }
-                
-                const mins = Math.floor(seconds / 60);
-                const secs = seconds % 60;
-                elements.voiceTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-            }
-        }, 100);
-    }
-    
-    getSupportedMimeType() {
-        const types = [
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/mp4',
-            'audio/ogg'
-        ];
-        
-        for (let type of types) {
-            if (MediaRecorder.isTypeSupported(type)) {
-                return type;
-            }
-        }
-        return 'audio/webm';
-    }
-    
-    cleanup() {
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-            this.timerInterval = null;
-        }
-        if (this.stream) {
-            this.stream.getTracks().forEach(t => t.stop());
-        }
-        
-        if (this.chatId) {
-            db.collection('voiceRecording').doc(this.chatId + '_' + currentUser.uid).delete();
-        }
-        
-        this.isRecording = false;
-        this.isStarting = false;
-    }
+    setTimeout(() => toast.remove(), 2000);
 }
 
-const voiceRecorder = new VoiceRecorder();
-
+// Скрываем кнопку голосовых сообщений (она не будет работать)
 document.addEventListener('DOMContentLoaded', function() {
+    if (elements.voiceMessageBtn) {
+        elements.voiceMessageBtn.style.display = 'none';
+    }
     init();
 });
 
@@ -349,18 +176,11 @@ function handleVisibilityChange() {
     if (currentUser && connectionId) {
         updateOnlineStatus(!document.hidden);
     }
-    if (document.hidden && voiceRecorder.isRecording) {
-        voiceRecorder.cancel();
-        elements.voiceRecordingIndicator.style.display = 'none';
-    }
 }
 
 function handleBeforeUnload() {
     if (currentUser && connectionId) {
         removeConnection();
-    }
-    if (voiceRecorder.isRecording) {
-        voiceRecorder.cancel();
     }
 }
 
@@ -475,7 +295,6 @@ async function checkUser() {
                 loadChats();
                 startHeartbeat();
                 setupTypingListener();
-                setupVoiceListener();
             } else {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
@@ -488,41 +307,6 @@ async function checkUser() {
     } finally {
         showLoading(false);
     }
-}
-
-function setupVoiceListener() {
-    if (voiceUnsubscribe) {
-        voiceUnsubscribe();
-    }
-    
-    voiceUnsubscribe = db.collection('voiceRecording').onSnapshot(snapshot => {
-        snapshot.docChanges().forEach(change => {
-            if (change.type === 'added' || change.type === 'modified') {
-                const data = change.doc.data();
-                if (data.userId !== currentUser?.uid) {
-                    voiceRecordingUsers.set(data.userId, {
-                        isRecording: true,
-                        chatId: data.chatId
-                    });
-                    
-                    if (currentChatUserId === data.userId && data.chatId.includes(currentUser.uid)) {
-                        showVoiceRecordingIndicator();
-                    }
-                    
-                    displayChats();
-                }
-            } else if (change.type === 'removed') {
-                const data = change.doc.data();
-                voiceRecordingUsers.delete(data.userId);
-                
-                if (currentChatUserId === data.userId) {
-                    hideVoiceRecordingIndicator();
-                }
-                
-                displayChats();
-            }
-        });
-    });
 }
 
 function setupTypingListener() {
@@ -541,9 +325,7 @@ function setupTypingListener() {
                     });
                     
                     if (currentChatUserId === data.userId && data.chatId.includes(currentUser.uid)) {
-                        if (!voiceRecordingUsers.has(data.userId)) {
-                            showTypingIndicator();
-                        }
+                        showTypingIndicator();
                     }
                     
                     displayChats();
@@ -553,9 +335,7 @@ function setupTypingListener() {
                 typingUsers.delete(data.userId);
                 
                 if (currentChatUserId === data.userId) {
-                    if (!voiceRecordingUsers.has(data.userId)) {
-                        hideTypingIndicator();
-                    }
+                    hideTypingIndicator();
                 }
                 
                 displayChats();
@@ -598,20 +378,6 @@ function showTypingIndicator() {
 }
 
 function hideTypingIndicator() {
-    const statusElement = elements.chatStatus;
-    if (!statusElement) return;
-    updateChatStatus();
-}
-
-function showVoiceRecordingIndicator() {
-    const statusElement = elements.chatStatus;
-    if (!statusElement) return;
-    
-    statusElement.innerHTML = '<span class="voice-recording-animation">🎤 Записывает голосовое сообщение<span>.</span><span>.</span><span>.</span></span>';
-    statusElement.style.color = '#ff7d7d';
-}
-
-function hideVoiceRecordingIndicator() {
     const statusElement = elements.chatStatus;
     if (!statusElement) return;
     updateChatStatus();
@@ -665,9 +431,6 @@ async function showChat(username) {
         
         if (typingUsers.has(user.uid)) {
             showTypingIndicator();
-        }
-        if (voiceRecordingUsers.has(user.uid)) {
-            showVoiceRecordingIndicator();
         }
           
     } catch (e) {
@@ -763,11 +526,6 @@ function setupEventListeners() {
             typingTimer = null;
         }
         
-        if (voiceRecorder.isRecording) {
-            voiceRecorder.cancel();
-            elements.voiceRecordingIndicator.style.display = 'none';
-        }
-        
         currentChatWith = null;
         currentChatUserId = null;
         isChatActive = false;
@@ -798,8 +556,6 @@ function setupEventListeners() {
         }
     });
 
-    setupVoiceButton();
-
     document.querySelectorAll('.close-modal').forEach(btn => {
         btn.addEventListener('click', e => {
             const modal = e.target.closest('.modal');
@@ -823,86 +579,6 @@ function setupEventListeners() {
     });
 
     elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
-}
-
-function setupVoiceButton() {
-    const voiceBtn = elements.voiceMessageBtn;
-    if (!voiceBtn) return;
-
-    const newBtn = voiceBtn.cloneNode(true);
-    voiceBtn.parentNode.replaceChild(newBtn, voiceBtn);
-    elements.voiceMessageBtn = newBtn;
-
-    newBtn.addEventListener('touchstart', handleVoiceStart, { passive: false });
-    newBtn.addEventListener('touchend', handleVoiceEnd, { passive: false });
-    newBtn.addEventListener('touchcancel', handleVoiceCancel, { passive: false });
-    
-    newBtn.addEventListener('mousedown', handleVoiceStart);
-    newBtn.addEventListener('mouseup', handleVoiceEnd);
-    newBtn.addEventListener('mouseleave', handleVoiceCancel);
-}
-
-function handleVoiceStart(e) {
-    e.preventDefault();
-    
-    if (!currentChatUserId) {
-        showToast('Сначала выберите чат');
-        return;
-    }
-    
-    if (voiceRecorder.isRecording || voiceRecorder.isStarting) return;
-    
-    const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
-    
-    elements.voiceRecordingIndicator.style.display = 'flex';
-    elements.voiceTimer.textContent = '0:00';
-    
-    voiceRecorder.start(currentChatUserId, chatId);
-}
-
-async function handleVoiceEnd(e) {
-    e.preventDefault();
-    
-    if (voiceRecorder.isRecording) {
-        const duration = await voiceRecorder.stop();
-        if (duration) {
-            showToast(`Голосовое отправлено (${duration} сек)`);
-        }
-    }
-    
-    elements.voiceRecordingIndicator.style.display = 'none';
-}
-
-function handleVoiceCancel(e) {
-    e.preventDefault();
-    
-    if (voiceRecorder.isRecording) {
-        voiceRecorder.cancel();
-        showToast('Запись отменена');
-    }
-    
-    elements.voiceRecordingIndicator.style.display = 'none';
-}
-
-function showToast(text) {
-    const toast = document.createElement('div');
-    toast.style.cssText = `
-        position: fixed;
-        bottom: 100px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0,0,0,0.8);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 30px;
-        font-size: 14px;
-        z-index: 10000;
-        animation: fadeInOut 2s ease;
-    `;
-    toast.textContent = text;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => toast.remove(), 2000);
 }
 
 function closeMenu() {
@@ -959,10 +635,6 @@ function cleanupSubscriptions() {
     if (typingUnsubscribe) {
         typingUnsubscribe();
         typingUnsubscribe = null;
-    }
-    if (voiceUnsubscribe) {
-        voiceUnsubscribe();
-        voiceUnsubscribe = null;
     }
 }
 
@@ -1031,11 +703,6 @@ function stopHeartbeat() {
 
 function updateChatStatus() {
     if (!currentChatUserId || !elements.chatStatus) return;
-    
-    if (voiceRecordingUsers.has(currentChatUserId)) {
-        showVoiceRecordingIndicator();
-        return;
-    }
     
     if (typingUsers.has(currentChatUserId)) {
         showTypingIndicator();
@@ -1113,7 +780,7 @@ async function loadChats() {
                 chatsMap.set(otherUserId, {
                     userId: otherUserId,
                     username: otherUsername,
-                    lastMessage: msg.type === 'voice' ? '🎤 Голосовое сообщение' : msg.message,
+                    lastMessage: msg.message,
                     lastTime: msg.created_at,
                     isMyMessage: msg.sender === currentUser.uid,
                     type: msg.type || 'text'
@@ -1159,15 +826,12 @@ function displayChats() {
         const userStatus = onlineUsers.get(chat.userId);
         const isOnline = userStatus?.is_online === true;
         const isTyping = typingUsers.has(chat.userId);
-        const isRecording = voiceRecordingUsers.has(chat.userId);
         const unreadCount = unreadCounts[chat.userId] || 0;
         const timeString = formatMessageTime(chat.lastTime);
         const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
         let displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
         
-        if (isRecording) {
-            displayMessage = '<span class="voice-recording-animation-small">🎤 Записывает голосовое<span>.</span><span>.</span><span>.</span></span>';
-        } else if (isTyping) {
+        if (isTyping) {
             displayMessage = '<span class="typing-animation-small">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
         } else {
             displayMessage = escapeHtml(messagePrefix + displayMessage);
@@ -1180,7 +844,7 @@ function displayChats() {
                     ${escapeHtml(chat.username)}
                     <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>
                 </div>
-                <div class="chat-last-message ${isTyping ? 'typing-message' : ''} ${isRecording ? 'voice-message' : ''}">${displayMessage}</div>
+                <div class="chat-last-message ${isTyping ? 'typing-message' : ''}">${displayMessage}</div>
                 <div class="chat-time">${timeString}</div>
             </div>
             ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
@@ -1237,70 +901,16 @@ function displayMessage(msg, isMyMessage, msgId) {
       
     const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
     
-    let contentHtml = '';
-    
-    if (msg.type === 'voice' && msg.voice_url) {
-        const duration = msg.voice_duration || 0;
-        const minutes = Math.floor(duration / 60);
-        const seconds = duration % 60;
-        const durationText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        
-        contentHtml = `
-            <div class="message-content voice-message-content">
-                <div class="voice-message">
-                    <button class="play-voice-btn" onclick="playVoiceMessage('${msg.voice_url}', this)">
-                        <span class="play-icon">▶</span>
-                    </button>
-                    <div class="voice-wave">
-                        <div class="voice-progress" style="width: 0%"></div>
-                    </div>
-                    <span class="voice-duration">${durationText}</span>
-                </div>
-                <div class="time">${timeString} ${statusSymbol}</div>
-            </div>
-        `;
-    } else {
-        contentHtml = `
-            <div class="message-content">
-                <div class="text">${escapeHtml(msg.message)}</div>
-                <div class="time">${timeString} ${statusSymbol}</div>
-            </div>
-        `;
-    }
+    let contentHtml = `
+        <div class="message-content">
+            <div class="text">${escapeHtml(msg.message)}</div>
+            <div class="time">${timeString} ${statusSymbol}</div>
+        </div>
+    `;
     
     messageElement.innerHTML = contentHtml;
     elements.privateMessages.appendChild(messageElement);
 }
-
-window.playVoiceMessage = function(url, button) {
-    const audio = new Audio(url);
-    const messageElement = button.closest('.voice-message');
-    const progressBar = messageElement.querySelector('.voice-progress');
-    const playIcon = button.querySelector('.play-icon');
-    
-    if (audio.paused) {
-        audio.play();
-        playIcon.textContent = '⏸';
-        
-        audio.ontimeupdate = () => {
-            const progress = (audio.currentTime / audio.duration) * 100;
-            progressBar.style.width = progress + '%';
-        };
-        
-        audio.onended = () => {
-            progressBar.style.width = '0%';
-            playIcon.textContent = '▶';
-        };
-        
-        audio.onerror = () => {
-            showToast('Ошибка воспроизведения');
-            playIcon.textContent = '▶';
-        };
-    } else {
-        audio.pause();
-        playIcon.textContent = '▶';
-    }
-};
 
 function scrollToBottom() {
     if (elements.privateMessages) {
@@ -1424,7 +1034,6 @@ async function login() {
         loadChats();
         startHeartbeat();
         setupTypingListener();
-        setupVoiceListener();
           
     } catch (e) {
         showError(elements.loginError, 'Ошибка при входе');
@@ -1616,10 +1225,6 @@ async function logout() {
         await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
         typingTimer = null;
     }
-    
-    if (voiceRecorder.isRecording) {
-        await voiceRecorder.cancel();
-    }
       
     try {
         await removeConnection();
@@ -1634,9 +1239,7 @@ async function logout() {
     isChatActive = false;
     onlineUsers.clear();
     typingUsers.clear();
-    voiceRecordingUsers.clear();
     unreadCounts = {};
-    voiceRecorder.reset();
     showLogin();
     showLoading(false);
 }
@@ -1672,25 +1275,5 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
-
-window.fixStatus = async function() {
-    if (!currentUser) {
-        alert('Сначала войдите');
-        return;
-    }
-    
-    try {
-        await db.collection('users')
-            .doc(currentUser.uid)
-            .set({
-                uid: currentUser.uid,
-                username: currentUser.username,
-                is_online: true,
-                last_seen: new Date().toISOString()
-            }, { merge: true });
-        
-        alert('Статус обновлен!');
-    } catch (e) {}
-};
 
 })();
