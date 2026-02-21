@@ -36,8 +36,7 @@ try {
 }
 
 const elements = {
-    loginScreen: document.getElementById('loginScreen'),
-    phoneScreen: document.getElementById('phoneScreen'),
+    registerScreen: document.getElementById('registerScreen'),
     codeScreen: document.getElementById('codeScreen'),
     chatsScreen: document.getElementById('chatsScreen'),
     chatScreen: document.getElementById('chatScreen'),
@@ -52,19 +51,16 @@ const elements = {
     privateMessages: document.getElementById('privateMessages'),
     messageInput: document.getElementById('messageInput'),
     sendMessageBtn: document.getElementById('sendMessageBtn'),
-    loginUsername: document.getElementById('loginUsername'),
-    loginButton: document.getElementById('loginButton'),
-    loginError: document.getElementById('loginError'),
-    phoneLoginBtn: document.getElementById('phoneLoginBtn'),
-    phoneInput: document.getElementById('phoneInput'),
-    phoneError: document.getElementById('phoneError'),
-    sendCodeBtn: document.getElementById('sendCodeBtn'),
-    backToLoginBtn: document.getElementById('backToLoginBtn'),
+    registerUsername: document.getElementById('registerUsername'),
+    registerPhone: document.getElementById('registerPhone'),
+    registerButton: document.getElementById('registerButton'),
+    registerError: document.getElementById('registerError'),
     codeInput: document.getElementById('codeInput'),
     codeError: document.getElementById('codeError'),
     verifyCodeBtn: document.getElementById('verifyCodeBtn'),
     resendCodeBtn: document.getElementById('resendCodeBtn'),
     phoneDisplay: document.getElementById('phoneDisplay'),
+    usernameDisplay: document.getElementById('usernameDisplay'),
     sideMenu: document.getElementById('sideMenu'),
     closeMenu: document.getElementById('closeMenu'),
     myProfileBtn: document.getElementById('myProfileBtn'),
@@ -120,6 +116,8 @@ let connectionId = null;
 let typingTimer = null;
 let recaptchaVerifier = null;
 let confirmationResult = null;
+let pendingUsername = '';
+let pendingPhone = '';
 
 function showToast(text) {
     const toast = document.createElement('div');
@@ -326,105 +324,29 @@ async function checkUser() {
                 setupTypingListener();
             } else {
                 localStorage.removeItem('speednexus_user');
-                showLogin();
+                showRegister();
             }
         } else {
-            showLogin();
+            showRegister();
         }
     } catch (e) {
-        showLogin();
+        showRegister();
     } finally {
         showLoading(false);
     }
 }
 
-function setupTypingListener() {
-    if (typingUnsubscribe) {
-        typingUnsubscribe();
-    }
-    
-    typingUnsubscribe = db.collection('typing').onSnapshot(snapshot => {
-        snapshot.docChanges().forEach(change => {
-            if (change.type === 'added' || change.type === 'modified') {
-                const data = change.doc.data();
-                if (data.userId !== currentUser?.uid) {
-                    typingUsers.set(data.userId, {
-                        isTyping: true,
-                        chatId: data.chatId
-                    });
-                    
-                    if (currentChatUserId === data.userId && data.chatId.includes(currentUser.uid)) {
-                        showTypingIndicator();
-                    }
-                    
-                    displayChats();
-                }
-            } else if (change.type === 'removed') {
-                const data = change.doc.data();
-                typingUsers.delete(data.userId);
-                
-                if (currentChatUserId === data.userId) {
-                    hideTypingIndicator();
-                }
-                
-                displayChats();
-            }
-        });
-    });
-}
-
-function setupTypingDetection() {
-    if (!currentChatUserId) return;
-    
-    elements.messageInput.addEventListener('input', () => {
-        if (!currentChatUserId) return;
-        
-        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
-        
-        if (typingTimer) {
-            clearTimeout(typingTimer);
-        } else {
-            db.collection('typing').doc(chatId + '_' + currentUser.uid).set({
-                userId: currentUser.uid,
-                chatId: chatId,
-                timestamp: new Date().toISOString()
-            });
-        }
-        
-        typingTimer = setTimeout(() => {
-            db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
-            typingTimer = null;
-        }, 3000);
-    });
-}
-
-function showTypingIndicator() {
-    const statusElement = elements.chatStatus;
-    if (!statusElement) return;
-    
-    statusElement.innerHTML = '<span class="typing-animation">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
-    statusElement.style.color = '#b19cd9';
-}
-
-function hideTypingIndicator() {
-    const statusElement = elements.chatStatus;
-    if (!statusElement) return;
-    updateChatStatus();
-}
-
-function showLogin() {
+function showRegister() {
     stopHeartbeat();
     cleanupSubscriptions();
-    elements.loginScreen.style.display = 'flex';
-    elements.phoneScreen.style.display = 'none';
+    elements.registerScreen.style.display = 'flex';
     elements.codeScreen.style.display = 'none';
     elements.chatsScreen.style.display = 'none';
     elements.chatScreen.style.display = 'none';
 }
 
 function showChats() {
-    elements.loginScreen.style.display = 'none';
-    elements.phoneScreen.style.display = 'none';
+    elements.registerScreen.style.display = 'none';
     elements.codeScreen.style.display = 'none';
     elements.chatsScreen.style.display = 'flex';
     elements.chatScreen.style.display = 'none';
@@ -445,32 +367,54 @@ function formatPhoneNumber(e) {
     }
 }
 
-async function sendPhoneCode() {
-    const phoneNumber = elements.phoneInput.value.replace(/\D/g, '');
-    if (!phoneNumber.startsWith('7')) {
-        showError(elements.phoneError, 'Введите корректный номер');
+async function startRegistration() {
+    const username = elements.registerUsername.value.trim();
+    const phone = elements.registerPhone.value.replace(/\D/g, '');
+    
+    if (!username || username.length < 3) {
+        showError(elements.registerError, 'Никнейм минимум 3 символа');
+        return;
+    }
+    
+    if (username.length > 15) {
+        showError(elements.registerError, 'Никнейм максимум 15 символов');
+        return;
+    }
+    
+    if (!phone.startsWith('7')) {
+        showError(elements.registerError, 'Введите корректный номер телефона');
+        return;
+    }
+    
+    const existingUser = await findUserByUsername(username);
+    if (existingUser) {
+        showError(elements.registerError, 'Этот никнейм уже занят');
         return;
     }
     
     showLoading(true);
     try {
-        const fullPhone = '+' + phoneNumber;
+        const fullPhone = '+' + phone;
+        
+        pendingUsername = username;
+        pendingPhone = fullPhone;
         
         if (!recaptchaVerifier) {
-            recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sendCodeBtn', {
+            recaptchaVerifier = new firebase.auth.RecaptchaVerifier('registerButton', {
                 size: 'invisible'
             });
         }
         
         confirmationResult = await auth.signInWithPhoneNumber(fullPhone, recaptchaVerifier);
         
-        elements.phoneDisplay.textContent = elements.phoneInput.value;
-        elements.phoneScreen.style.display = 'none';
+        elements.phoneDisplay.textContent = elements.registerPhone.value;
+        elements.usernameDisplay.textContent = username;
+        elements.registerScreen.style.display = 'none';
         elements.codeScreen.style.display = 'flex';
-        elements.phoneError.style.display = 'none';
+        elements.registerError.style.display = 'none';
         
     } catch (error) {
-        showError(elements.phoneError, 'Ошибка отправки кода');
+        showError(elements.registerError, 'Ошибка отправки кода');
         if (recaptchaVerifier) {
             recaptchaVerifier.clear();
             recaptchaVerifier = null;
@@ -480,7 +424,7 @@ async function sendPhoneCode() {
     }
 }
 
-async function verifyPhoneCode() {
+async function verifyCode() {
     const code = elements.codeInput.value.trim();
     if (!code || code.length < 6) {
         showError(elements.codeError, 'Введите код');
@@ -492,42 +436,27 @@ async function verifyPhoneCode() {
         const result = await confirmationResult.confirm(code);
         const user = result.user;
         
-        const userDoc = await db.collection('users').doc(user.uid).get();
+        const uid = user.uid;
         
-        if (!userDoc.exists) {
-            const username = 'User_' + Math.random().toString(36).substr(2, 6);
-            await db.collection('users').doc(user.uid).set({
-                uid: user.uid,
-                phone: user.phoneNumber,
-                username: username,
-                hidePhone: false,
-                is_online: true,
-                last_seen: new Date().toISOString(),
-                created_at: new Date().toISOString()
-            });
-            
-            currentUser = {
-                uid: user.uid,
-                username: username,
-                phone: user.phoneNumber,
-                hidePhone: false
-            };
-        } else {
-            currentUser = {
-                uid: userDoc.id,
-                username: userDoc.data().username,
-                phone: userDoc.data().phone || user.phoneNumber,
-                hidePhone: userDoc.data().hidePhone || false
-            };
-            
-            await db.collection('users').doc(user.uid).update({
-                is_online: true,
-                last_seen: new Date().toISOString()
-            });
-        }
+        await db.collection('users').doc(uid).set({
+            uid: uid,
+            phone: pendingPhone,
+            username: pendingUsername,
+            hidePhone: false,
+            is_online: true,
+            last_seen: new Date().toISOString(),
+            created_at: new Date().toISOString()
+        });
+        
+        currentUser = {
+            uid: uid,
+            username: pendingUsername,
+            phone: pendingPhone,
+            hidePhone: false
+        };
         
         if (elements.hidePhoneToggle) {
-            elements.hidePhoneToggle.checked = currentUser.hidePhone;
+            elements.hidePhoneToggle.checked = false;
         }
         
         await createConnection();
@@ -543,6 +472,31 @@ async function verifyPhoneCode() {
         
     } catch (error) {
         showError(elements.codeError, 'Неверный код');
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function resendCode() {
+    if (!pendingPhone) return;
+    
+    showLoading(true);
+    try {
+        if (recaptchaVerifier) {
+            recaptchaVerifier.clear();
+            recaptchaVerifier = null;
+        }
+        
+        recaptchaVerifier = new firebase.auth.RecaptchaVerifier('resendCodeBtn', {
+            size: 'invisible'
+        });
+        
+        confirmationResult = await auth.signInWithPhoneNumber(pendingPhone, recaptchaVerifier);
+        
+        showToast('Код отправлен повторно');
+        
+    } catch (error) {
+        showError(elements.codeError, 'Ошибка отправки кода');
     } finally {
         showLoading(false);
     }
@@ -732,26 +686,17 @@ async function showUserProfile(userId, username) {
 }
 
 function setupEventListeners() {
-    elements.loginButton.addEventListener('click', login);
-    elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
-
-    elements.phoneLoginBtn.addEventListener('click', () => {
-        elements.loginScreen.style.display = 'none';
-        elements.phoneScreen.style.display = 'flex';
+    elements.registerButton.addEventListener('click', startRegistration);
+    elements.registerPhone.addEventListener('input', formatPhoneNumber);
+    elements.registerUsername.addEventListener('keypress', e => {
+        if (e.key === 'Enter') startRegistration();
     });
 
-    elements.sendCodeBtn.addEventListener('click', sendPhoneCode);
-    elements.verifyCodeBtn.addEventListener('click', verifyPhoneCode);
-    elements.resendCodeBtn.addEventListener('click', sendPhoneCode);
-    elements.backToLoginBtn.addEventListener('click', () => {
-        elements.phoneScreen.style.display = 'none';
-        elements.loginScreen.style.display = 'flex';
-    });
-    
-    elements.phoneInput.addEventListener('input', formatPhoneNumber);
+    elements.verifyCodeBtn.addEventListener('click', verifyCode);
+    elements.resendCodeBtn.addEventListener('click', resendCode);
     elements.codeInput.addEventListener('input', () => {
         if (elements.codeInput.value.length === 6) {
-            verifyPhoneCode();
+            verifyCode();
         }
     });
 
@@ -1164,8 +1109,6 @@ function displayChats() {
         const div = document.createElement('div');
         div.className = 'chat-item';
         
-        const chatName = div.querySelector('.chat-name');
-        
         div.onclick = () => showChat(chat.username);
         
         const userStatus = onlineUsers.get(chat.userId);
@@ -1383,75 +1326,6 @@ async function markMessagesAsRead(userId) {
 function updateTitle() {
     const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
     document.title = totalUnread ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
-}
-
-async function login() {
-    const username = elements.loginUsername.value.trim();
-    if (!username || username.length < 3) {
-        showError(elements.loginError, 'Минимум 3 символа');
-        return;
-    }
-
-    if (username.length > 15) {
-        showError(elements.loginError, 'Максимум 15 символов');
-        return;
-    }
-
-    showLoading(true);
-    try {
-        const existingUser = await findUserByUsername(username);
-        const now = new Date().toISOString();
-          
-        if (existingUser) {
-            currentUser = {
-                uid: existingUser.uid,
-                username: existingUser.username,
-                phone: existingUser.phone || '',
-                hidePhone: existingUser.hidePhone || false
-            };
-            
-            await db.collection('users').doc(currentUser.uid).update({
-                is_online: true,
-                last_seen: now
-            });
-        } else {
-            const uid = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            
-            await db.collection('users').doc(uid).set({
-                uid: uid,
-                username: username,
-                phone: '',
-                hidePhone: false,
-                is_online: true,
-                last_seen: now,
-                created_at: now
-            });
-
-            currentUser = { uid, username, phone: '', hidePhone: false };
-        }
-
-        await createConnection();
-          
-        localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-        
-        if (elements.hidePhoneToggle) {
-            elements.hidePhoneToggle.checked = currentUser.hidePhone;
-        }
-          
-        showChats();
-        updateUI();
-        setupRealtimeSubscriptions();
-        loadChats();
-        startHeartbeat();
-        setupTypingListener();
-          
-    } catch (e) {
-        showError(elements.loginError, 'Ошибка при входе');
-        localStorage.removeItem('speednexus_user');
-        currentUser = null;
-    } finally {
-        showLoading(false);
-    }
 }
 
 async function editProfile() {
@@ -1710,7 +1584,9 @@ async function logout() {
     onlineUsers.clear();
     typingUsers.clear();
     unreadCounts = {};
-    showLogin();
+    pendingUsername = '';
+    pendingPhone = '';
+    showRegister();
     showLoading(false);
 }
 
