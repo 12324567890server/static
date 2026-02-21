@@ -11,28 +11,16 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <div id="loginScreen" class="login-screen">
+    <div id="registerScreen" class="login-screen">
         <div class="login-container">
             <div class="login-header">
                 <h1>SpeedNexus</h1>
+                <p style="color: rgba(255,255,255,0.7); margin-top: 10px;">Регистрация</p>
             </div>
-            <input type="text" id="loginUsername" class="login-input" placeholder="Введите ваш никнейм" maxlength="20">
-            <div id="loginError" class="error-message"></div>
-            <button id="loginButton" class="login-btn">Продолжить</button>
-            <button id="phoneLoginBtn" class="login-btn" style="background: rgba(76,175,80,0.8); margin-top: 10px;">Войти по номеру</button>
-        </div>
-    </div>
-
-    <div id="phoneScreen" class="login-screen" style="display: none;">
-        <div class="login-container">
-            <div class="login-header">
-                <h1>SpeedNexus</h1>
-                <p style="color: rgba(255,255,255,0.7); margin-top: 10px;">Введите номер телефона</p>
-            </div>
-            <input type="tel" id="phoneInput" class="login-input" placeholder="+7 (999) 999-99-99" maxlength="18">
-            <div id="phoneError" class="error-message"></div>
-            <button id="sendCodeBtn" class="login-btn">Получить код</button>
-            <button id="backToLoginBtn" class="login-btn" style="background: rgba(138,43,226,0.5); margin-top: 10px;">Назад</button>
+            <input type="text" id="registerUsername" class="login-input" placeholder="Ваш никнейм" maxlength="20">
+            <input type="tel" id="registerPhone" class="login-input" placeholder="+7 (999) 999-99-99" maxlength="18">
+            <div id="registerError" class="error-message"></div>
+            <button id="registerButton" class="login-btn">Получить код</button>
         </div>
     </div>
 
@@ -42,6 +30,7 @@
                 <h1>SpeedNexus</h1>
                 <p style="color: rgba(255,255,255,0.7); margin-top: 10px;">Введите код из SMS</p>
                 <p id="phoneDisplay" style="color: #b19cd9; font-weight: bold;">+7 999 999-99-99</p>
+                <p id="usernameDisplay" style="color: #b19cd9; font-size: 14px;"></p>
             </div>
             <input type="text" id="codeInput" class="login-input" placeholder="123456" maxlength="6">
             <div id="codeError" class="error-message"></div>
