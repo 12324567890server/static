@@ -389,7 +389,7 @@ function showChats() {
     elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;
 }
 
-async function openSavedMessages() {
+function openSavedMessages() {
     if (!currentUser) return;
     
     currentChatWith = 'Избранное';
@@ -861,6 +861,8 @@ function displayChats() {
     
     elements.chatsList.innerHTML = '';
     
+    if (!currentUser) return;
+    
     const savedElement = document.createElement('div');
     savedElement.className = 'chat-item saved-chat';
     savedElement.onclick = openSavedMessages;
@@ -885,10 +887,10 @@ function displayChats() {
     elements.chatsList.appendChild(savedElement);
     
     const searchTerm = elements.searchChats.value.toLowerCase();
-    let filteredChats = chats;
+    let filteredChats = chats || [];
       
     if (searchTerm) {
-        filteredChats = chats.filter(chat => chat.username.toLowerCase().includes(searchTerm));
+        filteredChats = filteredChats.filter(chat => chat.username.toLowerCase().includes(searchTerm));
     }
       
     const sortedChats = [...filteredChats].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
