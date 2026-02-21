@@ -18,10 +18,12 @@ const firebaseConfig = {
 let app;
 let db;
 let supabase;
+let auth;
 
 try {
     app = firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
+    auth = firebase.auth();
     
     const supabaseUrl = 'https://bncysgnqsgpdpuupzgqj.supabase.co';
     const supabaseKey = 'sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR';
@@ -35,6 +37,8 @@ try {
 
 const elements = {
     loginScreen: document.getElementById('loginScreen'),
+    phoneScreen: document.getElementById('phoneScreen'),
+    codeScreen: document.getElementById('codeScreen'),
     chatsScreen: document.getElementById('chatsScreen'),
     chatScreen: document.getElementById('chatScreen'),
     chatsList: document.getElementById('chatsList'),
@@ -44,25 +48,49 @@ const elements = {
     backToChats: document.getElementById('backToChats'),
     chatWithUser: document.getElementById('chatWithUser'),
     chatStatus: document.getElementById('chatStatus'),
+    chatHeaderInfo: document.getElementById('chatHeaderInfo'),
     privateMessages: document.getElementById('privateMessages'),
     messageInput: document.getElementById('messageInput'),
     sendMessageBtn: document.getElementById('sendMessageBtn'),
     loginUsername: document.getElementById('loginUsername'),
     loginButton: document.getElementById('loginButton'),
     loginError: document.getElementById('loginError'),
+    phoneLoginBtn: document.getElementById('phoneLoginBtn'),
+    phoneInput: document.getElementById('phoneInput'),
+    phoneError: document.getElementById('phoneError'),
+    sendCodeBtn: document.getElementById('sendCodeBtn'),
+    backToLoginBtn: document.getElementById('backToLoginBtn'),
+    codeInput: document.getElementById('codeInput'),
+    codeError: document.getElementById('codeError'),
+    verifyCodeBtn: document.getElementById('verifyCodeBtn'),
+    resendCodeBtn: document.getElementById('resendCodeBtn'),
+    phoneDisplay: document.getElementById('phoneDisplay'),
     sideMenu: document.getElementById('sideMenu'),
     closeMenu: document.getElementById('closeMenu'),
+    myProfileBtn: document.getElementById('myProfileBtn'),
     currentUsernameDisplay: document.getElementById('currentUsernameDisplay'),
     userAvatar: document.getElementById('userAvatar'),
     userStatusDisplay: document.getElementById('userStatusDisplay'),
     loadingOverlay: document.getElementById('loadingOverlay'),
     editProfileBtn: document.getElementById('editProfileBtn'),
     contactsBtn: document.getElementById('contactsBtn'),
+    settingsBtn: document.getElementById('settingsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
     editProfileModal: document.getElementById('editProfileModal'),
     editUsername: document.getElementById('editUsername'),
     saveProfileBtn: document.getElementById('saveProfileBtn'),
     editUsernameError: document.getElementById('editUsernameError'),
+    settingsModal: document.getElementById('settingsModal'),
+    hidePhoneToggle: document.getElementById('hidePhoneToggle'),
+    myPhoneNumberDisplay: document.getElementById('myPhoneNumberDisplay'),
+    userProfileModal: document.getElementById('userProfileModal'),
+    profileUsername: document.getElementById('profileUsername'),
+    profileAvatar: document.getElementById('profileAvatar'),
+    profileName: document.getElementById('profileName'),
+    profilePhone: document.getElementById('profilePhone'),
+    profilePhoneContainer: document.getElementById('profilePhoneContainer'),
+    profileStatus: document.getElementById('profileStatus'),
+    startChatFromProfile: document.getElementById('startChatFromProfile'),
     findFriendsModal: document.getElementById('findFriendsModal'),
     searchUsername: document.getElementById('searchUsername'),
     searchBtn: document.getElementById('searchBtn'),
@@ -90,6 +118,8 @@ let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.
 let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
+let recaptchaVerifier = null;
+let confirmationResult = null;
 
 function showToast(text) {
     const toast = document.createElement('div');
@@ -225,6 +255,8 @@ async function createConnection() {
             .set({
                 uid: currentUser.uid,
                 username: currentUser.username,
+                phone: currentUser.phone || '',
+                hidePhone: currentUser.hidePhone || false,
                 is_online: true,
                 last_seen: now
             }, { merge: true });
@@ -274,9 +306,15 @@ async function checkUser() {
             if (userDoc.exists) {
                 currentUser = {
                     uid: userDoc.id,
-                    username: userDoc.data().username
+                    username: userDoc.data().username,
+                    phone: userDoc.data().phone || '',
+                    hidePhone: userDoc.data().hidePhone || false
                 };
-                  
+                
+                if (elements.hidePhoneToggle) {
+                    elements.hidePhoneToggle.checked = currentUser.hidePhone;
+                }
+                
                 await createConnection();
                 await updateOnlineStatus(true);
                   
@@ -378,15 +416,136 @@ function showLogin() {
     stopHeartbeat();
     cleanupSubscriptions();
     elements.loginScreen.style.display = 'flex';
+    elements.phoneScreen.style.display = 'none';
+    elements.codeScreen.style.display = 'none';
     elements.chatsScreen.style.display = 'none';
     elements.chatScreen.style.display = 'none';
 }
 
 function showChats() {
     elements.loginScreen.style.display = 'none';
+    elements.phoneScreen.style.display = 'none';
+    elements.codeScreen.style.display = 'none';
     elements.chatsScreen.style.display = 'flex';
     elements.chatScreen.style.display = 'none';
     elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;
+}
+
+function formatPhoneNumber(e) {
+    let input = e.target.value.replace(/\D/g, '');
+    if (input.startsWith('7')) input = '+' + input;
+    else if (!input.startsWith('+')) input = '+7' + input;
+    
+    const match = input.match(/^(\+7)(\d{0,3})(\d{0,3})(\d{0,2})(\d{0,2})$/);
+    if (match) {
+        e.target.value = match[1] + (match[2] ? ' (' + match[2] + ')' : '') + 
+                         (match[3] ? ' ' + match[3] : '') + 
+                         (match[4] ? '-' + match[4] : '') + 
+                         (match[5] ? '-' + match[5] : '');
+    }
+}
+
+async function sendPhoneCode() {
+    const phoneNumber = elements.phoneInput.value.replace(/\D/g, '');
+    if (!phoneNumber.startsWith('7')) {
+        showError(elements.phoneError, 'Введите корректный номер');
+        return;
+    }
+    
+    showLoading(true);
+    try {
+        const fullPhone = '+' + phoneNumber;
+        
+        if (!recaptchaVerifier) {
+            recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sendCodeBtn', {
+                size: 'invisible'
+            });
+        }
+        
+        confirmationResult = await auth.signInWithPhoneNumber(fullPhone, recaptchaVerifier);
+        
+        elements.phoneDisplay.textContent = elements.phoneInput.value;
+        elements.phoneScreen.style.display = 'none';
+        elements.codeScreen.style.display = 'flex';
+        elements.phoneError.style.display = 'none';
+        
+    } catch (error) {
+        showError(elements.phoneError, 'Ошибка отправки кода');
+        if (recaptchaVerifier) {
+            recaptchaVerifier.clear();
+            recaptchaVerifier = null;
+        }
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function verifyPhoneCode() {
+    const code = elements.codeInput.value.trim();
+    if (!code || code.length < 6) {
+        showError(elements.codeError, 'Введите код');
+        return;
+    }
+    
+    showLoading(true);
+    try {
+        const result = await confirmationResult.confirm(code);
+        const user = result.user;
+        
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        
+        if (!userDoc.exists) {
+            const username = 'User_' + Math.random().toString(36).substr(2, 6);
+            await db.collection('users').doc(user.uid).set({
+                uid: user.uid,
+                phone: user.phoneNumber,
+                username: username,
+                hidePhone: false,
+                is_online: true,
+                last_seen: new Date().toISOString(),
+                created_at: new Date().toISOString()
+            });
+            
+            currentUser = {
+                uid: user.uid,
+                username: username,
+                phone: user.phoneNumber,
+                hidePhone: false
+            };
+        } else {
+            currentUser = {
+                uid: userDoc.id,
+                username: userDoc.data().username,
+                phone: userDoc.data().phone || user.phoneNumber,
+                hidePhone: userDoc.data().hidePhone || false
+            };
+            
+            await db.collection('users').doc(user.uid).update({
+                is_online: true,
+                last_seen: new Date().toISOString()
+            });
+        }
+        
+        if (elements.hidePhoneToggle) {
+            elements.hidePhoneToggle.checked = currentUser.hidePhone;
+        }
+        
+        await createConnection();
+        localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+        
+        elements.codeScreen.style.display = 'none';
+        showChats();
+        updateUI();
+        setupRealtimeSubscriptions();
+        loadChats();
+        startHeartbeat();
+        setupTypingListener();
+        
+    } catch (error) {
+        showError(elements.codeError, 'Неверный код');
+    } finally {
+        showLoading(false);
+    }
 }
 
 function openSavedMessages() {
@@ -540,9 +699,61 @@ function updateUI() {
     }
 }
 
+async function showUserProfile(userId, username) {
+    try {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) return;
+        
+        const userData = userDoc.data();
+        const isOnline = onlineUsers.get(userId)?.is_online === true;
+        
+        elements.profileUsername.textContent = username;
+        elements.profileName.textContent = username;
+        elements.profileAvatar.textContent = username.charAt(0).toUpperCase();
+        
+        if (userData.hidePhone && userId !== currentUser.uid) {
+            elements.profilePhoneContainer.style.display = 'none';
+        } else {
+            elements.profilePhoneContainer.style.display = 'flex';
+            elements.profilePhone.textContent = userData.phone || 'не указан';
+        }
+        
+        elements.profileStatus.textContent = isOnline ? 'на связи' : 'был(а) недавно';
+        elements.profileStatus.style.color = isOnline ? '#4CAF50' : 'rgba(255,255,255,0.5)';
+        
+        elements.startChatFromProfile.onclick = () => {
+            hideModal('userProfileModal');
+            showChat(username);
+        };
+        
+        showModal('userProfileModal');
+        
+    } catch (e) {}
+}
+
 function setupEventListeners() {
     elements.loginButton.addEventListener('click', login);
     elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
+
+    elements.phoneLoginBtn.addEventListener('click', () => {
+        elements.loginScreen.style.display = 'none';
+        elements.phoneScreen.style.display = 'flex';
+    });
+
+    elements.sendCodeBtn.addEventListener('click', sendPhoneCode);
+    elements.verifyCodeBtn.addEventListener('click', verifyPhoneCode);
+    elements.resendCodeBtn.addEventListener('click', sendPhoneCode);
+    elements.backToLoginBtn.addEventListener('click', () => {
+        elements.phoneScreen.style.display = 'none';
+        elements.loginScreen.style.display = 'flex';
+    });
+    
+    elements.phoneInput.addEventListener('input', formatPhoneNumber);
+    elements.codeInput.addEventListener('input', () => {
+        if (elements.codeInput.value.length === 6) {
+            verifyPhoneCode();
+        }
+    });
 
     elements.chatsMenuBtn.addEventListener('click', () => {
         elements.sideMenu.style.display = 'block';
@@ -550,6 +761,10 @@ function setupEventListeners() {
     });
 
     elements.closeMenu.addEventListener('click', closeMenu);
+    elements.myProfileBtn.addEventListener('click', () => {
+        closeMenu();
+        showUserProfile(currentUser.uid, currentUser.username);
+    });
 
     document.addEventListener('click', e => {
         if (!elements.sideMenu.contains(e.target) && !elements.chatsMenuBtn.contains(e.target) && elements.sideMenu.classList.contains('show')) {
@@ -583,18 +798,56 @@ function setupEventListeners() {
         showChats();
     });
 
+    elements.chatHeaderInfo.addEventListener('click', () => {
+        if (currentChatUserId && !currentChatUserId.startsWith('saved_')) {
+            showUserProfile(currentChatUserId, currentChatWith);
+        }
+    });
+
     elements.editProfileBtn.addEventListener('click', () => {
         elements.editUsername.value = currentUser?.username || '';
         elements.editUsernameError.style.display = 'none';
         showModal('editProfileModal');
+        closeMenu();
     });
 
     elements.saveProfileBtn.addEventListener('click', editProfile);
+    
+    elements.settingsBtn.addEventListener('click', () => {
+        if (elements.myPhoneNumberDisplay) {
+            elements.myPhoneNumberDisplay.textContent = currentUser.phone || 'Номер не указан';
+            elements.myPhoneNumberDisplay.className = currentUser.hidePhone ? 'phone-number hidden' : 'phone-number';
+        }
+        showModal('settingsModal');
+        closeMenu();
+    });
+
+    elements.hidePhoneToggle.addEventListener('change', async () => {
+        if (!currentUser) return;
+        
+        const hidePhone = elements.hidePhoneToggle.checked;
+        currentUser.hidePhone = hidePhone;
+        
+        try {
+            await db.collection('users').doc(currentUser.uid).update({
+                hidePhone: hidePhone
+            });
+            
+            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+            
+            if (elements.myPhoneNumberDisplay) {
+                elements.myPhoneNumberDisplay.className = hidePhone ? 'phone-number hidden' : 'phone-number';
+            }
+            
+        } catch (e) {}
+    });
+
     elements.searchBtn.addEventListener('click', searchUsers);
     elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
     elements.contactsBtn.addEventListener('click', () => {
         loadContacts();
         showModal('contactsModal');
+        closeMenu();
     });
 
     elements.logoutBtn.addEventListener('click', logout);
@@ -700,7 +953,9 @@ function setupRealtimeSubscriptions() {
                 const userData = change.doc.data();
                 onlineUsers.set(change.doc.id, {
                     username: userData.username,
-                    is_online: userData.is_online === true
+                    is_online: userData.is_online === true,
+                    phone: userData.phone,
+                    hidePhone: userData.hidePhone || false
                 });
                 
                 if (currentChatUserId === change.doc.id) {
@@ -710,9 +965,15 @@ function setupRealtimeSubscriptions() {
                 
                 if (currentUser && change.doc.id === currentUser.uid) {
                     currentUser.username = userData.username;
+                    currentUser.phone = userData.phone || currentUser.phone;
+                    currentUser.hidePhone = userData.hidePhone || false;
                     localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
                     updateUI();
                     elements.chatsTitle.textContent = `Чаты (${currentUser.username})`;
+                    
+                    if (elements.hidePhoneToggle) {
+                        elements.hidePhoneToggle.checked = currentUser.hidePhone;
+                    }
                 }
             } else if (change.type === 'removed') {
                 onlineUsers.delete(change.doc.id);
@@ -784,7 +1045,9 @@ async function findUserByUsername(username) {
         const doc = snapshot.docs[0];
         return {
             uid: doc.id,
-            username: doc.data().username
+            username: doc.data().username,
+            phone: doc.data().phone,
+            hidePhone: doc.data().hidePhone || false
         };
     }
     return null;
@@ -795,7 +1058,9 @@ async function findUserById(userId) {
     if (doc.exists) {
         return {
             uid: doc.id,
-            username: doc.data().username
+            username: doc.data().username,
+            phone: doc.data().phone,
+            hidePhone: doc.data().hidePhone || false
         };
     }
     return null;
@@ -898,8 +1163,11 @@ function displayChats() {
     sortedChats.forEach(chat => {
         const div = document.createElement('div');
         div.className = 'chat-item';
+        
+        const chatName = div.querySelector('.chat-name');
+        
         div.onclick = () => showChat(chat.username);
-          
+        
         const userStatus = onlineUsers.get(chat.userId);
         const isOnline = userStatus?.is_online === true;
         const isTyping = typingUsers.has(chat.userId);
@@ -926,6 +1194,19 @@ function displayChats() {
             </div>
             ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
         `;
+        
+        const avatar = div.querySelector('.chat-avatar');
+        const nameSpan = div.querySelector('.chat-name');
+        
+        avatar.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showUserProfile(chat.userId, chat.username);
+        });
+        
+        nameSpan.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showUserProfile(chat.userId, chat.username);
+        });
           
         elements.chatsList.appendChild(div);
     });
@@ -959,33 +1240,70 @@ function displayMessage(msg, isMyMessage, msgId) {
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
     messageElement.dataset.messageId = msgId;
-      
+    
     let timeString = '';
+    let messageDate = null;
+    
     if (msg.created_at) {
         try {
-            const messageDate = new Date(msg.created_at);
+            messageDate = new Date(msg.created_at);
             if (!isNaN(messageDate.getTime())) {
                 timeString = messageDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             } else {
-                timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                messageDate = new Date();
+                timeString = messageDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             }
         } catch (e) {
-            timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            messageDate = new Date();
+            timeString = messageDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         }
     } else {
-        timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        messageDate = new Date();
+        timeString = messageDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     }
-      
+    
+    const lastMessage = elements.privateMessages.lastElementChild;
+    let showDateSeparator = true;
+    
+    if (lastMessage && lastMessage.classList.contains('message')) {
+        const lastMsgId = lastMessage.dataset.messageId;
+        const lastMsgElement = document.querySelector(`[data-message-id="${lastMsgId}"]`);
+        
+        if (lastMsgElement) {
+            const lastMsgTimeAttr = lastMsgElement.querySelector('.message-content .time')?.getAttribute('data-fulltime');
+            if (lastMsgTimeAttr) {
+                const lastDate = new Date(lastMsgTimeAttr);
+                if (lastDate.toDateString() === messageDate.toDateString()) {
+                    showDateSeparator = false;
+                }
+            }
+        }
+    }
+    
+    if (showDateSeparator) {
+        const separator = document.createElement('div');
+        separator.className = 'date-separator';
+        
+        const dateStr = messageDate.toLocaleDateString('ru-RU', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+        
+        separator.innerHTML = `<span>${dateStr}</span>`;
+        elements.privateMessages.appendChild(separator);
+    }
+    
     const statusSymbol = isMyMessage ? (msg.read ? '✓✓' : '✓') : '';
     
-    let contentHtml = `
-        <div class="message-content">
-            <div class="text">${escapeHtml(msg.message)}</div>
-            <div class="time">${timeString} ${statusSymbol}</div>
-        </div>
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    messageContent.innerHTML = `
+        <div class="text">${escapeHtml(msg.message)}</div>
+        <div class="time" data-fulltime="${msg.created_at || ''}">${timeString} ${statusSymbol}</div>
     `;
     
-    messageElement.innerHTML = contentHtml;
+    messageElement.appendChild(messageContent);
     elements.privateMessages.appendChild(messageElement);
 }
 
@@ -1087,7 +1405,9 @@ async function login() {
         if (existingUser) {
             currentUser = {
                 uid: existingUser.uid,
-                username: existingUser.username
+                username: existingUser.username,
+                phone: existingUser.phone || '',
+                hidePhone: existingUser.hidePhone || false
             };
             
             await db.collection('users').doc(currentUser.uid).update({
@@ -1100,17 +1420,23 @@ async function login() {
             await db.collection('users').doc(uid).set({
                 uid: uid,
                 username: username,
+                phone: '',
+                hidePhone: false,
                 is_online: true,
                 last_seen: now,
                 created_at: now
             });
 
-            currentUser = { uid, username };
+            currentUser = { uid, username, phone: '', hidePhone: false };
         }
 
         await createConnection();
           
         localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+        
+        if (elements.hidePhoneToggle) {
+            elements.hidePhoneToggle.checked = currentUser.hidePhone;
+        }
           
         showChats();
         updateUI();
@@ -1193,22 +1519,46 @@ async function searchUsers() {
         users.forEach(user => {
             const userElement = document.createElement('div');
             userElement.className = 'user-result';
-            userElement.onclick = () => {
+            
+            const avatar = document.createElement('div');
+            avatar.className = `user-result-avatar ${onlineUsers.get(user.uid)?.is_online ? 'online' : ''}`;
+            avatar.textContent = user.username.charAt(0).toUpperCase();
+            
+            avatar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideModal('findFriendsModal');
+                showUserProfile(user.uid, user.username);
+            });
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'user-result-name';
+            nameSpan.textContent = user.username;
+            
+            nameSpan.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideModal('findFriendsModal');
+                showUserProfile(user.uid, user.username);
+            });
+            
+            const infoDiv = document.createElement('div');
+            infoDiv.appendChild(nameSpan);
+            
+            const statusDiv = document.createElement('div');
+            statusDiv.style.cssText = 'color: rgba(255,255,255,0.7); font-size: 12px;';
+            statusDiv.textContent = onlineUsers.get(user.uid)?.is_online ? 'на связи' : 'без связи';
+            infoDiv.appendChild(statusDiv);
+            
+            const infoWrapper = document.createElement('div');
+            infoWrapper.className = 'user-result-info';
+            infoWrapper.appendChild(avatar);
+            infoWrapper.appendChild(infoDiv);
+            
+            userElement.appendChild(infoWrapper);
+            
+            userElement.addEventListener('click', () => {
                 hideModal('findFriendsModal');
                 showChat(user.username);
-            };
-              
-            const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-              
-            userElement.innerHTML = `
-                <div class="user-result-info">
-                    <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
-                    <div>
-                        <div class="user-result-name">${escapeHtml(user.username)}</div>
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
-                    </div>
-                </div>
-            `;
+            });
               
             elements.searchResults.appendChild(userElement);
         });
@@ -1277,23 +1627,53 @@ function loadContacts() {
     contacts.forEach(contact => {
         const contactElement = document.createElement('div');
         contactElement.className = 'contact-item';
-        contactElement.onclick = () => {
-            hideModal('contactsModal');
-            showChat(contact.username);
-        };
-          
+        
         findUserByUsername(contact.username).then(user => {
             const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
-              
-            contactElement.innerHTML = `
-                <div class="contact-info">
-                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
-                    <div>
-                        <div class="contact-name">${escapeHtml(contact.username)}</div>
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
-                    </div>
-                </div>
-            `;
+            
+            const avatar = document.createElement('div');
+            avatar.className = `contact-avatar ${isOnline ? 'online' : ''}`;
+            avatar.textContent = contact.username.charAt(0).toUpperCase();
+            
+            avatar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideModal('contactsModal');
+                if (user) {
+                    showUserProfile(user.uid, contact.username);
+                }
+            });
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'contact-name';
+            nameSpan.textContent = contact.username;
+            
+            nameSpan.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideModal('contactsModal');
+                if (user) {
+                    showUserProfile(user.uid, contact.username);
+                }
+            });
+            
+            const infoDiv = document.createElement('div');
+            infoDiv.appendChild(nameSpan);
+            
+            const statusDiv = document.createElement('div');
+            statusDiv.style.cssText = 'color: rgba(255,255,255,0.7); font-size: 12px;';
+            statusDiv.textContent = isOnline ? 'на связи' : 'без связи';
+            infoDiv.appendChild(statusDiv);
+            
+            const infoWrapper = document.createElement('div');
+            infoWrapper.className = 'contact-info';
+            infoWrapper.appendChild(avatar);
+            infoWrapper.appendChild(infoDiv);
+            
+            contactElement.appendChild(infoWrapper);
+            
+            contactElement.addEventListener('click', () => {
+                hideModal('contactsModal');
+                showChat(contact.username);
+            });
         });
           
         elements.contactsList.appendChild(contactElement);
@@ -1309,8 +1689,14 @@ async function logout() {
         await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
         typingTimer = null;
     }
-      
+    
+    if (recaptchaVerifier) {
+        recaptchaVerifier.clear();
+        recaptchaVerifier = null;
+    }
+    
     try {
+        await auth.signOut();
         await removeConnection();
     } catch (e) {}
       
