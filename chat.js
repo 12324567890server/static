@@ -399,13 +399,23 @@ async function startRegistration() {
         pendingUsername = username;
         pendingPhone = fullPhone;
         
-        if (!recaptchaVerifier) {
-            recaptchaVerifier = new firebase.auth.RecaptchaVerifier('registerButton', {
-                size: 'invisible'
-            });
+        if (recaptchaVerifier) {
+            recaptchaVerifier.clear();
+            recaptchaVerifier = null;
         }
         
-        confirmationResult = await auth.signInWithPhoneNumber(fullPhone, recaptchaVerifier);
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('registerButton', {
+            size: 'invisible',
+            callback: function(response) {
+                console.log('reCAPTCHA solved');
+            }
+        });
+        
+        recaptchaVerifier = window.recaptchaVerifier;
+        
+        const appVerifier = recaptchaVerifier;
+        
+        confirmationResult = await auth.signInWithPhoneNumber(fullPhone, appVerifier);
         
         elements.phoneDisplay.textContent = elements.registerPhone.value;
         elements.usernameDisplay.textContent = username;
@@ -414,7 +424,18 @@ async function startRegistration() {
         elements.registerError.style.display = 'none';
         
     } catch (error) {
-        showError(elements.registerError, 'Ошибка отправки кода');
+        console.error('Firebase error:', error);
+        
+        if (error.code === 'auth/too-many-requests') {
+            showError(elements.registerError, 'Слишком много попыток. Попробуйте завтра');
+        } else if (error.code === 'auth/quota-exceeded') {
+            showError(elements.registerError, 'Лимит SMS на сегодня. Попробуйте завтра');
+        } else if (error.code === 'auth/invalid-phone-number') {
+            showError(elements.registerError, 'Неверный номер телефона');
+        } else {
+            showError(elements.registerError, 'Ошибка отправки кода');
+        }
+        
         if (recaptchaVerifier) {
             recaptchaVerifier.clear();
             recaptchaVerifier = null;
@@ -471,6 +492,7 @@ async function verifyCode() {
         setupTypingListener();
         
     } catch (error) {
+        console.error('Verify error:', error);
         showError(elements.codeError, 'Неверный код');
     } finally {
         showLoading(false);
@@ -487,15 +509,18 @@ async function resendCode() {
             recaptchaVerifier = null;
         }
         
-        recaptchaVerifier = new firebase.auth.RecaptchaVerifier('resendCodeBtn', {
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('resendCodeBtn', {
             size: 'invisible'
         });
+        
+        recaptchaVerifier = window.recaptchaVerifier;
         
         confirmationResult = await auth.signInWithPhoneNumber(pendingPhone, recaptchaVerifier);
         
         showToast('Код отправлен повторно');
         
     } catch (error) {
+        console.error('Resend error:', error);
         showError(elements.codeError, 'Ошибка отправки кода');
     } finally {
         showLoading(false);
@@ -683,6 +708,45 @@ async function showUserProfile(userId, username) {
         showModal('userProfileModal');
         
     } catch (e) {}
+}
+
+function setupTypingDetection() {
+    if (!currentChatUserId) return;
+    
+    elements.messageInput.addEventListener('input', () => {
+        if (!currentChatUserId) return;
+        
+        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+        
+        if (typingTimer) {
+            clearTimeout(typingTimer);
+        } else {
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).set({
+                userId: currentUser.uid,
+                chatId: chatId,
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        typingTimer = setTimeout(() => {
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+            typingTimer = null;
+        }, 3000);
+    });
+}
+
+function showTypingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    
+    statusElement.innerHTML = '<span class="typing-animation">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
+    statusElement.style.color = '#b19cd9';
+}
+
+function hideTypingIndicator() {
+    const statusElement = elements.chatStatus;
+    if (!statusElement) return;
+    updateChatStatus();
 }
 
 function setupEventListeners() {
