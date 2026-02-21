@@ -47,9 +47,6 @@ const elements = {
     privateMessages: document.getElementById('privateMessages'),
     messageInput: document.getElementById('messageInput'),
     sendMessageBtn: document.getElementById('sendMessageBtn'),
-    voiceMessageBtn: document.getElementById('voiceMessageBtn'),
-    voiceRecordingIndicator: document.getElementById('voiceRecordingIndicator'),
-    voiceTimer: document.getElementById('voiceTimer'),
     loginUsername: document.getElementById('loginUsername'),
     loginButton: document.getElementById('loginButton'),
     loginError: document.getElementById('loginError'),
@@ -94,7 +91,6 @@ let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
 
-// Простая функция для показа уведомлений
 function showToast(text) {
     const toast = document.createElement('div');
     toast.style.cssText = `
@@ -112,15 +108,10 @@ function showToast(text) {
     `;
     toast.textContent = text;
     document.body.appendChild(toast);
-    
     setTimeout(() => toast.remove(), 2000);
 }
 
-// Скрываем кнопку голосовых сообщений (она не будет работать)
 document.addEventListener('DOMContentLoaded', function() {
-    if (elements.voiceMessageBtn) {
-        elements.voiceMessageBtn.style.display = 'none';
-    }
     init();
 });
 
@@ -398,7 +389,67 @@ function showChats() {
     elements.chatsTitle.textContent = `Чаты (${currentUser?.username || ''})`;
 }
 
+async function openSavedMessages() {
+    if (!currentUser) return;
+    
+    currentChatWith = 'Избранное';
+    currentChatUserId = 'saved_' + currentUser.uid;
+    isChatActive = true;
+    
+    elements.chatWithUser.textContent = 'Избранное';
+    elements.chatsScreen.style.display = 'none';
+    elements.chatScreen.style.display = 'flex';
+    elements.privateMessages.innerHTML = '';
+    elements.messageInput.value = '';
+    
+    loadSavedMessages();
+    
+    elements.chatStatus.textContent = 'сохраненные заметки';
+    elements.chatStatus.style.color = '#4CAF50';
+}
+
+function loadSavedMessages() {
+    const saved = JSON.parse(localStorage.getItem(`saved_${currentUser.uid}`) || '[]');
+    elements.privateMessages.innerHTML = '';
+    
+    saved.forEach(msg => {
+        const messageElement = document.createElement('div');
+        messageElement.className = 'message me';
+        
+        let timeString = '';
+        if (msg.time) {
+            const date = new Date(msg.time);
+            timeString = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        messageElement.innerHTML = `
+            <div class="message-content">
+                <div class="text">${escapeHtml(msg.text)}</div>
+                <div class="time">${timeString}</div>
+            </div>
+        `;
+        
+        elements.privateMessages.appendChild(messageElement);
+    });
+    
+    scrollToBottom();
+}
+
+function saveMessageToLocal(text) {
+    const saved = JSON.parse(localStorage.getItem(`saved_${currentUser.uid}`) || '[]');
+    saved.push({
+        text: text,
+        time: new Date().toISOString()
+    });
+    localStorage.setItem(`saved_${currentUser.uid}`, JSON.stringify(saved));
+}
+
 async function showChat(username) {
+    if (username === 'Избранное') {
+        openSavedMessages();
+        return;
+    }
+    
     showLoading(true);
     try {
         const user = await findUserByUsername(username);
@@ -704,6 +755,12 @@ function stopHeartbeat() {
 function updateChatStatus() {
     if (!currentChatUserId || !elements.chatStatus) return;
     
+    if (currentChatUserId.startsWith('saved_')) {
+        elements.chatStatus.textContent = 'сохраненные заметки';
+        elements.chatStatus.style.color = '#4CAF50';
+        return;
+    }
+    
     if (typingUsers.has(currentChatUserId)) {
         showTypingIndicator();
         return;
@@ -746,7 +803,7 @@ async function findUserById(userId) {
 
 async function loadChats() {
     if (!currentUser) return;
-      
+    
     try {
         const snapshot = await db.collection('messages')
             .where('participants', 'array-contains', currentUser.uid)
@@ -801,7 +858,32 @@ async function loadChats() {
 
 function displayChats() {
     if (!elements.chatsList) return;
-      
+    
+    elements.chatsList.innerHTML = '';
+    
+    const savedElement = document.createElement('div');
+    savedElement.className = 'chat-item saved-chat';
+    savedElement.onclick = openSavedMessages;
+    
+    const saved = JSON.parse(localStorage.getItem(`saved_${currentUser.uid}`) || '[]');
+    const lastSaved = saved.length > 0 ? saved[saved.length - 1] : null;
+    const lastMessage = lastSaved ? lastSaved.text : 'Нет заметок';
+    const lastTime = lastSaved ? lastSaved.time : null;
+    
+    savedElement.innerHTML = `
+        <div class="chat-avatar" style="background: #4CAF50">📌</div>
+        <div class="chat-info">
+            <div class="chat-name">
+                Избранное
+                <span class="saved-badge">${saved.length}</span>
+            </div>
+            <div class="chat-last-message">${escapeHtml(lastMessage.substring(0, 30))}${lastMessage.length > 30 ? '...' : ''}</div>
+            <div class="chat-time">${lastTime ? formatMessageTime(lastTime) : ''}</div>
+        </div>
+    `;
+    
+    elements.chatsList.appendChild(savedElement);
+    
     const searchTerm = elements.searchChats.value.toLowerCase();
     let filteredChats = chats;
       
@@ -811,13 +893,6 @@ function displayChats() {
       
     const sortedChats = [...filteredChats].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
       
-    elements.chatsList.innerHTML = '';
-      
-    if (sortedChats.length === 0) {
-        elements.chatsList.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 40px 20px;">Нет чатов</div>';
-        return;
-    }
-
     sortedChats.forEach(chat => {
         const div = document.createElement('div');
         div.className = 'chat-item';
@@ -921,15 +996,22 @@ function scrollToBottom() {
 async function sendMessage() {
     if (!currentChatUserId || !currentUser || !elements.messageInput.value.trim()) return;
     
+    const messageText = elements.messageInput.value.trim();
+    elements.messageInput.value = '';
+    
+    if (currentChatUserId.startsWith('saved_')) {
+        saveMessageToLocal(messageText);
+        loadSavedMessages();
+        displayChats();
+        return;
+    }
+    
     if (typingTimer) {
         clearTimeout(typingTimer);
         const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
         await db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
         typingTimer = null;
     }
-      
-    const messageText = elements.messageInput.value.trim();
-    elements.messageInput.value = '';
     
     const participantsArray = [currentUser.uid, currentChatUserId].sort();
     const chatId = participantsArray.join('_');
