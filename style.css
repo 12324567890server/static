@@ -361,6 +361,19 @@ body {
     font-weight: normal;
 }
 
+.saved-chat .chat-avatar {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.saved-chat .chat-avatar::before {
+    content: "📎";
+    font-size: 22px;
+}
+
 .chat-screen {
     display: none;
     flex-direction: column;
