@@ -7,35 +7,17 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <div id="registerScreen" class="login-screen">
+    <div id="loginScreen" class="login-screen">
         <div class="login-container">
             <div class="login-header">
                 <h1>SpeedNexus</h1>
-                <p style="color: rgba(255,255,255,0.7); margin-top: 10px;">Регистрация</p>
             </div>
-            <input type="text" id="registerUsername" class="login-input" placeholder="Ваш никнейм" maxlength="20">
-            <input type="tel" id="registerPhone" class="login-input" placeholder="+7 (999) 999-99-99" maxlength="18">
-            <div id="registerError" class="error-message"></div>
-            <button id="registerButton" class="login-btn">Получить код</button>
-        </div>
-    </div>
-
-    <div id="codeScreen" class="login-screen" style="display: none;">
-        <div class="login-container">
-            <div class="login-header">
-                <h1>SpeedNexus</h1>
-                <p style="color: rgba(255,255,255,0.7); margin-top: 10px;">Введите код из SMS</p>
-                <p id="phoneDisplay" style="color: #b19cd9; font-weight: bold;">+7 999 999-99-99</p>
-                <p id="usernameDisplay" style="color: #b19cd9; font-size: 14px;"></p>
-            </div>
-            <input type="text" id="codeInput" class="login-input" placeholder="123456" maxlength="6">
-            <div id="codeError" class="error-message"></div>
-            <button id="verifyCodeBtn" class="login-btn">Подтвердить</button>
-            <button id="resendCodeBtn" class="login-btn" style="background: rgba(138,43,226,0.5); margin-top: 10px;">Отправить повторно</button>
+            <input type="text" id="loginUsername" class="login-input" placeholder="Введите ваш никнейм" maxlength="20">
+            <div id="loginError" class="error-message"></div>
+            <button id="loginButton" class="login-btn">Продолжить</button>
         </div>
     </div>
 
@@ -62,7 +44,7 @@
     <div id="chatScreen" class="chat-screen">
         <div class="chat-header">
             <button id="backToChats" class="back-btn">←</button>
-            <div class="chat-header-info" id="chatHeaderInfo">
+            <div class="chat-header-info">
                 <div id="chatWithUser" class="chat-username">-</div>
                 <div id="chatStatus" class="chat-status">без связи</div>
             </div>
@@ -80,7 +62,7 @@
 
     <div id="sideMenu" class="side-menu">
         <div class="side-menu-header">
-            <div class="user-info" id="myProfileBtn">
+            <div class="user-info">
                 <div id="userAvatar" class="user-avatar">U</div>
                 <div>
                     <h4 id="currentUsernameDisplay">-</h4>
@@ -99,10 +81,6 @@
                 <span class="icon contacts-icon"></span>
                 <span class="btn-text">Контакты</span>
             </button>
-            <button id="settingsBtn" class="side-menu-btn">
-                <span class="icon settings-icon"></span>
-                <span class="btn-text">Настройки</span>
-            </button>
             <button id="logoutBtn" class="side-menu-btn">
                 <span class="icon logout-icon"></span>
                 <span class="btn-text">Выйти</span>
@@ -120,52 +98,6 @@
                 <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
                 <div id="editUsernameError" class="error-message"></div>
                 <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="settingsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Настройки</h3>
-                <button class="close-modal">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="settings-item">
-                    <span>Скрыть номер телефона</span>
-                    <label class="switch">
-                        <input type="checkbox" id="hidePhoneToggle">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div id="myPhoneNumberDisplay" class="phone-number"></div>
-            </div>
-        </div>
-    </div>
-
-    <div id="userProfileModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="profileUsername">...</h3>
-                <button class="close-modal">×</button>
-            </div>
-            <div class="modal-body profile-body">
-                <div class="profile-avatar" id="profileAvatar">U</div>
-                <div class="profile-info">
-                    <div class="profile-item">
-                        <span class="profile-label">Имя:</span>
-                        <span id="profileName">...</span>
-                    </div>
-                    <div class="profile-item" id="profilePhoneContainer">
-                        <span class="profile-label">Телефон:</span>
-                        <span id="profilePhone">...</span>
-                    </div>
-                    <div class="profile-item">
-                        <span class="profile-label">Статус:</span>
-                        <span id="profileStatus">...</span>
-                    </div>
-                </div>
-                <button id="startChatFromProfile" class="modal-btn">Написать сообщение</button>
             </div>
         </div>
     </div>
