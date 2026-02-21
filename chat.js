@@ -94,12 +94,204 @@ let heartbeatInterval = null;
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let messageListener = null;
 let connectionId = null;
-let mediaRecorder = null;
-let audioChunks = [];
-let recordingTimer = null;
-let recordingSeconds = 0;
-let isRecording = false;
-let typingTimer = null;
+
+class VoiceRecorder {
+    constructor() {
+        this.reset();
+    }
+    
+    reset() {
+        this.isRecording = false;
+        this.isStarting = false;
+        this.duration = 0;
+        this.stream = null;
+        this.recorder = null;
+        this.chunks = [];
+        this.timerInterval = null;
+        this.chatId = null;
+        this.targetUserId = null;
+        this.startTime = 0;
+    }
+    
+    async start(targetUserId, chatId) {
+        if (this.isRecording || this.isStarting) return false;
+        
+        this.isStarting = true;
+        this.targetUserId = targetUserId;
+        this.chatId = chatId;
+        
+        try {
+            this.stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    channelCount: 1
+                }
+            });
+            
+            const mimeType = this.getSupportedMimeType();
+            
+            this.recorder = new MediaRecorder(this.stream, {
+                mimeType: mimeType,
+                audioBitsPerSecond: 128000
+            });
+            
+            this.chunks = [];
+            
+            this.recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    this.chunks.push(e.data);
+                }
+            };
+            
+            this.recorder.start();
+            this.isRecording = true;
+            this.isStarting = false;
+            this.startTime = Date.now();
+            
+            this.startTimer();
+            
+            await db.collection('voiceRecording').doc(this.chatId + '_' + currentUser.uid).set({
+                userId: currentUser.uid,
+                chatId: this.chatId,
+                timestamp: new Date().toISOString()
+            });
+            
+            if (navigator.vibrate) navigator.vibrate(50);
+            
+            return true;
+            
+        } catch (error) {
+            this.cleanup();
+            return false;
+        }
+    }
+    
+    async stop() {
+        if (!this.isRecording || !this.recorder) return null;
+        
+        return new Promise((resolve) => {
+            const finalDuration = Math.floor((Date.now() - this.startTime) / 1000);
+            
+            this.recorder.onstop = async () => {
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                    this.timerInterval = null;
+                }
+                
+                if (finalDuration < 1) {
+                    this.cleanup();
+                    resolve(null);
+                    return;
+                }
+                
+                const blob = new Blob(this.chunks, { type: 'audio/webm' });
+                const fileName = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
+                
+                try {
+                    const { error } = await supabase.storage
+                        .from('voice-messages')
+                        .upload(fileName, blob, {
+                            contentType: 'audio/webm',
+                            cacheControl: '3600'
+                        });
+                    
+                    if (error) throw error;
+                    
+                    const { data: urlData } = supabase.storage
+                        .from('voice-messages')
+                        .getPublicUrl(fileName);
+                    
+                    await db.collection('messages').add({
+                        chat_id: this.chatId,
+                        participants: [currentUser.uid, this.targetUserId].sort(),
+                        sender: currentUser.uid,
+                        receiver: this.targetUserId,
+                        message: '🎤 Голосовое сообщение',
+                        voice_url: urlData.publicUrl,
+                        voice_duration: finalDuration,
+                        type: 'voice',
+                        read: false,
+                        created_at: new Date().toISOString()
+                    });
+                    
+                    if (navigator.vibrate) navigator.vibrate(100);
+                    
+                    resolve(finalDuration);
+                    
+                } catch (error) {
+                    resolve(null);
+                }
+                
+                this.cleanup();
+            };
+            
+            this.recorder.stop();
+            this.stream.getTracks().forEach(track => track.stop());
+        });
+    }
+    
+    cancel() {
+        if (this.recorder && this.isRecording) {
+            this.recorder.stop();
+        }
+        this.cleanup();
+        if (navigator.vibrate) navigator.vibrate(200);
+    }
+    
+    startTimer() {
+        this.timerInterval = setInterval(() => {
+            if (this.isRecording) {
+                const seconds = Math.floor((Date.now() - this.startTime) / 1000);
+                
+                if (seconds >= 300) {
+                    this.stop();
+                    return;
+                }
+                
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                elements.voiceTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+        }, 100);
+    }
+    
+    getSupportedMimeType() {
+        const types = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/mp4',
+            'audio/ogg'
+        ];
+        
+        for (let type of types) {
+            if (MediaRecorder.isTypeSupported(type)) {
+                return type;
+            }
+        }
+        return 'audio/webm';
+    }
+    
+    cleanup() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+        if (this.stream) {
+            this.stream.getTracks().forEach(t => t.stop());
+        }
+        
+        if (this.chatId) {
+            db.collection('voiceRecording').doc(this.chatId + '_' + currentUser.uid).delete();
+        }
+        
+        this.isRecording = false;
+        this.isStarting = false;
+    }
+}
+
+const voiceRecorder = new VoiceRecorder();
 
 document.addEventListener('DOMContentLoaded', function() {
     init();
@@ -157,14 +349,18 @@ function handleVisibilityChange() {
     if (currentUser && connectionId) {
         updateOnlineStatus(!document.hidden);
     }
+    if (document.hidden && voiceRecorder.isRecording) {
+        voiceRecorder.cancel();
+        elements.voiceRecordingIndicator.style.display = 'none';
+    }
 }
 
 function handleBeforeUnload() {
     if (currentUser && connectionId) {
         removeConnection();
     }
-    if (isRecording) {
-        stopRecording();
+    if (voiceRecorder.isRecording) {
+        voiceRecorder.cancel();
     }
 }
 
@@ -199,6 +395,7 @@ async function createConnection() {
     
     try {
         const now = new Date().toISOString();
+        connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         
         await db.collection('users')
             .doc(currentUser.uid)
@@ -268,8 +465,6 @@ async function checkUser() {
                     uid: userDoc.id,
                     username: userDoc.data().username
                 };
-                  
-                connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                   
                 await createConnection();
                 await updateOnlineStatus(true);
@@ -568,8 +763,9 @@ function setupEventListeners() {
             typingTimer = null;
         }
         
-        if (isRecording) {
-            stopRecording();
+        if (voiceRecorder.isRecording) {
+            voiceRecorder.cancel();
+            elements.voiceRecordingIndicator.style.display = 'none';
         }
         
         currentChatWith = null;
@@ -633,199 +829,80 @@ function setupVoiceButton() {
     const voiceBtn = elements.voiceMessageBtn;
     if (!voiceBtn) return;
 
-    voiceBtn.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        elements.voiceRecordingIndicator.style.display = 'flex';
-        elements.voiceTimer.textContent = '0:00';
-        startRecording();
-    });
+    const newBtn = voiceBtn.cloneNode(true);
+    voiceBtn.parentNode.replaceChild(newBtn, voiceBtn);
+    elements.voiceMessageBtn = newBtn;
 
-    voiceBtn.addEventListener('pointerup', (e) => {
-        e.preventDefault();
-        stopRecording();
-    });
-
-    voiceBtn.addEventListener('pointercancel', (e) => {
-        e.preventDefault();
-        elements.voiceRecordingIndicator.style.display = 'none';
-        if (isRecording) {
-            stopRecording();
-        }
-    });
-
-    voiceBtn.addEventListener('mouseleave', (e) => {
-        if (isRecording) {
-            stopRecording();
-        }
-    });
+    newBtn.addEventListener('touchstart', handleVoiceStart, { passive: false });
+    newBtn.addEventListener('touchend', handleVoiceEnd, { passive: false });
+    newBtn.addEventListener('touchcancel', handleVoiceCancel, { passive: false });
+    
+    newBtn.addEventListener('mousedown', handleVoiceStart);
+    newBtn.addEventListener('mouseup', handleVoiceEnd);
+    newBtn.addEventListener('mouseleave', handleVoiceCancel);
 }
 
-async function startRecording() {
-    if (!currentChatUserId || !currentUser) {
-        alert('Сначала выберите чат');
+function handleVoiceStart(e) {
+    e.preventDefault();
+    
+    if (!currentChatUserId) {
+        showToast('Сначала выберите чат');
         return;
     }
-
-    try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('Ваш браузер не поддерживает запись audio');
-            return;
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-            } 
-        });
-        
-        let options = { mimeType: 'audio/webm' };
-        const types = [
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/mp4',
-            'audio/ogg'
-        ];
-        
-        for (let type of types) {
-            if (MediaRecorder.isTypeSupported(type)) {
-                options = { mimeType: type };
-                break;
-            }
-        }
-        
-        mediaRecorder = new MediaRecorder(stream, options);
-        audioChunks = [];
-        recordingSeconds = 0;
-        isRecording = true;
-        
-        mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-                audioChunks.push(event.data);
-            }
-        };
-        
-        mediaRecorder.start(1000);
-        
-        recordingTimer = setInterval(() => {
-            if (isRecording) {
-                recordingSeconds++;
-                const minutes = Math.floor(recordingSeconds / 60);
-                const seconds = recordingSeconds % 60;
-                elements.voiceTimer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            }
-        }, 1000);
-        
-        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
-        await db.collection('voiceRecording').doc(chatId + '_' + currentUser.uid).set({
-            userId: currentUser.uid,
-            chatId: chatId,
-            timestamp: new Date().toISOString()
-        });
-        
-    } catch (error) {
-        console.error('Ошибка записи:', error);
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-            alert('Разрешите доступ к микрофону в настройках браузера');
-        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-            alert('Микрофон не найден. Подключите микрофон и повторите попытку');
-        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-            alert('Микрофон уже используется другим приложением');
-        } else {
-            alert('Ошибка доступа к микрофону: ' + error.message);
-        }
-        elements.voiceRecordingIndicator.style.display = 'none';
-        isRecording = false;
-    }
+    
+    if (voiceRecorder.isRecording || voiceRecorder.isStarting) return;
+    
+    const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+    
+    elements.voiceRecordingIndicator.style.display = 'flex';
+    elements.voiceTimer.textContent = '0:00';
+    
+    voiceRecorder.start(currentChatUserId, chatId);
 }
 
-async function stopRecording() {
-    if (!isRecording || !mediaRecorder) return;
+async function handleVoiceEnd(e) {
+    e.preventDefault();
     
-    const currentStream = mediaRecorder.stream;
-    const currentSeconds = recordingSeconds;
-    
-    mediaRecorder.addEventListener('stop', async () => {
-        if (currentSeconds < 1) {
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-            }
-            return;
+    if (voiceRecorder.isRecording) {
+        const duration = await voiceRecorder.stop();
+        if (duration) {
+            showToast(`Голосовое отправлено (${duration} сек)`);
         }
-        
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        
-        showLoading(true);
-        
-        let success = false;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                const fileName = `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
-                
-                const { data, error } = await supabase.storage
-                    .from('voice-messages')
-                    .upload(fileName, audioBlob, {
-                        contentType: 'audio/webm',
-                        cacheControl: '3600',
-                        upsert: false
-                    });
-                
-                if (error) throw error;
-                
-                const { data: urlData } = supabase.storage
-                    .from('voice-messages')
-                    .getPublicUrl(fileName);
-                
-                const participantsArray = [currentUser.uid, currentChatUserId].sort();
-                const chatId = participantsArray.join('_');
-                
-                await db.collection('messages').add({
-                    chat_id: chatId,
-                    participants: participantsArray,
-                    sender: currentUser.uid,
-                    receiver: currentChatUserId,
-                    message: '🎤 Голосовое сообщение',
-                    voice_url: urlData.publicUrl,
-                    voice_duration: currentSeconds,
-                    type: 'voice',
-                    read: false,
-                    created_at: new Date().toISOString()
-                });
-                
-                success = true;
-                break;
-                
-            } catch (error) {
-                console.error(`Попытка ${attempt} не удалась:`, error);
-                if (attempt === 3) {
-                    alert('Не удалось отправить голосовое сообщение. Проверьте интернет и попробуйте снова');
-                } else {
-                    await new Promise(r => setTimeout(r, 1000));
-                }
-            }
-        }
-        
-        if (currentStream) {
-            currentStream.getTracks().forEach(track => track.stop());
-        }
-        
-        showLoading(false);
-    });
-    
-    mediaRecorder.stop();
-    
-    isRecording = false;
-    if (recordingTimer) {
-        clearInterval(recordingTimer);
-        recordingTimer = null;
     }
+    
     elements.voiceRecordingIndicator.style.display = 'none';
+}
+
+function handleVoiceCancel(e) {
+    e.preventDefault();
     
-    if (currentChatUserId) {
-        const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
-        await db.collection('voiceRecording').doc(chatId + '_' + currentUser.uid).delete();
+    if (voiceRecorder.isRecording) {
+        voiceRecorder.cancel();
+        showToast('Запись отменена');
     }
+    
+    elements.voiceRecordingIndicator.style.display = 'none';
+}
+
+function showToast(text) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 30px;
+        font-size: 14px;
+        z-index: 10000;
+        animation: fadeInOut 2s ease;
+    `;
+    toast.textContent = text;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => toast.remove(), 2000);
 }
 
 function closeMenu() {
@@ -1199,20 +1276,30 @@ window.playVoiceMessage = function(url, button) {
     const audio = new Audio(url);
     const messageElement = button.closest('.voice-message');
     const progressBar = messageElement.querySelector('.voice-progress');
+    const playIcon = button.querySelector('.play-icon');
     
-    audio.play();
-    
-    audio.ontimeupdate = () => {
-        const progress = (audio.currentTime / audio.duration) * 100;
-        progressBar.style.width = progress + '%';
-    };
-    
-    audio.onended = () => {
-        progressBar.style.width = '0%';
-        button.innerHTML = '<span class="play-icon">▶</span>';
-    };
-    
-    button.innerHTML = '<span class="play-icon">⏸</span>';
+    if (audio.paused) {
+        audio.play();
+        playIcon.textContent = '⏸';
+        
+        audio.ontimeupdate = () => {
+            const progress = (audio.currentTime / audio.duration) * 100;
+            progressBar.style.width = progress + '%';
+        };
+        
+        audio.onended = () => {
+            progressBar.style.width = '0%';
+            playIcon.textContent = '▶';
+        };
+        
+        audio.onerror = () => {
+            showToast('Ошибка воспроизведения');
+            playIcon.textContent = '▶';
+        };
+    } else {
+        audio.pause();
+        playIcon.textContent = '▶';
+    }
 };
 
 function scrollToBottom() {
@@ -1327,8 +1414,6 @@ async function login() {
             currentUser = { uid, username };
         }
 
-        connectionId = 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-          
         await createConnection();
           
         localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
@@ -1532,8 +1617,8 @@ async function logout() {
         typingTimer = null;
     }
     
-    if (isRecording) {
-        await stopRecording();
+    if (voiceRecorder.isRecording) {
+        await voiceRecorder.cancel();
     }
       
     try {
@@ -1551,6 +1636,7 @@ async function logout() {
     typingUsers.clear();
     voiceRecordingUsers.clear();
     unreadCounts = {};
+    voiceRecorder.reset();
     showLogin();
     showLoading(false);
 }
