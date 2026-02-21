@@ -392,11 +392,11 @@ function showChats() {
 function openSavedMessages() {
     if (!currentUser) return;
     
-    currentChatWith = 'Избранное';
+    currentChatWith = 'Заметки';
     currentChatUserId = 'saved_' + currentUser.uid;
     isChatActive = true;
     
-    elements.chatWithUser.textContent = 'Избранное';
+    elements.chatWithUser.textContent = 'Заметки';
     elements.chatsScreen.style.display = 'none';
     elements.chatScreen.style.display = 'flex';
     elements.privateMessages.innerHTML = '';
@@ -445,7 +445,7 @@ function saveMessageToLocal(text) {
 }
 
 async function showChat(username) {
-    if (username === 'Избранное') {
+    if (username === 'Заметки') {
         openSavedMessages();
         return;
     }
@@ -873,10 +873,10 @@ function displayChats() {
     const lastTime = lastSaved ? lastSaved.time : null;
     
     savedElement.innerHTML = `
-        <div class="chat-avatar" style="background: #4CAF50">📌</div>
+        <div class="chat-avatar"></div>
         <div class="chat-info">
             <div class="chat-name">
-                Избранное
+                Заметки
                 <span class="saved-badge">${saved.length}</span>
             </div>
             <div class="chat-last-message">${escapeHtml(lastMessage.substring(0, 30))}${lastMessage.length > 30 ? '...' : ''}</div>
