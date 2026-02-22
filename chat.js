@@ -602,8 +602,8 @@ function setupEventListeners() {
         elements.editUsername.value = currentUser?.username || '';
         elements.editUsernameError.style.display = 'none';
         currentAvatarFile = null;
-        initAvatarUpload();
-        loadCurrentAvatarPreview();
+        document.getElementById('avatarUpload').value = '';
+        loadAvatarPreview();
         showModal('editProfileModal');
     });
 
@@ -648,6 +648,24 @@ function setupEventListeners() {
     });
 
     elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+    
+    const selectAvatarBtn = document.getElementById('selectAvatarBtn');
+    const avatarUpload = document.getElementById('avatarUpload');
+    const removeAvatarBtn = document.getElementById('removeAvatarBtn');
+    
+    if (selectAvatarBtn) {
+        selectAvatarBtn.addEventListener('click', () => {
+            avatarUpload.click();
+        });
+    }
+    
+    if (avatarUpload) {
+        avatarUpload.addEventListener('change', handleAvatarSelect);
+    }
+    
+    if (removeAvatarBtn) {
+        removeAvatarBtn.addEventListener('click', removeAvatar);
+    }
 }
 
 function closeMenu() {
@@ -1132,64 +1150,6 @@ function updateTitle() {
     document.title = totalUnread ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
 }
 
-async function compressImage(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        
-        reader.onload = (e) => {
-            const img = new Image();
-            img.src = e.target.result;
-            
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                let width = img.width;
-                let height = img.height;
-                const maxSize = 300;
-                
-                if (width > height && width > maxSize) {
-                    height *= maxSize / width;
-                    width = maxSize;
-                } else if (height > maxSize) {
-                    width *= maxSize / height;
-                    height = maxSize;
-                }
-                
-                canvas.width = width;
-                canvas.height = height;
-                
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                canvas.toBlob((blob) => {
-                    resolve(blob);
-                }, 'image/jpeg', 0.7);
-            };
-            
-            img.onerror = reject;
-        };
-        
-        reader.onerror = reject;
-    });
-}
-
-async function uploadAvatar(file) {
-    if (!file || !currentUser) return null;
-    
-    const fileName = `avatars/${currentUser.uid}_${Date.now()}.jpg`;
-    const storageRef = storage.ref().child(fileName);
-    
-    try {
-        const compressedFile = await compressImage(file);
-        const snapshot = await storageRef.put(compressedFile);
-        const downloadUrl = await snapshot.ref.getDownloadURL();
-        return downloadUrl;
-    } catch (error) {
-        throw error;
-    }
-}
-
 async function login() {
     const username = elements.loginUsername.value.trim();
     if (!username || username.length < 3) {
@@ -1251,57 +1211,12 @@ async function login() {
     }
 }
 
-function initAvatarUpload() {
-    const avatarUpload = document.getElementById('avatarUpload');
-    const avatarPreviewImage = document.getElementById('avatarPreviewImage');
+async function loadAvatarPreview() {
     const avatarPreviewText = document.getElementById('avatarPreviewText');
+    const avatarPreviewImage = document.getElementById('avatarPreviewImage');
     const removeAvatarBtn = document.getElementById('removeAvatarBtn');
     
-    if (!avatarUpload) return;
-    
-    avatarUpload.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        if (file.size > 5 * 1024 * 1024) {
-            showToast('Файл слишком большой. Максимум 5MB');
-            avatarUpload.value = '';
-            return;
-        }
-        
-        if (!file.type.startsWith('image/')) {
-            showToast('Пожалуйста, выберите изображение');
-            avatarUpload.value = '';
-            return;
-        }
-        
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            avatarPreviewImage.src = e.target.result;
-            avatarPreviewImage.style.display = 'block';
-            avatarPreviewText.style.display = 'none';
-            removeAvatarBtn.style.display = 'block';
-            currentAvatarFile = file;
-        };
-        reader.readAsDataURL(file);
-    });
-    
-    removeAvatarBtn.addEventListener('click', () => {
-        avatarUpload.value = '';
-        avatarPreviewImage.src = '#';
-        avatarPreviewImage.style.display = 'none';
-        avatarPreviewText.style.display = 'block';
-        removeAvatarBtn.style.display = 'none';
-        currentAvatarFile = null;
-    });
-}
-
-async function loadCurrentAvatarPreview() {
     if (!currentUser) return;
-    
-    const avatarPreviewImage = document.getElementById('avatarPreviewImage');
-    const avatarPreviewText = document.getElementById('avatarPreviewText');
-    const removeAvatarBtn = document.getElementById('removeAvatarBtn');
     
     try {
         const userDoc = await db.collection('users').doc(currentUser.uid).get();
@@ -1314,16 +1229,92 @@ async function loadCurrentAvatarPreview() {
             removeAvatarBtn.style.display = 'block';
         } else {
             avatarPreviewText.textContent = currentUser.username.charAt(0).toUpperCase();
+            avatarPreviewImage.style.display = 'none';
+            avatarPreviewText.style.display = 'block';
+            removeAvatarBtn.style.display = 'none';
         }
     } catch (e) {
         avatarPreviewText.textContent = currentUser.username.charAt(0).toUpperCase();
     }
 }
 
+function handleAvatarSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const avatarPreviewText = document.getElementById('avatarPreviewText');
+    const avatarPreviewImage = document.getElementById('avatarPreviewImage');
+    const removeAvatarBtn = document.getElementById('removeAvatarBtn');
+    
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('Файл слишком большой. Максимум 2MB');
+        e.target.value = '';
+        return;
+    }
+    
+    if (!file.type.startsWith('image/')) {
+        showToast('Пожалуйста, выберите изображение');
+        e.target.value = '';
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        avatarPreviewImage.src = e.target.result;
+        avatarPreviewImage.style.display = 'block';
+        avatarPreviewText.style.display = 'none';
+        removeAvatarBtn.style.display = 'block';
+        currentAvatarFile = file;
+    };
+    reader.readAsDataURL(file);
+}
+
+async function removeAvatar() {
+    const avatarUpload = document.getElementById('avatarUpload');
+    const avatarPreviewText = document.getElementById('avatarPreviewText');
+    const avatarPreviewImage = document.getElementById('avatarPreviewImage');
+    const removeAvatarBtn = document.getElementById('removeAvatarBtn');
+    
+    avatarUpload.value = '';
+    avatarPreviewImage.src = '#';
+    avatarPreviewImage.style.display = 'none';
+    avatarPreviewText.style.display = 'block';
+    avatarPreviewText.textContent = currentUser.username.charAt(0).toUpperCase();
+    removeAvatarBtn.style.display = 'none';
+    currentAvatarFile = null;
+    
+    await db.collection('users').doc(currentUser.uid).update({ avatar: null });
+    updateUI();
+    displayChats();
+    showToast('Аватар удален');
+}
+
+async function uploadAvatar(file) {
+    if (!file || !currentUser) return null;
+    
+    const fileName = `avatars/${currentUser.uid}_${Date.now()}.jpg`;
+    const storageRef = storage.ref().child(fileName);
+    
+    try {
+        const snapshot = await storageRef.put(file);
+        const downloadUrl = await snapshot.ref.getDownloadURL();
+        return downloadUrl;
+    } catch (error) {
+        return null;
+    }
+}
+
 async function editProfile() {
     const newUsername = elements.editUsername.value.trim();
-    const avatarFile = document.getElementById('avatarUpload').files[0];
+    const avatarUpload = document.getElementById('avatarUpload');
+    const file = avatarUpload.files[0];
+    const removeBtn = document.getElementById('removeAvatarBtn');
     
+    if (!newUsername && !file && removeBtn.style.display === 'none') {
+        hideModal('editProfileModal');
+        return;
+    }
+
     showLoading(true);
     try {
         const updateData = {};
@@ -1345,30 +1336,25 @@ async function editProfile() {
             }
             updateData.username = newUsername;
             currentUser.username = newUsername;
+            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
         }
         
-        if (avatarFile) {
-            try {
-                const avatarUrl = await uploadAvatar(avatarFile);
+        if (file) {
+            const avatarUrl = await uploadAvatar(file);
+            if (avatarUrl) {
                 updateData.avatar = avatarUrl;
-            } catch (error) {
-                showToast('Ошибка при загрузке аватарки');
-                return;
             }
-        }
-        
-        if (document.getElementById('removeAvatarBtn').style.display === 'block' && !avatarFile) {
+        } else if (removeBtn.style.display === 'none' && currentAvatarFile === null) {
             updateData.avatar = null;
         }
         
         if (Object.keys(updateData).length > 0) {
             await db.collection('users').doc(currentUser.uid).update(updateData);
-            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
-            updateUI();
-            displayChats();
         }
         
         hideModal('editProfileModal');
+        updateUI();
+        displayChats();
         showToast('Профиль обновлен');
         
     } catch (e) {
