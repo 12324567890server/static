@@ -17,15 +17,10 @@ const firebaseConfig = {
 
 let app;
 let db;
-let supabase;
 
 try {
     app = firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
-    
-    const supabaseUrl = 'https://bncysgnqsgpdpuupzgqj.supabase.co';
-    const supabaseKey = 'sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR';
-    supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 } catch (error) {
     document.addEventListener('DOMContentLoaded', function() {
         alert('Ошибка подключения к серверу. Пожалуйста, обновите страницу.');
@@ -41,6 +36,8 @@ const elements = {
     searchChats: document.getElementById('searchChats'),
     chatsMenuBtn: document.getElementById('chatsMenuBtn'),
     findFriendsCircleBtn: document.getElementById('findFriendsCircleBtn'),
+    attachMediaBtn: document.getElementById('attachMediaBtn'),
+    attachMediaBtnChat: document.getElementById('attachMediaBtnChat'),
     backToChats: document.getElementById('backToChats'),
     chatWithUser: document.getElementById('chatWithUser'),
     chatStatus: document.getElementById('chatStatus'),
@@ -90,6 +87,31 @@ let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.
 let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
+let mediaDB = null;
+
+function initMediaDB() {
+    const request = indexedDB.open('SpeedNexusMedia', 2);
+    request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('media')) {
+            db.createObjectStore('media', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('chats')) {
+            db.createObjectStore('chats', { keyPath: 'id' });
+        }
+    };
+    request.onsuccess = (event) => {
+        mediaDB = event.target.result;
+    };
+}
+
+initMediaDB();
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js');
+    });
+}
 
 function showToast(text) {
     const toast = document.createElement('div');
@@ -113,7 +135,125 @@ function showToast(text) {
 
 document.addEventListener('DOMContentLoaded', function() {
     init();
+    setupMediaButtons();
 });
+
+function setupMediaButtons() {
+    if (elements.attachMediaBtn) {
+        elements.attachMediaBtn.addEventListener('click', openMediaPicker);
+    }
+    if (elements.attachMediaBtnChat) {
+        elements.attachMediaBtnChat.addEventListener('click', openMediaPicker);
+    }
+}
+
+function openMediaPicker() {
+    if (!currentChatUserId) {
+        showToast('Сначала выберите чат');
+        return;
+    }
+    
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,video/*';
+    input.multiple = false;
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            sendMediaMessage(file);
+        }
+    };
+    input.click();
+}
+
+async function sendMediaMessage(file) {
+    if (!currentChatUserId || !currentUser) return;
+    
+    const messageId = 'media_' + Date.now() + '_' + Math.random().toString(36);
+    const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+    
+    showLoading(true);
+    
+    try {
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            const mediaData = e.target.result;
+            
+            const mediaObj = {
+                id: messageId,
+                chatId: chatId,
+                sender: currentUser.uid,
+                type: file.type.startsWith('image/') ? 'image' : 'video',
+                data: mediaData,
+                timestamp: new Date().toISOString()
+            };
+            
+            await saveMediaToIndexedDB(mediaObj);
+            
+            await db.collection('messages').add({
+                chat_id: chatId,
+                participants: [currentUser.uid, currentChatUserId],
+                sender: currentUser.uid,
+                receiver: currentChatUserId,
+                type: 'media',
+                messageId: messageId,
+                mediaType: mediaObj.type,
+                read: false,
+                created_at: new Date().toISOString()
+            });
+            
+            if (navigator.onLine) {
+                syncMediaWithPeer(mediaObj, currentChatUserId);
+            }
+            
+            showLoading(false);
+        };
+        reader.readAsDataURL(file);
+    } catch (error) {
+        showLoading(false);
+        showToast('Ошибка при отправке');
+    }
+}
+
+function saveMediaToIndexedDB(mediaObj) {
+    return new Promise((resolve, reject) => {
+        if (!mediaDB) {
+            resolve();
+            return;
+        }
+        const transaction = mediaDB.transaction(['media'], 'readwrite');
+        const store = transaction.objectStore('media');
+        const request = store.put(mediaObj);
+        request.onsuccess = () => resolve();
+        request.onerror = reject;
+    });
+}
+
+function getMediaFromIndexedDB(messageId) {
+    return new Promise((resolve) => {
+        if (!mediaDB) {
+            resolve(null);
+            return;
+        }
+        const transaction = mediaDB.transaction(['media'], 'readonly');
+        const store = transaction.objectStore('media');
+        const request = store.get(messageId);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+    });
+}
+
+function syncMediaWithPeer(mediaObj, peerId) {
+    const peerData = JSON.stringify({
+        type: 'media_sync',
+        mediaId: mediaObj.id,
+        chatId: mediaObj.chatId,
+        sender: mediaObj.sender,
+        data: mediaObj.data
+    });
+    
+    localStorage.setItem('pending_sync_' + mediaObj.id, peerData);
+}
 
 function init() {
     checkUser();
@@ -505,8 +645,12 @@ function setupMessageListener(userId) {
                     const msgId = change.doc.id;
                       
                     if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
-                        const isMyMessage = (msg.sender === currentUser.uid);
-                        displayMessage(msg, isMyMessage, msgId);
+                        if (msg.type === 'media') {
+                            displayMediaMessage(msg, msg.sender === currentUser.uid, msgId);
+                        } else {
+                            const isMyMessage = (msg.sender === currentUser.uid);
+                            displayMessage(msg, isMyMessage, msgId);
+                        }
                           
                         if (isChatActive && currentChatUserId === userId) {
                             scrollToBottom();
@@ -530,6 +674,61 @@ function setupMessageListener(userId) {
                 }
             });
         });
+}
+
+async function displayMediaMessage(msg, isMyMessage, msgId) {
+    const messageElement = document.createElement('div');
+    messageElement.className = `message ${isMyMessage ? 'me' : 'other'} media-message`;
+    messageElement.dataset.messageId = msgId;
+    
+    const mediaObj = await getMediaFromIndexedDB(msg.messageId);
+    
+    let contentHtml = '';
+    if (mediaObj) {
+        if (msg.mediaType === 'image') {
+            contentHtml = `<img src="${mediaObj.data}" class="media-content" onclick="window.open('${mediaObj.data}')">`;
+        } else {
+            contentHtml = `<video src="${mediaObj.data}" controls class="media-content"></video>`;
+        }
+    } else {
+        contentHtml = `
+            <div class="media-placeholder">
+                <div class="spinner-small"></div>
+                <span>Загрузка...</span>
+            </div>
+        `;
+        
+        if (navigator.onLine) {
+            requestMediaFromPeer(msg.messageId);
+        }
+    }
+    
+    const timeString = formatMessageTime(msg.created_at);
+    
+    messageElement.innerHTML = `
+        <div class="message-content">
+            ${contentHtml}
+            <div class="time">${timeString}</div>
+        </div>
+    `;
+    
+    elements.privateMessages.appendChild(messageElement);
+}
+
+function requestMediaFromPeer(messageId) {
+    setTimeout(async () => {
+        const media = await getMediaFromIndexedDB(messageId);
+        if (media) {
+            const msgElement = document.querySelector(`[data-message-id="${messageId}"]`);
+            if (msgElement) {
+                if (media.type === 'image') {
+                    msgElement.querySelector('.media-placeholder').outerHTML = `<img src="${media.data}" class="media-content" onclick="window.open('${media.data}')">`;
+                } else {
+                    msgElement.querySelector('.media-placeholder').outerHTML = `<video src="${media.data}" controls class="media-content"></video>`;
+                }
+            }
+        }
+    }, 1000);
 }
 
 function updateUI() {
@@ -837,7 +1036,7 @@ async function loadChats() {
                 chatsMap.set(otherUserId, {
                     userId: otherUserId,
                     username: otherUsername,
-                    lastMessage: msg.message,
+                    lastMessage: msg.type === 'media' ? '📷 Медиа' : msg.message,
                     lastTime: msg.created_at,
                     isMyMessage: msg.sender === currentUser.uid,
                     type: msg.type || 'text'
@@ -906,7 +1105,13 @@ function displayChats() {
         const unreadCount = unreadCounts[chat.userId] || 0;
         const timeString = formatMessageTime(chat.lastTime);
         const messagePrefix = chat.isMyMessage ? 'Вы: ' : '';
-        let displayMessage = chat.lastMessage.length > 30 ? chat.lastMessage.substring(0, 30) + '...' : chat.lastMessage;
+        let displayMessage = chat.lastMessage;
+        
+        if (chat.type === 'media') {
+            displayMessage = '📷 Медиа';
+        } else {
+            displayMessage = displayMessage.length > 30 ? displayMessage.substring(0, 30) + '...' : displayMessage;
+        }
         
         if (isTyping) {
             displayMessage = '<span class="typing-animation-small">что-то пишет<span>.</span><span>.</span><span>.</span></span>';
@@ -945,11 +1150,17 @@ async function loadMessages(userId) {
             .get();
 
         elements.privateMessages.innerHTML = '';
-        snapshot.forEach(doc => {
+        
+        for (const doc of snapshot.docs) {
             const msg = doc.data();
             const isMyMessage = (msg.sender === currentUser.uid);
-            displayMessage(msg, isMyMessage, doc.id);
-        });
+            
+            if (msg.type === 'media') {
+                await displayMediaMessage(msg, isMyMessage, doc.id);
+            } else {
+                displayMessage(msg, isMyMessage, doc.id);
+            }
+        }
           
         scrollToBottom();
     } catch (e) {}
