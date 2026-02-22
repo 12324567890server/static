@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SpeedNexus</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -53,16 +53,11 @@
         <div id="privateMessages" class="private-messages"></div>
         
         <div class="message-input-container">
-            <button id="emojiBtn" class="emoji-btn">
-                <div class="emoji-img"></div>
-            </button>
             <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
             <button id="sendMessageBtn" class="send-btn">
                 <span class="send-icon"></span>
             </button>
         </div>
-
-        <div id="emojiPanel" class="emoji-panel"></div>
     </div>
 
     <div id="sideMenu" class="side-menu">
@@ -138,7 +133,5 @@
     </div>
 
     <script src="chat.js"></script>
-    <script src="emoji.js"></script>
-    <script src="block.js"></script>
 </body>
 </html>
