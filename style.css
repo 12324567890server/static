@@ -203,6 +203,16 @@ body {
     margin-right: 15px;
     flex-shrink: 0;
     position: relative;
+    overflow: hidden;
+}
+
+.chat-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .chat-avatar.online::after {
@@ -215,6 +225,7 @@ body {
     background: #4CAF50;
     border: 2px solid #2d1b69;
     border-radius: 50%;
+    z-index: 2;
 }
 
 .chat-info {
@@ -627,14 +638,25 @@ body {
 .user-avatar {
     width: 45px;
     height: 45px;
-    background: white;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 22px;
     font-weight: bold;
-    color: #8a2be2;
+    color: white;
+    overflow: hidden;
+    position: relative;
+}
+
+.user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .user-info h4 {
@@ -759,6 +781,43 @@ body {
     border-radius: 10px;
 }
 
+.avatar-upload-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.current-avatar-preview {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    font-weight: bold;
+    color: white;
+    overflow: hidden;
+    border: 3px solid rgba(177, 156, 217, 0.5);
+    position: relative;
+}
+
+.current-avatar-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.current-avatar-preview span {
+    z-index: 1;
+}
+
 .modal-input {
     width: 100%;
     padding: 13px 16px;
@@ -789,6 +848,21 @@ body {
 
 .modal-btn:active {
     transform: scale(0.98);
+}
+
+.modal-btn-secondary {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid rgba(177, 156, 217, 0.5);
+    background: rgba(74, 44, 140, 0.7);
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.modal-btn-secondary:active {
+    background: rgba(177, 156, 217, 0.3);
 }
 
 .search-results {
@@ -831,6 +905,16 @@ body {
     font-weight: bold;
     color: white;
     position: relative;
+    overflow: hidden;
+}
+
+.user-result-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .user-result-avatar.online::after {
@@ -843,6 +927,7 @@ body {
     background: #4CAF50;
     border: 2px solid #2d1b69;
     border-radius: 50%;
+    z-index: 2;
 }
 
 .user-result-name {
@@ -867,6 +952,16 @@ body {
     border: 1px solid rgba(177, 156, 217, 0.3);
 }
 
+.contact-item:active {
+    background: rgba(177, 156, 217, 0.2);
+}
+
+.contact-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .contact-avatar {
     width: 34px;
     height: 34px;
@@ -880,6 +975,16 @@ body {
     color: white;
     margin-right: 10px;
     position: relative;
+    overflow: hidden;
+}
+
+.contact-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .contact-avatar.online::after {
@@ -892,6 +997,7 @@ body {
     background: #4CAF50;
     border: 2px solid #2d1b69;
     border-radius: 50%;
+    z-index: 2;
 }
 
 .contact-name {
@@ -977,3 +1083,4 @@ body {
         width: 52px;
         height: 52px;
     }
+}
