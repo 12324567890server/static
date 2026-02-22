@@ -536,20 +536,14 @@ function setupMessageListener(userId) {
                     
                     if (messageElement && msg.read) {
                         const timeElement = messageElement.querySelector('.time');
-                        if (timeElement) {
+                        if (timeElement && messageElement.classList.contains('me')) {
                             let timeText = timeElement.textContent.replace('✓', '').replace('✓✓', '').trim();
-                            timeElement.innerHTML = `${timeText} <span class="read-status">✓✓</span>`;
+                            timeElement.textContent = timeText + ' ✓✓';
                         }
                     }
                 }
             });
         });
-}
-
-function setupMediaButtons() {
-    if (elements.attachMediaBtn) {
-        elements.attachMediaBtn.addEventListener('click', openMediaPicker);
-    }
 }
 
 function openMediaPicker() {
@@ -706,20 +700,18 @@ async function displayMediaMessage(msg, isMyMessage, msgId) {
     messageElement.dataset.messageId = msgId;
     
     const mediaObj = await getMediaFromIndexedDB(msg.messageId);
+    const timeString = formatMessageTime(msg.created_at);
+    const statusSymbol = isMyMessage ? (msg.read ? ' ✓✓' : ' ✓') : '';
     
     let contentHtml = '';
     if (mediaObj) {
         if (msg.mediaType === 'image') {
-            contentHtml = `<img src="${mediaObj.data}" class="media-content" onclick="window.open('${mediaObj.data}')" style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;">`;
+            contentHtml = `<img src="${mediaObj.data}" class="media-content" style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;" onclick="window.open('${mediaObj.data}')">`;
         } else {
             contentHtml = `<video src="${mediaObj.data}" controls style="max-width: 200px; max-height: 200px; border-radius: 8px;"></video>`;
         }
     } else {
-        contentHtml = `
-            <div style="width: 200px; height: 200px; background: rgba(74,44,140,0.5); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                <div class="spinner-small"></div>
-            </div>
-        `;
+        contentHtml = `<div style="width: 200px; height: 200px; background: rgba(74,44,140,0.5); border-radius: 8px; display: flex; align-items: center; justify-content: center;"><div class="spinner-small"></div></div>`;
         
         setTimeout(async () => {
             const media = await getMediaFromIndexedDB(msg.messageId);
@@ -727,7 +719,7 @@ async function displayMediaMessage(msg, isMyMessage, msgId) {
                 const msgDiv = document.querySelector(`[data-message-id="${msgId}"]`);
                 if (msgDiv) {
                     if (msg.mediaType === 'image') {
-                        msgDiv.querySelector('div').outerHTML = `<img src="${media.data}" class="media-content" onclick="window.open('${media.data}')" style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;">`;
+                        msgDiv.querySelector('div').outerHTML = `<img src="${media.data}" class="media-content" style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;" onclick="window.open('${media.data}')">`;
                     } else {
                         msgDiv.querySelector('div').outerHTML = `<video src="${media.data}" controls style="max-width: 200px; max-height: 200px; border-radius: 8px;"></video>`;
                     }
@@ -736,13 +728,10 @@ async function displayMediaMessage(msg, isMyMessage, msgId) {
         }, 1000);
     }
     
-    const timeString = formatMessageTime(msg.created_at);
-    const readStatus = !isMyMessage ? '' : (msg.read ? '<span class="read-status"> ✓✓</span>' : ' ✓');
-    
     messageElement.innerHTML = `
         <div class="message-content">
             ${contentHtml}
-            <div class="time">${timeString}${readStatus}</div>
+            <div class="time">${timeString}${statusSymbol}</div>
         </div>
     `;
     
@@ -1246,13 +1235,13 @@ function displayMessage(msg, isMyMessage, msgId) {
         elements.privateMessages.appendChild(separator);
     }
     
-    const readStatus = !isMyMessage ? '' : (msg.read ? '<span class="read-status"> ✓✓</span>' : ' ✓');
+    const statusSymbol = isMyMessage ? (msg.read ? ' ✓✓' : ' ✓') : '';
     
     const messageContent = document.createElement('div');
     messageContent.className = 'message-content';
     messageContent.innerHTML = `
         <div class="text">${escapeHtml(msg.message)}</div>
-        <div class="time" data-fulltime="${msg.created_at || ''}">${timeString}${readStatus}</div>
+        <div class="time" data-fulltime="${msg.created_at || ''}">${timeString}${statusSymbol}</div>
     `;
     
     messageElement.appendChild(messageContent);
