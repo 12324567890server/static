@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SpeedNexus</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#8a2be2">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div id="loginScreen" class="login-screen">
@@ -38,6 +39,9 @@
             <button id="findFriendsCircleBtn" class="find-friends-circle-btn">
                 <span class="find-friends-icon"></span>
             </button>
+            <button id="attachMediaBtn" class="attach-media-btn">
+                <span class="attach-icon">📎</span>
+            </button>
         </div>
     </div>
 
@@ -54,6 +58,9 @@
         
         <div class="message-input-container">
             <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
+            <button id="attachMediaBtnChat" class="attach-btn">
+                <span class="attach-icon">📎</span>
+            </button>
             <button id="sendMessageBtn" class="send-btn">
                 <span class="send-icon"></span>
             </button>
