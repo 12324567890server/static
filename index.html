@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -95,6 +96,15 @@
                 <button class="close-modal" data-close="editProfileModal">×</button>
             </div>
             <div class="modal-body">
+                <div class="avatar-upload-section">
+                    <div class="current-avatar-preview" id="avatarPreview">
+                        <img src="#" alt="Preview" id="avatarPreviewImage" style="display: none;">
+                        <span id="avatarPreviewText">A</span>
+                    </div>
+                    <label for="avatarUpload" class="modal-btn-secondary">Выбрать фото</label>
+                    <input type="file" id="avatarUpload" accept="image/jpeg,image/png,image/gif,image/webp" style="display: none;">
+                    <button id="removeAvatarBtn" class="modal-btn-secondary" style="display: none;">Удалить</button>
+                </div>
                 <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
                 <div id="editUsernameError" class="error-message"></div>
                 <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
