@@ -527,12 +527,6 @@ function setupMessageListener(userId) {
                             timeElement.textContent = timeElement.textContent.replace('✓', '✓✓');
                         }
                     }
-                } else if (change.type === 'removed') {
-                    const msgId = change.doc.id;
-                    const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
-                    if (messageElement) {
-                        messageElement.remove();
-                    }
                 }
             });
         });
@@ -943,8 +937,6 @@ function filterChats(searchTerm) {
 
 async function loadMessages(userId) {
     if (!userId || !currentUser) return;
-    
-    const deletedMessages = JSON.parse(localStorage.getItem(`deleted_${currentUser.uid}`) || '[]');
       
     try {
         const snapshot = await db.collection('messages')
@@ -954,11 +946,9 @@ async function loadMessages(userId) {
 
         elements.privateMessages.innerHTML = '';
         snapshot.forEach(doc => {
-            if (!deletedMessages.includes(doc.id)) {
-                const msg = doc.data();
-                const isMyMessage = (msg.sender === currentUser.uid);
-                displayMessage(msg, isMyMessage, doc.id);
-            }
+            const msg = doc.data();
+            const isMyMessage = (msg.sender === currentUser.uid);
+            displayMessage(msg, isMyMessage, doc.id);
         });
           
         scrollToBottom();
@@ -969,32 +959,6 @@ function displayMessage(msg, isMyMessage, msgId) {
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
     messageElement.dataset.messageId = msgId;
-    messageElement.dataset.sender = msg.sender;
-    
-    let pressTimer;
-    
-    messageElement.addEventListener('touchstart', (e) => {
-        pressTimer = setTimeout(() => {
-            showDeleteMenu(msgId, isMyMessage);
-        }, 500);
-    });
-    
-    messageElement.addEventListener('touchend', () => {
-        clearTimeout(pressTimer);
-    });
-    
-    messageElement.addEventListener('touchmove', () => {
-        clearTimeout(pressTimer);
-    });
-    
-    messageElement.addEventListener('mousedown', (e) => {
-        pressTimer = setTimeout(() => {
-            showDeleteMenu(msgId, isMyMessage);
-        }, 500);
-    });
-    
-    messageElement.addEventListener('mouseup', () => clearTimeout(pressTimer));
-    messageElement.addEventListener('mouseleave', () => clearTimeout(pressTimer));
     
     let timeString = '';
     let messageDate = null;
@@ -1060,115 +1024,6 @@ function displayMessage(msg, isMyMessage, msgId) {
     
     messageElement.appendChild(messageContent);
     elements.privateMessages.appendChild(messageElement);
-}
-
-function showDeleteMenu(messageId, isMyMessage) {
-    document.getSelection().removeAllRanges();
-    
-    document.querySelectorAll('.delete-menu').forEach(m => m.remove());
-    
-    const menu = document.createElement('div');
-    menu.className = 'delete-menu';
-    menu.style.cssText = `
-        position: fixed;
-        background: rgba(45, 27, 105, 0.98);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        padding: 20px;
-        z-index: 10000;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        border: 1px solid rgba(177, 156, 217, 0.3);
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        width: 300px;
-        animation: menuAppear 0.2s ease;
-    `;
-    
-    let html = `
-        <style>
-        @keyframes menuAppear {
-            from { opacity: 0; transform: translate(-50%, -40%); }
-            to { opacity: 1; transform: translate(-50%, -50%); }
-        }
-        .delete-menu button {
-            transition: all 0.2s;
-            font-size: 16px;
-            margin: 5px 0;
-            cursor: pointer;
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 12px;
-            font-weight: 600;
-        }
-        .delete-menu button:active {
-            transform: scale(0.98);
-        }
-        </style>
-        <div style="color: white; text-align: center; margin-bottom: 15px; font-size: 16px;">
-            Удалить сообщение?
-        </div>
-    `;
-    
-    if (isMyMessage) {
-        html += `
-            <button onclick="deleteMessage('${messageId}', true)" 
-                style="background:#ff4444; color:white;">
-                Удалить у всех
-            </button>
-        `;
-    }
-    
-    html += `
-        <button onclick="deleteMessage('${messageId}', false)" 
-            style="background:#8a2be2; color:white;">
-            Удалить у себя
-        </button>
-        <button onclick="this.closest('.delete-menu').remove()" 
-            style="background:transparent; color:rgba(255,255,255,0.7); border:1px solid rgba(255,255,255,0.2); margin-top: 8px;">
-            Отмена
-        </button>
-    `;
-    
-    menu.innerHTML = html;
-    document.body.appendChild(menu);
-    
-    setTimeout(() => {
-        document.addEventListener('click', function closeMenu(e) {
-            if (!menu.contains(e.target)) {
-                menu.remove();
-                document.removeEventListener('click', closeMenu);
-            }
-        });
-    }, 100);
-}
-
-async function deleteMessage(messageId, deleteForEveryone = false) {
-    try {
-        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (!messageElement) return;
-        
-        if (deleteForEveryone) {
-            await db.collection('messages').doc(messageId).delete();
-            showToast('Удалено у всех');
-        } else {
-            messageElement.remove();
-            
-            const deletedMessages = JSON.parse(localStorage.getItem(`deleted_${currentUser.uid}`) || '[]');
-            if (!deletedMessages.includes(messageId)) {
-                deletedMessages.push(messageId);
-                localStorage.setItem(`deleted_${currentUser.uid}`, JSON.stringify(deletedMessages));
-            }
-            showToast('Удалено у себя');
-        }
-        
-        document.querySelectorAll('.delete-menu').forEach(m => m.remove());
-        
-    } catch (error) {
-        console.error('Ошибка удаления:', error);
-        showToast('Ошибка при удалении');
-    }
 }
 
 function scrollToBottom() {
