@@ -136,6 +136,16 @@ body {
     justify-content: center;
 }
 
+.menu-icon {
+    width: 24px;
+    height: 24px;
+    display: inline-block;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>');
+}
+
 .search-input {
     width: 100%;
     padding: 12px 15px;
@@ -705,6 +715,10 @@ body {
 
 .side-menu-btn:active {
     background: rgba(177, 156, 217, 0.2);
+}
+
+.btn-text {
+    flex: 1;
 }
 
 .modal {
