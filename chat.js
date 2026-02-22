@@ -688,6 +688,7 @@ function hideModal(id) {
 function showError(element, message) {
     element.textContent = message;
     element.style.display = 'block';
+    setTimeout(() => element.style.display = 'none', 3000);
 }
 
 function debounce(func, wait) {
@@ -734,6 +735,7 @@ function setupRealtimeSubscriptions() {
         snapshot.docChanges().forEach(change => {
             if (change.type === 'modified' || change.type === 'added') {
                 const userData = change.doc.data();
+                
                 if (change.doc.id !== currentUser?.uid) {
                     onlineUsers.set(change.doc.id, {
                         username: userData.username,
@@ -744,6 +746,7 @@ function setupRealtimeSubscriptions() {
                 if (currentChatUserId === change.doc.id) {
                     currentChatWith = userData.username;
                     elements.chatWithUser.textContent = userData.username;
+                    updateChatStatus();
                 }
                 
                 if (currentUser && change.doc.id === currentUser.uid) {
@@ -756,10 +759,7 @@ function setupRealtimeSubscriptions() {
                 onlineUsers.delete(change.doc.id);
             }
         });
-          
-        if (currentChatWith) {
-            updateChatStatus();
-        }
+        
         displayChats();
         updateSearchResultsWithStatus();
         updateContactsWithStatus();
