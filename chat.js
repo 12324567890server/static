@@ -17,13 +17,11 @@ const firebaseConfig = {
 
 let app;
 let db;
-let storage;
 let supabase;
 
 try {
     app = firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
-    storage = firebase.storage();
     
     const supabaseUrl = 'https://bncysgnqsgpdpuupzgqj.supabase.co';
     const supabaseKey = 'sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR';
@@ -92,7 +90,6 @@ let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.
 let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
-let currentAvatarFile = null;
 
 function showToast(text) {
     const toast = document.createElement('div');
@@ -535,23 +532,11 @@ function setupMessageListener(userId) {
         });
 }
 
-async function updateUI() {
+function updateUI() {
     if (currentUser) {
         elements.currentUsernameDisplay.textContent = currentUser.username;
+        elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
         elements.userStatusDisplay.textContent = 'на связи';
-        
-        try {
-            const userDoc = await db.collection('users').doc(currentUser.uid).get();
-            const avatarUrl = userDoc.data()?.avatar;
-            
-            if (avatarUrl) {
-                elements.userAvatar.innerHTML = `<img src="${avatarUrl}" alt="avatar">`;
-            } else {
-                elements.userAvatar.innerHTML = currentUser.username.charAt(0).toUpperCase();
-            }
-        } catch (e) {
-            elements.userAvatar.innerHTML = currentUser.username.charAt(0).toUpperCase();
-        }
     }
 }
 
@@ -601,9 +586,6 @@ function setupEventListeners() {
     elements.editProfileBtn.addEventListener('click', () => {
         elements.editUsername.value = currentUser?.username || '';
         elements.editUsernameError.style.display = 'none';
-        currentAvatarFile = null;
-        document.getElementById('avatarUpload').value = '';
-        loadAvatarPreview();
         showModal('editProfileModal');
     });
 
@@ -648,24 +630,6 @@ function setupEventListeners() {
     });
 
     elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
-    
-    const selectAvatarBtn = document.getElementById('selectAvatarBtn');
-    const avatarUpload = document.getElementById('avatarUpload');
-    const removeAvatarBtn = document.getElementById('removeAvatarBtn');
-    
-    if (selectAvatarBtn) {
-        selectAvatarBtn.addEventListener('click', () => {
-            avatarUpload.click();
-        });
-    }
-    
-    if (avatarUpload) {
-        avatarUpload.addEventListener('change', handleAvatarSelect);
-    }
-    
-    if (removeAvatarBtn) {
-        removeAvatarBtn.addEventListener('click', removeAvatar);
-    }
 }
 
 function closeMenu() {
@@ -688,7 +652,6 @@ function hideModal(id) {
 function showError(element, message) {
     element.textContent = message;
     element.style.display = 'block';
-    setTimeout(() => element.style.display = 'none', 3000);
 }
 
 function debounce(func, wait) {
@@ -735,18 +698,14 @@ function setupRealtimeSubscriptions() {
         snapshot.docChanges().forEach(change => {
             if (change.type === 'modified' || change.type === 'added') {
                 const userData = change.doc.data();
-                
-                if (change.doc.id !== currentUser?.uid) {
-                    onlineUsers.set(change.doc.id, {
-                        username: userData.username,
-                        is_online: userData.is_online === true
-                    });
-                }
+                onlineUsers.set(change.doc.id, {
+                    username: userData.username,
+                    is_online: userData.is_online === true
+                });
                 
                 if (currentChatUserId === change.doc.id) {
                     currentChatWith = userData.username;
                     elements.chatWithUser.textContent = userData.username;
-                    updateChatStatus();
                 }
                 
                 if (currentUser && change.doc.id === currentUser.uid) {
@@ -759,7 +718,10 @@ function setupRealtimeSubscriptions() {
                 onlineUsers.delete(change.doc.id);
             }
         });
-        
+          
+        if (currentChatWith) {
+            updateChatStatus();
+        }
         displayChats();
         updateSearchResultsWithStatus();
         updateContactsWithStatus();
@@ -894,7 +856,7 @@ async function loadChats() {
     } catch (e) {}
 }
 
-async function displayChats() {
+function displayChats() {
     if (!elements.chatsList) return;
     
     elements.chatsList.innerHTML = '';
@@ -933,20 +895,10 @@ async function displayChats() {
       
     const sortedChats = [...filteredChats].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
       
-    for (const chat of sortedChats) {
+    sortedChats.forEach(chat => {
         const div = document.createElement('div');
         div.className = 'chat-item';
         div.onclick = () => showChat(chat.username);
-        
-        let avatarHtml = chat.username.charAt(0).toUpperCase();
-        
-        try {
-            const userDoc = await db.collection('users').doc(chat.userId).get();
-            const avatarUrl = userDoc.data()?.avatar;
-            if (avatarUrl) {
-                avatarHtml = `<img src="${avatarUrl}" alt="avatar">`;
-            }
-        } catch (e) {}
           
         const userStatus = onlineUsers.get(chat.userId);
         const isOnline = userStatus?.is_online === true;
@@ -963,7 +915,7 @@ async function displayChats() {
         }
           
         div.innerHTML = `
-            <div class="chat-avatar ${isOnline ? 'online' : ''}">${avatarHtml}</div>
+            <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
             <div class="chat-info">
                 <div class="chat-name">
                     ${escapeHtml(chat.username)}
@@ -976,7 +928,7 @@ async function displayChats() {
         `;
           
         elements.chatsList.appendChild(div);
-    }
+    });
 }
 
 function filterChats(searchTerm) {
@@ -1213,146 +1165,37 @@ async function login() {
     }
 }
 
-async function loadAvatarPreview() {
-    const previewText = document.getElementById('avatarPreviewText');
-    const previewImg = document.getElementById('avatarPreviewImage');
-    const removeBtn = document.getElementById('removeAvatarBtn');
-    
-    if (!currentUser) return;
-    
-    try {
-        const userDoc = await db.collection('users').doc(currentUser.uid).get();
-        const avatarUrl = userDoc.data()?.avatar;
-        
-        if (avatarUrl) {
-            previewImg.src = avatarUrl;
-            previewImg.style.display = 'block';
-            previewText.style.display = 'none';
-            removeBtn.style.display = 'block';
-        } else {
-            previewText.textContent = currentUser.username.charAt(0).toUpperCase();
-            previewImg.style.display = 'none';
-            previewText.style.display = 'block';
-            removeBtn.style.display = 'none';
-        }
-    } catch (e) {
-        previewText.textContent = currentUser.username.charAt(0).toUpperCase();
-    }
-}
-
-function handleAvatarSelect(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    const previewText = document.getElementById('avatarPreviewText');
-    const previewImg = document.getElementById('avatarPreviewImage');
-    const removeBtn = document.getElementById('removeAvatarBtn');
-    
-    if (file.size > 2 * 1024 * 1024) {
-        showToast('Файл слишком большой. Максимум 2MB');
-        e.target.value = '';
-        return;
-    }
-    
-    if (!file.type.startsWith('image/')) {
-        showToast('Пожалуйста, выберите изображение');
-        e.target.value = '';
-        return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        previewImg.src = e.target.result;
-        previewImg.style.display = 'block';
-        previewText.style.display = 'none';
-        removeBtn.style.display = 'block';
-        currentAvatarFile = file;
-    };
-    reader.readAsDataURL(file);
-}
-
-async function removeAvatar() {
-    const upload = document.getElementById('avatarUpload');
-    const previewText = document.getElementById('avatarPreviewText');
-    const previewImg = document.getElementById('avatarPreviewImage');
-    const removeBtn = document.getElementById('removeAvatarBtn');
-    
-    upload.value = '';
-    previewImg.src = '#';
-    previewImg.style.display = 'none';
-    previewText.style.display = 'block';
-    previewText.textContent = currentUser.username.charAt(0).toUpperCase();
-    removeBtn.style.display = 'none';
-    currentAvatarFile = null;
-    
-    await db.collection('users').doc(currentUser.uid).update({ avatar: null });
-    updateUI();
-    displayChats();
-    showToast('Аватар удален');
-}
-
-async function uploadAvatar(file) {
-    if (!file || !currentUser) return null;
-    
-    const fileName = `avatars/${currentUser.uid}_${Date.now()}.jpg`;
-    const storageRef = storage.ref().child(fileName);
-    
-    try {
-        const snapshot = await storageRef.put(file);
-        const downloadUrl = await snapshot.ref.getDownloadURL();
-        return downloadUrl;
-    } catch (error) {
-        return null;
-    }
-}
-
 async function editProfile() {
     const newUsername = elements.editUsername.value.trim();
-    const avatarUpload = document.getElementById('avatarUpload');
-    const file = avatarUpload.files[0];
-    const removeBtn = document.getElementById('removeAvatarBtn');
-    
+    if (!newUsername || newUsername.length < 3) {
+        showError(elements.editUsernameError, 'Минимум 3 символа');
+        return;
+    }
+      
+    if (newUsername.length > 15) {
+        showError(elements.editUsernameError, 'Максимум 15 символов');
+        return;
+    }
+      
+    if (newUsername === currentUser.username) {
+        hideModal('editProfileModal');
+        return;
+    }
+
     showLoading(true);
     try {
-        const updateData = {};
-        
-        if (newUsername && newUsername !== currentUser.username) {
-            if (newUsername.length < 3) {
-                showError(elements.editUsernameError, 'Минимум 3 символа');
-                return;
-            }
-            if (newUsername.length > 15) {
-                showError(elements.editUsernameError, 'Максимум 15 символов');
-                return;
-            }
-            
-            const existingUser = await findUserByUsername(newUsername);
-            if (existingUser && existingUser.uid !== currentUser.uid) {
-                showError(elements.editUsernameError, 'Имя пользователя уже занято');
-                return;
-            }
-            updateData.username = newUsername;
-            currentUser.username = newUsername;
-            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+        const existingUser = await findUserByUsername(newUsername);
+
+        if (existingUser && existingUser.uid !== currentUser.uid) {
+            showError(elements.editUsernameError, 'Имя пользователя уже занято');
+            return;
         }
-        
-        if (file) {
-            const avatarUrl = await uploadAvatar(file);
-            if (avatarUrl) {
-                updateData.avatar = avatarUrl;
-            }
-        } else if (removeBtn.style.display === 'none' && currentAvatarFile === null) {
-            updateData.avatar = null;
-        }
-        
-        if (Object.keys(updateData).length > 0) {
-            await db.collection('users').doc(currentUser.uid).update(updateData);
-        }
-        
+
+        await db.collection('users').doc(currentUser.uid).update({
+            username: newUsername
+        });
+
         hideModal('editProfileModal');
-        updateUI();
-        displayChats();
-        showToast('Профиль обновлен');
         
     } catch (e) {
         showError(elements.editUsernameError, 'Ошибка при изменении профиля');
@@ -1384,7 +1227,7 @@ async function searchUsers() {
             return;
         }
 
-        for (const user of users) {
+        users.forEach(user => {
             const userElement = document.createElement('div');
             userElement.className = 'user-result';
             userElement.onclick = () => {
@@ -1393,15 +1236,10 @@ async function searchUsers() {
             };
               
             const isOnline = onlineUsers.get(user.uid)?.is_online === true;
-            let avatarHtml = user.username.charAt(0).toUpperCase();
-            
-            if (user.avatar) {
-                avatarHtml = `<img src="${user.avatar}" alt="avatar">`;
-            }
               
             userElement.innerHTML = `
                 <div class="user-result-info">
-                    <div class="user-result-avatar ${isOnline ? 'online' : ''}">${avatarHtml}</div>
+                    <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
                     <div>
                         <div class="user-result-name">${escapeHtml(user.username)}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
@@ -1410,7 +1248,7 @@ async function searchUsers() {
             `;
               
             elements.searchResults.appendChild(userElement);
-        }
+        });
     } catch (e) {
         elements.searchResults.innerHTML = '<div style="color: #ff7d7d; text-align: center;">Ошибка при поиске</div>';
     }
@@ -1483,15 +1321,10 @@ function loadContacts() {
           
         findUserByUsername(contact.username).then(user => {
             const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
-            let avatarHtml = contact.username.charAt(0).toUpperCase();
-            
-            if (user && user.avatar) {
-                avatarHtml = `<img src="${user.avatar}" alt="avatar">`;
-            }
               
             contactElement.innerHTML = `
                 <div class="contact-info">
-                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${avatarHtml}</div>
+                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
                     <div>
                         <div class="contact-name">${escapeHtml(contact.username)}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
