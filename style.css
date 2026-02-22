@@ -530,6 +530,7 @@ body {
     font-size: 14px;
     outline: none;
     min-height: 44px;
+    margin: 0 8px;
 }
 
 .message-input:focus {
@@ -565,6 +566,66 @@ body {
     background-repeat: no-repeat;
     background-position: center;
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><polygon points="2,3 22,12 2,21 8,12 2,3"/></svg>');
+}
+
+.emoji-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.emoji-img {
+    width: 28px;
+    height: 28px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10"/><circle cx="8" cy="9" r="1.5" fill="white"/><circle cx="16" cy="9" r="1.5" fill="white"/><path d="M12 17c2.5 0 3.5-2 3.5-2h-7s1 2 3.5 2z"/></svg>');
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+.emoji-panel {
+    position: absolute;
+    bottom: 80px;
+    left: 10px;
+    right: 10px;
+    background: rgba(45, 27, 105, 0.98);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 12px;
+    display: none;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+    z-index: 1000;
+    border: 1px solid rgba(177, 156, 217, 0.3);
+    max-height: 250px;
+    overflow-y: auto;
+    box-shadow: 0 -5px 20px rgba(0,0,0,0.3);
+}
+
+.emoji-panel.show {
+    display: grid;
+}
+
+.emoji-item {
+    background: rgba(74, 44, 140, 0.5);
+    border: 1px solid rgba(177, 156, 217, 0.3);
+    border-radius: 12px;
+    padding: 8px 4px;
+    font-size: 24px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.emoji-item:active {
+    transform: scale(0.9);
+    background: rgba(138, 43, 226, 0.5);
 }
 
 .icon {
