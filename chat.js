@@ -17,11 +17,13 @@ const firebaseConfig = {
 
 let app;
 let db;
+let storage;
 let supabase;
 
 try {
     app = firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
+    storage = firebase.storage();
     
     const supabaseUrl = 'https://bncysgnqsgpdpuupzgqj.supabase.co';
     const supabaseKey = 'sb_publishable_bCoFKBILLDgxddAOkd0ZrA_7LJTvSaR';
@@ -90,6 +92,7 @@ let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.
 let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
+let currentAvatarFile = null;
 
 function showToast(text) {
     const toast = document.createElement('div');
@@ -532,11 +535,23 @@ function setupMessageListener(userId) {
         });
 }
 
-function updateUI() {
+async function updateUI() {
     if (currentUser) {
         elements.currentUsernameDisplay.textContent = currentUser.username;
-        elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
         elements.userStatusDisplay.textContent = 'на связи';
+        
+        try {
+            const userDoc = await db.collection('users').doc(currentUser.uid).get();
+            const avatarUrl = userDoc.data()?.avatar;
+            
+            if (avatarUrl) {
+                elements.userAvatar.innerHTML = `<img src="${avatarUrl}" alt="avatar">`;
+            } else {
+                elements.userAvatar.innerHTML = currentUser.username.charAt(0).toUpperCase();
+            }
+        } catch (e) {
+            elements.userAvatar.innerHTML = currentUser.username.charAt(0).toUpperCase();
+        }
     }
 }
 
@@ -586,6 +601,9 @@ function setupEventListeners() {
     elements.editProfileBtn.addEventListener('click', () => {
         elements.editUsername.value = currentUser?.username || '';
         elements.editUsernameError.style.display = 'none';
+        currentAvatarFile = null;
+        initAvatarUpload();
+        loadCurrentAvatarPreview();
         showModal('editProfileModal');
     });
 
@@ -856,7 +874,7 @@ async function loadChats() {
     } catch (e) {}
 }
 
-function displayChats() {
+async function displayChats() {
     if (!elements.chatsList) return;
     
     elements.chatsList.innerHTML = '';
@@ -894,11 +912,21 @@ function displayChats() {
     }
       
     const sortedChats = [...filteredChats].sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
-      
-    sortedChats.forEach(chat => {
+    
+    for (const chat of sortedChats) {
         const div = document.createElement('div');
         div.className = 'chat-item';
         div.onclick = () => showChat(chat.username);
+        
+        let avatarHtml = chat.username.charAt(0).toUpperCase();
+        
+        try {
+            const userDoc = await db.collection('users').doc(chat.userId).get();
+            const avatarUrl = userDoc.data()?.avatar;
+            if (avatarUrl) {
+                avatarHtml = `<img src="${avatarUrl}" alt="avatar">`;
+            }
+        } catch (e) {}
           
         const userStatus = onlineUsers.get(chat.userId);
         const isOnline = userStatus?.is_online === true;
@@ -915,7 +943,7 @@ function displayChats() {
         }
           
         div.innerHTML = `
-            <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
+            <div class="chat-avatar ${isOnline ? 'online' : ''}">${avatarHtml}</div>
             <div class="chat-info">
                 <div class="chat-name">
                     ${escapeHtml(chat.username)}
@@ -928,7 +956,7 @@ function displayChats() {
         `;
           
         elements.chatsList.appendChild(div);
-    });
+    }
 }
 
 function filterChats(searchTerm) {
@@ -1104,6 +1132,64 @@ function updateTitle() {
     document.title = totalUnread ? `(${totalUnread}) SpeedNexus` : 'SpeedNexus';
 }
 
+async function compressImage(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        
+        reader.onload = (e) => {
+            const img = new Image();
+            img.src = e.target.result;
+            
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                let width = img.width;
+                let height = img.height;
+                const maxSize = 300;
+                
+                if (width > height && width > maxSize) {
+                    height *= maxSize / width;
+                    width = maxSize;
+                } else if (height > maxSize) {
+                    width *= maxSize / height;
+                    height = maxSize;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                canvas.toBlob((blob) => {
+                    resolve(blob);
+                }, 'image/jpeg', 0.7);
+            };
+            
+            img.onerror = reject;
+        };
+        
+        reader.onerror = reject;
+    });
+}
+
+async function uploadAvatar(file) {
+    if (!file || !currentUser) return null;
+    
+    const fileName = `avatars/${currentUser.uid}_${Date.now()}.jpg`;
+    const storageRef = storage.ref().child(fileName);
+    
+    try {
+        const compressedFile = await compressImage(file);
+        const snapshot = await storageRef.put(compressedFile);
+        const downloadUrl = await snapshot.ref.getDownloadURL();
+        return downloadUrl;
+    } catch (error) {
+        throw error;
+    }
+}
+
 async function login() {
     const username = elements.loginUsername.value.trim();
     if (!username || username.length < 3) {
@@ -1165,37 +1251,125 @@ async function login() {
     }
 }
 
-async function editProfile() {
-    const newUsername = elements.editUsername.value.trim();
-    if (!newUsername || newUsername.length < 3) {
-        showError(elements.editUsernameError, 'Минимум 3 символа');
-        return;
-    }
-      
-    if (newUsername.length > 15) {
-        showError(elements.editUsernameError, 'Максимум 15 символов');
-        return;
-    }
-      
-    if (newUsername === currentUser.username) {
-        hideModal('editProfileModal');
-        return;
-    }
-
-    showLoading(true);
-    try {
-        const existingUser = await findUserByUsername(newUsername);
-
-        if (existingUser && existingUser.uid !== currentUser.uid) {
-            showError(elements.editUsernameError, 'Имя пользователя уже занято');
+function initAvatarUpload() {
+    const avatarUpload = document.getElementById('avatarUpload');
+    const avatarPreviewImage = document.getElementById('avatarPreviewImage');
+    const avatarPreviewText = document.getElementById('avatarPreviewText');
+    const removeAvatarBtn = document.getElementById('removeAvatarBtn');
+    
+    if (!avatarUpload) return;
+    
+    avatarUpload.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        if (file.size > 5 * 1024 * 1024) {
+            showToast('Файл слишком большой. Максимум 5MB');
+            avatarUpload.value = '';
             return;
         }
+        
+        if (!file.type.startsWith('image/')) {
+            showToast('Пожалуйста, выберите изображение');
+            avatarUpload.value = '';
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            avatarPreviewImage.src = e.target.result;
+            avatarPreviewImage.style.display = 'block';
+            avatarPreviewText.style.display = 'none';
+            removeAvatarBtn.style.display = 'block';
+            currentAvatarFile = file;
+        };
+        reader.readAsDataURL(file);
+    });
+    
+    removeAvatarBtn.addEventListener('click', () => {
+        avatarUpload.value = '';
+        avatarPreviewImage.src = '#';
+        avatarPreviewImage.style.display = 'none';
+        avatarPreviewText.style.display = 'block';
+        removeAvatarBtn.style.display = 'none';
+        currentAvatarFile = null;
+    });
+}
 
-        await db.collection('users').doc(currentUser.uid).update({
-            username: newUsername
-        });
+async function loadCurrentAvatarPreview() {
+    if (!currentUser) return;
+    
+    const avatarPreviewImage = document.getElementById('avatarPreviewImage');
+    const avatarPreviewText = document.getElementById('avatarPreviewText');
+    const removeAvatarBtn = document.getElementById('removeAvatarBtn');
+    
+    try {
+        const userDoc = await db.collection('users').doc(currentUser.uid).get();
+        const avatarUrl = userDoc.data()?.avatar;
+        
+        if (avatarUrl) {
+            avatarPreviewImage.src = avatarUrl;
+            avatarPreviewImage.style.display = 'block';
+            avatarPreviewText.style.display = 'none';
+            removeAvatarBtn.style.display = 'block';
+        } else {
+            avatarPreviewText.textContent = currentUser.username.charAt(0).toUpperCase();
+        }
+    } catch (e) {
+        avatarPreviewText.textContent = currentUser.username.charAt(0).toUpperCase();
+    }
+}
 
+async function editProfile() {
+    const newUsername = elements.editUsername.value.trim();
+    const avatarFile = document.getElementById('avatarUpload').files[0];
+    
+    showLoading(true);
+    try {
+        const updateData = {};
+        
+        if (newUsername && newUsername !== currentUser.username) {
+            if (newUsername.length < 3) {
+                showError(elements.editUsernameError, 'Минимум 3 символа');
+                return;
+            }
+            if (newUsername.length > 15) {
+                showError(elements.editUsernameError, 'Максимум 15 символов');
+                return;
+            }
+            
+            const existingUser = await findUserByUsername(newUsername);
+            if (existingUser && existingUser.uid !== currentUser.uid) {
+                showError(elements.editUsernameError, 'Имя пользователя уже занято');
+                return;
+            }
+            updateData.username = newUsername;
+            currentUser.username = newUsername;
+        }
+        
+        if (avatarFile) {
+            try {
+                const avatarUrl = await uploadAvatar(avatarFile);
+                updateData.avatar = avatarUrl;
+            } catch (error) {
+                showToast('Ошибка при загрузке аватарки');
+                return;
+            }
+        }
+        
+        if (document.getElementById('removeAvatarBtn').style.display === 'block' && !avatarFile) {
+            updateData.avatar = null;
+        }
+        
+        if (Object.keys(updateData).length > 0) {
+            await db.collection('users').doc(currentUser.uid).update(updateData);
+            localStorage.setItem('speednexus_user', JSON.stringify(currentUser));
+            updateUI();
+            displayChats();
+        }
+        
         hideModal('editProfileModal');
+        showToast('Профиль обновлен');
         
     } catch (e) {
         showError(elements.editUsernameError, 'Ошибка при изменении профиля');
@@ -1227,7 +1401,7 @@ async function searchUsers() {
             return;
         }
 
-        users.forEach(user => {
+        for (const user of users) {
             const userElement = document.createElement('div');
             userElement.className = 'user-result';
             userElement.onclick = () => {
@@ -1236,10 +1410,15 @@ async function searchUsers() {
             };
               
             const isOnline = onlineUsers.get(user.uid)?.is_online === true;
+            let avatarHtml = user.username.charAt(0).toUpperCase();
+            
+            if (user.avatar) {
+                avatarHtml = `<img src="${user.avatar}" alt="avatar">`;
+            }
               
             userElement.innerHTML = `
                 <div class="user-result-info">
-                    <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
+                    <div class="user-result-avatar ${isOnline ? 'online' : ''}">${avatarHtml}</div>
                     <div>
                         <div class="user-result-name">${escapeHtml(user.username)}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
@@ -1248,7 +1427,7 @@ async function searchUsers() {
             `;
               
             elements.searchResults.appendChild(userElement);
-        });
+        }
     } catch (e) {
         elements.searchResults.innerHTML = '<div style="color: #ff7d7d; text-align: center;">Ошибка при поиске</div>';
     }
@@ -1321,10 +1500,15 @@ function loadContacts() {
           
         findUserByUsername(contact.username).then(user => {
             const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
+            let avatarHtml = contact.username.charAt(0).toUpperCase();
+            
+            if (user && user.avatar) {
+                avatarHtml = `<img src="${user.avatar}" alt="avatar">`;
+            }
               
             contactElement.innerHTML = `
                 <div class="contact-info">
-                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
+                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${avatarHtml}</div>
                     <div>
                         <div class="contact-name">${escapeHtml(contact.username)}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
