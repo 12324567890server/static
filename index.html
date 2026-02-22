@@ -8,6 +8,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div id="loginScreen" class="login-screen">
@@ -15,9 +16,9 @@
             <div class="login-header">
                 <h1>SpeedNexus</h1>
             </div>
-            <input type="text" id="loginUsername" class="login-input" placeholder="Введите никнейм" maxlength="20">
+            <input type="text" id="loginUsername" class="login-input" placeholder="Введите ваш никнейм" maxlength="20">
             <div id="loginError" class="error-message"></div>
-            <button id="loginButton" class="login-btn">Войти</button>
+            <button id="loginButton" class="login-btn">Продолжить</button>
         </div>
     </div>
 
@@ -25,64 +26,87 @@
         <div class="chats-header">
             <div class="header-content">
                 <span id="chatsTitle" class="chats-title">Чаты</span>
-                <button id="chatsMenuBtn" class="menu-btn">☰</button>
+                <button id="chatsMenuBtn" class="menu-btn">
+                    <span class="icon menu-icon"></span>
+                </button>
             </div>
-            <input type="text" id="searchChats" class="search-input" placeholder="Поиск...">
+            <input type="text" id="searchChats" class="search-input" placeholder="Поиск чатов...">
         </div>
+        
         <div id="chatsList" class="chats-list"></div>
-        <button id="findFriendsCircleBtn" class="find-friends-circle-btn">+</button>
+        
+        <div class="action-buttons">
+            <button id="findFriendsCircleBtn" class="find-friends-circle-btn">
+                <span class="find-friends-icon"></span>
+            </button>
+        </div>
     </div>
 
     <div id="chatScreen" class="chat-screen">
         <div class="chat-header">
             <button id="backToChats" class="back-btn">←</button>
             <div class="chat-header-info">
-                <div id="chatWithUser" class="chat-username"></div>
-                <div id="chatStatus" class="chat-status"></div>
+                <div id="chatWithUser" class="chat-username">-</div>
+                <div id="chatStatus" class="chat-status">без связи</div>
             </div>
         </div>
+        
         <div id="privateMessages" class="private-messages"></div>
+        
         <div class="message-input-container">
-            <input type="text" id="messageInput" class="message-input" placeholder="Сообщение...">
-            <button id="sendMessageBtn" class="send-btn">→</button>
+            <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
+            <button id="sendMessageBtn" class="send-btn">
+                <span class="send-icon"></span>
+            </button>
         </div>
     </div>
 
     <div id="sideMenu" class="side-menu">
         <div class="side-menu-header">
             <div class="user-info">
-                <div id="userAvatar" class="user-avatar"></div>
+                <div id="userAvatar" class="user-avatar">U</div>
                 <div>
-                    <div id="currentUsernameDisplay"></div>
-                    <div id="userStatusDisplay" class="user-status"></div>
+                    <h4 id="currentUsernameDisplay">-</h4>
+                    <div id="userStatusDisplay" class="user-status">не в сети</div>
                 </div>
             </div>
             <button id="closeMenu" class="close-menu-btn">×</button>
         </div>
+        
         <div class="side-menu-content">
-            <button id="editProfileBtn" class="side-menu-btn">✎ Профиль</button>
-            <button id="contactsBtn" class="side-menu-btn">👥 Контакты</button>
-            <button id="logoutBtn" class="side-menu-btn">🚪 Выйти</button>
+            <button id="editProfileBtn" class="side-menu-btn">
+                <span class="icon edit-icon"></span>
+                <span class="btn-text">Изменить профиль</span>
+            </button>
+            <button id="contactsBtn" class="side-menu-btn">
+                <span class="icon contacts-icon"></span>
+                <span class="btn-text">Контакты</span>
+            </button>
+            <button id="logoutBtn" class="side-menu-btn">
+                <span class="icon logout-icon"></span>
+                <span class="btn-text">Выйти</span>
+            </button>
         </div>
     </div>
 
     <div id="editProfileModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Редактировать</h3>
-                <button class="close-modal">×</button>
+                <h3>Изменить профиль</h3>
+                <button class="close-modal" data-close="editProfileModal">×</button>
             </div>
             <div class="modal-body">
                 <div class="avatar-upload-section">
                     <div class="current-avatar-preview" id="avatarPreview">
-                        <span id="avatarPreviewText"></span>
+                        <span id="avatarPreviewText">A</span>
                         <img id="avatarPreviewImage" src="#" style="display:none;">
                     </div>
-                    <input type="file" id="avatarUpload" accept="image/*" style="display:none;">
-                    <button id="selectAvatarBtn" class="modal-btn">Выбрать фото</button>
-                    <button id="removeAvatarBtn" class="modal-btn" style="display:none;">Удалить</button>
+                    <input type="file" id="avatarUpload" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
+                    <button id="selectAvatarBtn" class="modal-btn" style="margin-bottom:5px;">Выбрать фото</button>
+                    <button id="removeAvatarBtn" class="modal-btn" style="display:none; margin-bottom:5px;">Удалить</button>
+                    <div style="font-size:12px; color:#b19cd9; margin-top:5px;">Максимум 2MB</div>
                 </div>
-                <input type="text" id="editUsername" class="modal-input" placeholder="Новый ник">
+                <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
                 <div id="editUsernameError" class="error-message"></div>
                 <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
             </div>
@@ -93,10 +117,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Поиск</h3>
-                <button class="close-modal">×</button>
+                <button class="close-modal" data-close="findFriendsModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя">
+                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя" maxlength="20">
                 <button id="searchBtn" class="modal-btn">Найти</button>
                 <div id="searchResults" class="search-results"></div>
             </div>
@@ -107,7 +131,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Контакты</h3>
-                <button class="close-modal">×</button>
+                <button class="close-modal" data-close="contactsModal">×</button>
             </div>
             <div class="modal-body">
                 <div id="contactsList" class="contacts-list"></div>
