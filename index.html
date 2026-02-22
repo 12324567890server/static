@@ -53,11 +53,16 @@
         <div id="privateMessages" class="private-messages"></div>
         
         <div class="message-input-container">
+            <button id="emojiBtn" class="emoji-btn">
+                <div class="emoji-img"></div>
+            </button>
             <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
             <button id="sendMessageBtn" class="send-btn">
                 <span class="send-icon"></span>
             </button>
         </div>
+
+        <div id="emojiPanel" class="emoji-panel"></div>
     </div>
 
     <div id="sideMenu" class="side-menu">
@@ -133,5 +138,6 @@
     </div>
 
     <script src="chat.js"></script>
+    <script src="emoji.js"></script>
 </body>
 </html>
