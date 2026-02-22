@@ -3,48 +3,20 @@
     padding: 0;
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
 }
 
 html, body {
+    overscroll-behavior-y: none;
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;
-    overscroll-behavior: none;
-    -webkit-overflow-scrolling: none;
-    touch-action: none;
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     background: #2d1b69;
     color: #ffffff;
-}
-
-input, textarea {
-    -webkit-user-select: auto;
-    user-select: auto;
-}
-
-.chats-list, 
-.private-messages, 
-.emoji-panel, 
-.modal-body,
-.search-results,
-.contacts-list {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
-    overscroll-behavior: contain;
-    height: 100%;
-    max-height: 100%;
 }
 
 .login-screen {
@@ -182,7 +154,9 @@ input, textarea {
 
 .chats-list {
     flex: 1;
+    overflow-y: auto;
     padding: 12px 0;
+    -webkit-overflow-scrolling: touch;
     background: rgba(45, 27, 105, 0.5);
 }
 
@@ -461,11 +435,13 @@ input, textarea {
 
 .private-messages {
     flex: 1;
+    overflow-y: auto;
     padding: 18px;
     background: linear-gradient(180deg, #2d1b69 0%, #3d237d 100%);
     display: flex;
     flex-direction: column;
     gap: 10px;
+    -webkit-overflow-scrolling: touch;
 }
 
 .private-messages::-webkit-scrollbar {
@@ -535,13 +511,13 @@ input, textarea {
 
 .message-input-container {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 15px;
+    gap: 10px;
+    padding: 12px 20px;
     background: rgba(45, 27, 105, 0.8);
     border-top: 1px solid rgba(177, 156, 217, 0.3);
     flex-shrink: 0;
     position: relative;
+    align-items: center;
 }
 
 .message-input {
@@ -561,8 +537,8 @@ input, textarea {
 }
 
 .send-btn {
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
     border: 2px solid rgba(255, 255, 255, 0.2);
@@ -571,6 +547,9 @@ input, textarea {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 0;
+    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
+    transition: transform 0.2s;
     flex-shrink: 0;
 }
 
@@ -586,80 +565,6 @@ input, textarea {
     background-repeat: no-repeat;
     background-position: center;
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><polygon points="2,3 22,12 2,21 8,12 2,3"/></svg>');
-}
-
-.emoji-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    margin: 0;
-    padding: 0;
-}
-
-.emoji-img {
-    width: 24px;
-    height: 24px;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10"/><circle cx="8" cy="9" r="1.5" fill="white"/><circle cx="16" cy="9" r="1.5" fill="white"/><path d="M12 17c2.5 0 3.5-2 3.5-2h-7s1 2 3.5 2z"/></svg>');
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-
-.emoji-panel {
-    position: absolute;
-    bottom: 70px;
-    left: 10px;
-    right: 10px;
-    background: rgba(45, 27, 105, 0.98);
-    backdrop-filter: blur(10px);
-    border-radius: 20px;
-    padding: 12px;
-    display: none;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    z-index: 1000;
-    border: 1px solid rgba(177, 156, 217, 0.3);
-    max-height: 300px;
-}
-
-.emoji-panel::-webkit-scrollbar {
-    width: 4px;
-}
-
-.emoji-panel::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-}
-
-.emoji-panel::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-    border-radius: 10px;
-}
-
-.emoji-panel.show {
-    display: grid;
-}
-
-.emoji-item {
-    background: rgba(74, 44, 140, 0.5);
-    border: 1px solid rgba(177, 156, 217, 0.3);
-    border-radius: 12px;
-    padding: 8px 4px;
-    font-size: 24px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s;
-}
-
-.emoji-item:active {
-    transform: scale(0.9);
-    background: rgba(138, 43, 226, 0.5);
 }
 
 .icon {
@@ -835,7 +740,9 @@ input, textarea {
 
 .modal-body {
     padding: 18px;
+    overflow-y: auto;
     max-height: calc(90vh - 65px);
+    -webkit-overflow-scrolling: touch;
 }
 
 .modal-body::-webkit-scrollbar {
@@ -1066,25 +973,8 @@ input, textarea {
         max-width: 85%;
     }
     
-    .emoji-panel {
-        grid-template-columns: repeat(4, 1fr);
-        bottom: 65px;
-        left: 5px;
-        right: 5px;
-    }
-    
-    .emoji-btn {
-        width: 40px;
-        height: 40px;
-    }
-    
     .send-btn {
-        width: 40px;
-        height: 40px;
-    }
-    
-    .message-input {
-        padding: 10px 12px;
-        font-size: 14px;
+        width: 52px;
+        height: 52px;
     }
 }
