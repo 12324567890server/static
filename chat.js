@@ -508,22 +508,26 @@ function setupMessageListener(userId) {
         .where('chat_id', '==', [currentUser.uid, userId].sort().join('_'))
         .orderBy('created_at')
         .onSnapshot(snapshot => {
+            const existingMessages = new Set();
+            document.querySelectorAll('[data-message-id]').forEach(el => {
+                existingMessages.add(el.dataset.messageId);
+            });
+
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
                     const msg = change.doc.data();
                     const msgId = change.doc.id;
-                      
-                    if (!document.querySelector(`[data-message-id="${msgId}"]`)) {
+                    
+                    if (!existingMessages.has(msgId) && !document.querySelector(`[data-message-id="${msgId}"]`)) {
                         if (msg.type === 'media') {
                             displayMediaMessage(msg, msg.sender === currentUser.uid, msgId);
                         } else {
                             const isMyMessage = (msg.sender === currentUser.uid);
                             displayMessage(msg, isMyMessage, msgId);
                         }
-                          
+                        
                         if (isChatActive && currentChatUserId === userId) {
                             scrollToBottom();
-                              
                             if (msg.receiver === currentUser.uid && !msg.read) {
                                 markMessagesAsRead(userId);
                             }
@@ -586,7 +590,6 @@ async function sendMediaMessage(file) {
             };
             
             mediaCache.set(messageId, mediaObj);
-            
             await saveMediaToIndexedDB(mediaObj);
             
             const messageRef = await db.collection('messages').add({
@@ -600,13 +603,6 @@ async function sendMediaMessage(file) {
                 read: false,
                 created_at: new Date().toISOString()
             });
-            
-            displayMediaMessage({
-                messageId: messageId,
-                mediaType: mediaObj.type,
-                sender: currentUser.uid,
-                created_at: new Date().toISOString()
-            }, true, messageRef.id);
             
             if (navigator.onLine) {
                 setTimeout(() => {
@@ -651,8 +647,10 @@ function getMediaFromIndexedDB(messageId) {
                 const media = getRequest.result;
                 if (media) {
                     mediaCache.set(messageId, media);
+                    resolve(media);
+                } else {
+                    resolve(null);
                 }
-                resolve(media);
             };
             getRequest.onerror = () => resolve(null);
         };
@@ -694,6 +692,26 @@ function checkPendingSync() {
 
 setInterval(checkPendingSync, 5000);
 
+async function requestMediaFromSender(messageId, senderId) {
+    setTimeout(async () => {
+        const media = await getMediaFromIndexedDB(messageId);
+        if (media) {
+            const msgDiv = document.querySelector(`[data-message-id="${messageId}"]`);
+            if (msgDiv) {
+                const snapshot = await db.collection('messages').where('messageId', '==', messageId).get();
+                if (!snapshot.empty) {
+                    const msg = snapshot.docs[0].data();
+                    if (msg.mediaType === 'image') {
+                        msgDiv.querySelector('div').outerHTML = `<img src="${media.data}" class="media-content" style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;" onclick="window.open('${media.data}')">`;
+                    } else {
+                        msgDiv.querySelector('div').outerHTML = `<video src="${media.data}" controls style="max-width: 200px; max-height: 200px; border-radius: 8px;"></video>`;
+                    }
+                }
+            }
+        }
+    }, 2000);
+}
+
 async function displayMediaMessage(msg, isMyMessage, msgId) {
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'me' : 'other'} media-message`;
@@ -711,21 +729,11 @@ async function displayMediaMessage(msg, isMyMessage, msgId) {
             contentHtml = `<video src="${mediaObj.data}" controls style="max-width: 200px; max-height: 200px; border-radius: 8px;"></video>`;
         }
     } else {
-        contentHtml = `<div style="width: 200px; height: 200px; background: rgba(74,44,140,0.5); border-radius: 8px; display: flex; align-items: center; justify-content: center;"><div class="spinner-small"></div></div>`;
+        contentHtml = `<div style="width: 200px; height: 200px; background: rgba(74,44,140,0.5); border-radius: 8px; display: flex; align-items: center; justify-content: center;"><div class="spinner-small"></div><div style="margin-left: 10px;">Загрузка...</div></div>`;
         
-        setTimeout(async () => {
-            const media = await getMediaFromIndexedDB(msg.messageId);
-            if (media) {
-                const msgDiv = document.querySelector(`[data-message-id="${msgId}"]`);
-                if (msgDiv) {
-                    if (msg.mediaType === 'image') {
-                        msgDiv.querySelector('div').outerHTML = `<img src="${media.data}" class="media-content" style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;" onclick="window.open('${media.data}')">`;
-                    } else {
-                        msgDiv.querySelector('div').outerHTML = `<video src="${media.data}" controls style="max-width: 200px; max-height: 200px; border-radius: 8px;"></video>`;
-                    }
-                }
-            }
-        }, 1000);
+        if (navigator.onLine && !isMyMessage) {
+            requestMediaFromSender(msg.messageId, msg.sender);
+        }
     }
     
     messageElement.innerHTML = `
@@ -1161,15 +1169,21 @@ async function loadMessages(userId) {
             .get();
 
         elements.privateMessages.innerHTML = '';
+        const processedIds = new Set();
         
         for (const doc of snapshot.docs) {
             const msg = doc.data();
-            const isMyMessage = (msg.sender === currentUser.uid);
+            const msgId = doc.id;
             
-            if (msg.type === 'media') {
-                await displayMediaMessage(msg, isMyMessage, doc.id);
-            } else {
-                displayMessage(msg, isMyMessage, doc.id);
+            if (!processedIds.has(msgId)) {
+                processedIds.add(msgId);
+                const isMyMessage = (msg.sender === currentUser.uid);
+                
+                if (msg.type === 'media') {
+                    await displayMediaMessage(msg, isMyMessage, msgId);
+                } else {
+                    displayMessage(msg, isMyMessage, msgId);
+                }
             }
         }
           
