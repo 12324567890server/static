@@ -3,10 +3,11 @@
     padding: 0;
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
 }
 
 html, body {
-    overscroll-behavior-y: none;
+    overscroll-behavior: none;
     position: fixed;
     width: 100%;
     height: 100%;
@@ -158,6 +159,7 @@ body {
     padding: 12px 0;
     -webkit-overflow-scrolling: touch;
     background: rgba(45, 27, 105, 0.5);
+    overscroll-behavior: contain;
 }
 
 .chats-list::-webkit-scrollbar {
@@ -442,6 +444,7 @@ body {
     flex-direction: column;
     gap: 10px;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .private-messages::-webkit-scrollbar {
@@ -604,6 +607,7 @@ body {
     max-height: 300px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .emoji-panel::-webkit-scrollbar {
@@ -816,6 +820,7 @@ body {
     overflow-y: auto;
     max-height: calc(90vh - 65px);
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .modal-body::-webkit-scrollbar {
@@ -868,6 +873,7 @@ body {
     margin-top: 18px;
     max-height: 300px;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .user-result {
@@ -927,6 +933,7 @@ body {
 .contacts-list {
     max-height: 280px;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .contact-item {
