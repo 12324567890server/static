@@ -734,10 +734,12 @@ function setupRealtimeSubscriptions() {
         snapshot.docChanges().forEach(change => {
             if (change.type === 'modified' || change.type === 'added') {
                 const userData = change.doc.data();
-                onlineUsers.set(change.doc.id, {
-                    username: userData.username,
-                    is_online: userData.is_online === true
-                });
+                if (change.doc.id !== currentUser?.uid) {
+                    onlineUsers.set(change.doc.id, {
+                        username: userData.username,
+                        is_online: userData.is_online === true
+                    });
+                }
                 
                 if (currentChatUserId === change.doc.id) {
                     currentChatWith = userData.username;
