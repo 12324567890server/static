@@ -87,6 +87,7 @@ let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
 let pendingTransfers = new Map();
+let mediaMessageTimers = {};
 
 function initMediaDB() {
     const request = indexedDB.open('SpeedNexusMedia', 3);
@@ -134,6 +135,24 @@ function getMediaFromIndexedDB(mediaId) {
     });
 }
 
+function getAllMediaFromIndexedDB(chatId) {
+    return new Promise((resolve) => {
+        const request = indexedDB.open('SpeedNexusMedia', 3);
+        request.onsuccess = (event) => {
+            const db = event.target.result;
+            const transaction = db.transaction(['media'], 'readonly');
+            const store = transaction.objectStore('media');
+            const index = store.index('by_chat');
+            const getRequest = index.getAll(chatId);
+            getRequest.onsuccess = () => {
+                resolve(getRequest.result);
+            };
+            getRequest.onerror = () => resolve([]);
+        };
+        request.onerror = () => resolve([]);
+    });
+}
+
 function showToast(text) {
     const toast = document.createElement('div');
     toast.style.cssText = `
@@ -164,6 +183,7 @@ function init() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
     setInterval(cleanupOldConnections, 3000);
+    setupMediaTransferListeners();
 }
 
 async function cleanupOldConnections() {
@@ -402,7 +422,7 @@ async function sendMediaMessage(file) {
             receiver: currentChatUserId
         });
         
-        await db.collection('messages').add({
+        const messageRef = await db.collection('messages').add({
             chat_id: chatId,
             participants: [currentUser.uid, currentChatUserId],
             sender: currentUser.uid,
@@ -725,12 +745,12 @@ async function showChat(username) {
           
         await loadMessages(user.uid);
         setupTypingDetection();
-          
+        
         setTimeout(() => {
             if (isChatActive && isPageVisible) {
                 markMessagesAsRead(user.uid);
             }
-        }, 1500);
+        }, 1000);
           
         updateChatStatus();
         scrollToBottom();
@@ -765,25 +785,35 @@ function setupMessageListener(userId) {
                 const msg = change.doc.data();
                 const msgId = change.doc.id;
                 
-                if (change.type === 'added' && !processedIds.has(msgId) && !document.querySelector(`[data-message-id="${msgId}"]`)) {
-                    processedIds.add(msgId);
-                    
-                    const isMyMessage = (msg.sender === currentUser.uid);
-                    
-                    if (msg.type === 'media') {
-                        displayMediaMessage(msg, isMyMessage, msgId);
-                    } else {
-                        displayMessage(msg, isMyMessage, msgId);
+                if (change.type === 'added') {
+                    if (!processedIds.has(msgId) && !document.querySelector(`[data-message-id="${msgId}"]`)) {
+                        processedIds.add(msgId);
+                        
+                        const isMyMessage = (msg.sender === currentUser.uid);
+                        
+                        if (msg.type === 'media') {
+                            displayMediaMessage(msg, isMyMessage, msgId);
+                        } else {
+                            displayMessage(msg, isMyMessage, msgId);
+                        }
+                        
+                        if (isChatActive && currentChatUserId === userId && msg.receiver === currentUser.uid && !msg.read) {
+                            setTimeout(() => {
+                                change.doc.ref.update({ 
+                                    read: true,
+                                    read_at: new Date().toISOString()
+                                }).then(() => {
+                                    if (unreadCounts[userId]) {
+                                        delete unreadCounts[userId];
+                                        updateTitle();
+                                        displayChats();
+                                    }
+                                });
+                            }, 500);
+                        }
+                        
+                        scrollToBottom();
                     }
-                    
-                    if (isChatActive && currentChatUserId === userId && msg.receiver === currentUser.uid && !msg.read) {
-                        change.doc.ref.update({ 
-                            read: true,
-                            read_at: new Date().toISOString()
-                        });
-                    }
-                    
-                    scrollToBottom();
                 } else if (change.type === 'modified') {
                     const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
                     if (messageElement && msg.read) {
@@ -829,7 +859,7 @@ async function displayMediaMessage(msg, isMyMessage, msgId) {
     
     const media = await getMediaFromIndexedDB(msg.mediaId);
     const timeString = formatMessageTime(msg.created_at);
-    const statusSymbol = isMyMessage ? (msg.read ? ' ✓✓' : ' ✓') : '';
+    const statusSymbol = isMyMessage ? (msg.read ? ' ✓✓' : (msg.delivered ? ' ✓' : '')) : '';
     
     if (media) {
         if (msg.mediaType === 'image') {
