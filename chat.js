@@ -430,6 +430,7 @@ async function sendMediaMessage(file) {
             mediaId: mediaId,
             mediaType: file.type.startsWith('image/') ? 'image' : 'video',
             delivered: false,
+            read: false,
             created_at: new Date().toISOString()
         });
         
@@ -503,8 +504,10 @@ function appendMediaMessageToChat(mediaId, isMyMessage, msgId, mediaData) {
 }
 
 function setupMediaTransferListeners() {
+    if (!currentUser) return;
+    
     db.collection('media_transfers')
-        .where('receiver', '==', currentUser?.uid || '')
+        .where('receiver', '==', currentUser.uid)
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
@@ -788,12 +791,13 @@ async function showChat(username) {
           
         await loadMessages(user.uid);
         setupTypingDetection();
-          
+        
+        // Отмечаем сообщения как прочитанные при открытии чата
         setTimeout(() => {
             if (isChatActive && isPageVisible) {
                 markMessagesAsRead(user.uid);
             }
-        }, 1500);
+        }, 500);
           
         updateChatStatus();
         scrollToBottom();
@@ -814,40 +818,56 @@ function setupMessageListener(userId) {
         messageListener();
     }
 
+    // Set для отслеживания уже обработанных ID сообщений
+    const processedMessageIds = new Set();
+    
+    // Добавляем уже существующие сообщения в Set
+    document.querySelectorAll('[data-message-id]').forEach(el => {
+        processedMessageIds.add(el.dataset.messageId);
+    });
+
     messageListener = db.collection('messages')
         .where('chat_id', '==', [currentUser.uid, userId].sort().join('_'))
         .orderBy('created_at')
         .onSnapshot(snapshot => {
-            const existingMessages = new Set();
-            document.querySelectorAll('[data-message-id]').forEach(el => {
-                existingMessages.add(el.dataset.messageId);
-            });
-
             snapshot.docChanges().forEach(change => {
-                if (change.type === 'added') {
-                    const msg = change.doc.data();
-                    const msgId = change.doc.id;
+                const msg = change.doc.data();
+                const msgId = change.doc.id;
+                
+                // Обрабатываем только добавленные сообщения, которых еще нет в DOM
+                if (change.type === 'added' && !processedMessageIds.has(msgId)) {
+                    // Добавляем ID в Set
+                    processedMessageIds.add(msgId);
                     
-                    if (!existingMessages.has(msgId) && !document.querySelector(`[data-message-id="${msgId}"]`)) {
-                        if (msg.type === 'media') {
-                            displayMediaMessage(msg, msg.sender === currentUser.uid, msgId);
-                        } else {
-                            const isMyMessage = (msg.sender === currentUser.uid);
-                            displayMessage(msg, isMyMessage, msgId);
-                        }
-                        
-                        if (isChatActive && currentChatUserId === userId) {
-                            scrollToBottom();
-                            if (msg.receiver === currentUser.uid && !msg.read) {
-                                markMessagesAsRead(userId);
-                            }
-                        }
+                    const isMyMessage = (msg.sender === currentUser.uid);
+                    
+                    if (msg.type === 'media') {
+                        displayMediaMessage(msg, isMyMessage, msgId);
+                    } else {
+                        displayMessage(msg, isMyMessage, msgId);
                     }
-                } else if (change.type === 'modified') {
-                    const msg = change.doc.data();
-                    const msgId = change.doc.id;
-                    const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
                     
+                    // Отмечаем как прочитанное, если сообщение не мое и чат активен
+                    if (isChatActive && currentChatUserId === userId && !isMyMessage && !msg.read) {
+                        change.doc.ref.update({ 
+                            read: true,
+                            read_at: new Date().toISOString()
+                        }).then(() => {
+                            // Обновляем UI
+                            if (unreadCounts[userId]) {
+                                delete unreadCounts[userId];
+                                updateTitle();
+                                displayChats();
+                            }
+                        });
+                    }
+                    
+                    scrollToBottom();
+                }
+                
+                // Обновляем статус прочтения при изменении
+                if (change.type === 'modified') {
+                    const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
                     if (messageElement && msg.read) {
                         const timeElement = messageElement.querySelector('.time');
                         if (timeElement && messageElement.classList.contains('me')) {
@@ -880,6 +900,11 @@ function openMediaPicker() {
 }
 
 async function displayMediaMessage(msg, isMyMessage, msgId) {
+    // Проверяем, не существует ли уже такое сообщение
+    if (document.querySelector(`[data-message-id="${msgId}"]`)) {
+        return;
+    }
+    
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'me' : 'other'} media-message`;
     messageElement.dataset.messageId = msgId;
@@ -887,7 +912,7 @@ async function displayMediaMessage(msg, isMyMessage, msgId) {
     
     const media = await getMediaFromIndexedDB(msg.mediaId);
     const timeString = formatMessageTime(msg.created_at);
-    const statusSymbol = isMyMessage ? (msg.delivered ? ' ✓✓' : ' ✓') : '';
+    const statusSymbol = isMyMessage ? (msg.read ? ' ✓✓' : (msg.delivered ? ' ✓' : '')) : '';
     
     if (media) {
         if (msg.mediaType === 'image') {
@@ -948,8 +973,10 @@ async function requestMediaFromSender(mediaId, senderId) {
 }
 
 function setupMediaRequestListener() {
+    if (!currentUser) return;
+    
     db.collection('media_requests')
-        .where('sender', '==', currentUser?.uid || '')
+        .where('sender', '==', currentUser.uid)
         .where('status', '==', 'pending')
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(async change => {
@@ -1430,6 +1457,11 @@ async function loadMessages(userId) {
 }
 
 function displayMessage(msg, isMyMessage, msgId) {
+    // Проверяем, не существует ли уже такое сообщение
+    if (document.querySelector(`[data-message-id="${msgId}"]`)) {
+        return;
+    }
+    
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
     messageElement.dataset.messageId = msgId;
@@ -1569,6 +1601,19 @@ async function markMessagesAsRead(userId) {
                 updateTitle();
                 displayChats();
             }
+            
+            // Обновляем статус галочек в UI
+            snapshot.forEach(doc => {
+                const msgId = doc.id;
+                const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
+                if (messageElement) {
+                    const timeElement = messageElement.querySelector('.time');
+                    if (timeElement && messageElement.classList.contains('me')) {
+                        let timeText = timeElement.textContent.replace('✓', '').replace('✓✓', '').trim();
+                        timeElement.textContent = timeText + ' ✓✓';
+                    }
+                }
+            });
         }
     } catch (e) {}
 }
