@@ -134,24 +134,6 @@ function getMediaFromIndexedDB(mediaId) {
     });
 }
 
-function getAllMediaFromIndexedDB(chatId) {
-    return new Promise((resolve) => {
-        const request = indexedDB.open('SpeedNexusMedia', 3);
-        request.onsuccess = (event) => {
-            const db = event.target.result;
-            const transaction = db.transaction(['media'], 'readonly');
-            const store = transaction.objectStore('media');
-            const index = store.index('by_chat');
-            const getRequest = index.getAll(chatId);
-            getRequest.onsuccess = () => {
-                resolve(getRequest.result);
-            };
-            getRequest.onerror = () => resolve([]);
-        };
-        request.onerror = () => resolve([]);
-    });
-}
-
 function showToast(text) {
     const toast = document.createElement('div');
     toast.style.cssText = `
@@ -182,7 +164,6 @@ function init() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
     setInterval(cleanupOldConnections, 3000);
-    setupMediaTransferListeners();
 }
 
 async function cleanupOldConnections() {
@@ -421,7 +402,7 @@ async function sendMediaMessage(file) {
             receiver: currentChatUserId
         });
         
-        const messageRef = await db.collection('messages').add({
+        await db.collection('messages').add({
             chat_id: chatId,
             participants: [currentUser.uid, currentChatUserId],
             sender: currentUser.uid,
@@ -450,7 +431,6 @@ async function sendMediaMessage(file) {
             } catch (e) {}
         }, 60000);
         
-        appendMediaMessageToChat(mediaId, true, messageRef.id, mediaData);
         showLoading(false);
         
     } catch (error) {
@@ -459,55 +439,9 @@ async function sendMediaMessage(file) {
     }
 }
 
-function appendMediaMessageToChat(mediaId, isMyMessage, msgId, mediaData) {
-    const messageElement = document.createElement('div');
-    messageElement.className = `message ${isMyMessage ? 'me' : 'other'} media-message`;
-    messageElement.dataset.messageId = msgId;
-    messageElement.dataset.mediaId = mediaId;
-    
-    const timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    
-    if (mediaData) {
-        if (mediaData.includes('image')) {
-            messageElement.innerHTML = `
-                <div class="message-content">
-                    <img src="${mediaData}" class="media-content" 
-                         style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;"
-                         onclick="window.open('${mediaData}')">
-                    <div class="time">${timeString}</div>
-                </div>
-            `;
-        } else {
-            messageElement.innerHTML = `
-                <div class="message-content">
-                    <video src="${mediaData}" controls 
-                           style="max-width: 200px; max-height: 200px; border-radius: 8px;"></video>
-                    <div class="time">${timeString}</div>
-                </div>
-            `;
-        }
-    } else {
-        messageElement.innerHTML = `
-            <div class="message-content">
-                <div style="width: 200px; height: 200px; background: rgba(74,44,140,0.5); 
-                            border-radius: 8px; display: flex; align-items: center; 
-                            justify-content: center;">
-                    <div class="spinner-small"></div>
-                </div>
-                <div class="time">${timeString}</div>
-            </div>
-        `;
-    }
-    
-    elements.privateMessages.appendChild(messageElement);
-    scrollToBottom();
-}
-
 function setupMediaTransferListeners() {
-    if (!currentUser) return;
-    
     db.collection('media_transfers')
-        .where('receiver', '==', currentUser.uid)
+        .where('receiver', '==', currentUser?.uid || '')
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
@@ -791,13 +725,12 @@ async function showChat(username) {
           
         await loadMessages(user.uid);
         setupTypingDetection();
-        
-        // Отмечаем сообщения как прочитанные при открытии чата
+          
         setTimeout(() => {
             if (isChatActive && isPageVisible) {
                 markMessagesAsRead(user.uid);
             }
-        }, 500);
+        }, 1500);
           
         updateChatStatus();
         scrollToBottom();
@@ -818,12 +751,10 @@ function setupMessageListener(userId) {
         messageListener();
     }
 
-    // Set для отслеживания уже обработанных ID сообщений
-    const processedMessageIds = new Set();
+    const processedIds = new Set();
     
-    // Добавляем уже существующие сообщения в Set
     document.querySelectorAll('[data-message-id]').forEach(el => {
-        processedMessageIds.add(el.dataset.messageId);
+        processedIds.add(el.dataset.messageId);
     });
 
     messageListener = db.collection('messages')
@@ -834,10 +765,8 @@ function setupMessageListener(userId) {
                 const msg = change.doc.data();
                 const msgId = change.doc.id;
                 
-                // Обрабатываем только добавленные сообщения, которых еще нет в DOM
-                if (change.type === 'added' && !processedMessageIds.has(msgId)) {
-                    // Добавляем ID в Set
-                    processedMessageIds.add(msgId);
+                if (change.type === 'added' && !processedIds.has(msgId) && !document.querySelector(`[data-message-id="${msgId}"]`)) {
+                    processedIds.add(msgId);
                     
                     const isMyMessage = (msg.sender === currentUser.uid);
                     
@@ -847,26 +776,15 @@ function setupMessageListener(userId) {
                         displayMessage(msg, isMyMessage, msgId);
                     }
                     
-                    // Отмечаем как прочитанное, если сообщение не мое и чат активен
-                    if (isChatActive && currentChatUserId === userId && !isMyMessage && !msg.read) {
+                    if (isChatActive && currentChatUserId === userId && msg.receiver === currentUser.uid && !msg.read) {
                         change.doc.ref.update({ 
                             read: true,
                             read_at: new Date().toISOString()
-                        }).then(() => {
-                            // Обновляем UI
-                            if (unreadCounts[userId]) {
-                                delete unreadCounts[userId];
-                                updateTitle();
-                                displayChats();
-                            }
                         });
                     }
                     
                     scrollToBottom();
-                }
-                
-                // Обновляем статус прочтения при изменении
-                if (change.type === 'modified') {
+                } else if (change.type === 'modified') {
                     const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
                     if (messageElement && msg.read) {
                         const timeElement = messageElement.querySelector('.time');
@@ -900,7 +818,6 @@ function openMediaPicker() {
 }
 
 async function displayMediaMessage(msg, isMyMessage, msgId) {
-    // Проверяем, не существует ли уже такое сообщение
     if (document.querySelector(`[data-message-id="${msgId}"]`)) {
         return;
     }
@@ -912,7 +829,7 @@ async function displayMediaMessage(msg, isMyMessage, msgId) {
     
     const media = await getMediaFromIndexedDB(msg.mediaId);
     const timeString = formatMessageTime(msg.created_at);
-    const statusSymbol = isMyMessage ? (msg.read ? ' ✓✓' : (msg.delivered ? ' ✓' : '')) : '';
+    const statusSymbol = isMyMessage ? (msg.read ? ' ✓✓' : ' ✓') : '';
     
     if (media) {
         if (msg.mediaType === 'image') {
@@ -973,10 +890,8 @@ async function requestMediaFromSender(mediaId, senderId) {
 }
 
 function setupMediaRequestListener() {
-    if (!currentUser) return;
-    
     db.collection('media_requests')
-        .where('sender', '==', currentUser.uid)
+        .where('sender', '==', currentUser?.uid || '')
         .where('status', '==', 'pending')
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(async change => {
@@ -1457,7 +1372,6 @@ async function loadMessages(userId) {
 }
 
 function displayMessage(msg, isMyMessage, msgId) {
-    // Проверяем, не существует ли уже такое сообщение
     if (document.querySelector(`[data-message-id="${msgId}"]`)) {
         return;
     }
@@ -1601,19 +1515,6 @@ async function markMessagesAsRead(userId) {
                 updateTitle();
                 displayChats();
             }
-            
-            // Обновляем статус галочек в UI
-            snapshot.forEach(doc => {
-                const msgId = doc.id;
-                const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
-                if (messageElement) {
-                    const timeElement = messageElement.querySelector('.time');
-                    if (timeElement && messageElement.classList.contains('me')) {
-                        let timeText = timeElement.textContent.replace('✓', '').replace('✓✓', '').trim();
-                        timeElement.textContent = timeText + ' ✓✓';
-                    }
-                }
-            });
         }
     } catch (e) {}
 }
