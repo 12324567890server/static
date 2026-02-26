@@ -15,8 +15,8 @@ html, body {
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #0a0c0f;
-    color: #e8edf2;
+    background: #1a0b2e;
+    color: #f0eaff;
 }
 
 .login-screen {
@@ -26,13 +26,13 @@ body {
     justify-content: center;
     height: 100vh;
     padding: 20px;
-    background: #0a0c0f;
+    background: #1a0b2e;
     position: relative;
     overflow: hidden;
 }
 
 .login-container {
-    background: #14171c;
+    background: #2d1b4a;
     border-radius: 28px;
     padding: 36px 28px;
     width: 100%;
@@ -42,7 +42,7 @@ body {
 
 .login-header h1 {
     font-size: 32px;
-    color: #e8edf2;
+    color: #d4bfff;
     font-weight: 600;
     text-align: center;
     margin-bottom: 32px;
@@ -54,8 +54,8 @@ body {
     padding: 16px 18px;
     border-radius: 16px;
     border: none;
-    background: #1e2228;
-    color: #e8edf2;
+    background: #3f2a5c;
+    color: #f0eaff;
     font-size: 16px;
     margin-bottom: 16px;
     outline: none;
@@ -63,7 +63,7 @@ body {
 }
 
 .login-input:focus {
-    background: #252a32;
+    background: #4f3670;
 }
 
 .login-btn {
@@ -71,7 +71,7 @@ body {
     padding: 16px;
     border-radius: 16px;
     border: none;
-    background: #2b80ff;
+    background: #7c4dff;
     color: white;
     font-size: 16px;
     font-weight: 500;
@@ -80,7 +80,7 @@ body {
 }
 
 .login-btn:active {
-    background: #1a5bbf;
+    background: #5f3dc4;
 }
 
 .error-message {
@@ -96,13 +96,13 @@ body {
     display: none;
     flex-direction: column;
     height: 100vh;
-    background: #0a0c0f;
+    background: #1a0b2e;
     position: relative;
     overflow: hidden;
 }
 
 .chats-header {
-    background: #14171c;
+    background: #2d1b4a;
     padding: 16px 20px;
     flex-shrink: 0;
 }
@@ -116,14 +116,14 @@ body {
 .chats-title {
     font-size: 22px;
     font-weight: 600;
-    color: #e8edf2;
+    color: #d4bfff;
     letter-spacing: -0.3px;
 }
 
 .menu-btn {
     background: none;
     border: none;
-    color: #8e9aaf;
+    color: #b39ddb;
     font-size: 24px;
     cursor: pointer;
     padding: 8px;
@@ -139,15 +139,15 @@ body {
     padding: 14px 18px;
     border-radius: 20px;
     border: none;
-    background: #1e2228;
-    color: #e8edf2;
+    background: #3f2a5c;
+    color: #f0eaff;
     font-size: 15px;
     margin-top: 12px;
     outline: none;
 }
 
 .search-input::placeholder {
-    color: #5f6b7a;
+    color: #a58bd1;
 }
 
 .chats-list {
@@ -155,7 +155,7 @@ body {
     overflow-y: auto;
     padding: 12px 0;
     -webkit-overflow-scrolling: touch;
-    background: #0a0c0f;
+    background: #1a0b2e;
 }
 
 .chats-list::-webkit-scrollbar {
@@ -163,11 +163,11 @@ body {
 }
 
 .chats-list::-webkit-scrollbar-track {
-    background: #14171c;
+    background: #2d1b4a;
 }
 
 .chats-list::-webkit-scrollbar-thumb {
-    background: #2b80ff;
+    background: #7c4dff;
     border-radius: 4px;
 }
 
@@ -177,19 +177,19 @@ body {
     padding: 16px 20px;
     cursor: pointer;
     position: relative;
-    background: #14171c;
+    background: #2d1b4a;
     margin: 2px 12px;
     border-radius: 20px;
 }
 
 .chat-item:active {
-    background: #1e2228;
+    background: #3f2a5c;
 }
 
 .chat-avatar {
     width: 52px;
     height: 52px;
-    background: #2b80ff;
+    background: #7c4dff;
     border-radius: 18px;
     display: flex;
     align-items: center;
@@ -210,7 +210,7 @@ body {
     width: 12px;
     height: 12px;
     background: #34c759;
-    border: 2px solid #14171c;
+    border: 2px solid #2d1b4a;
     border-radius: 50%;
 }
 
@@ -222,7 +222,7 @@ body {
 .chat-name {
     font-size: 16px;
     font-weight: 500;
-    color: #e8edf2;
+    color: #f0eaff;
     margin-bottom: 6px;
     display: flex;
     align-items: center;
@@ -231,7 +231,7 @@ body {
 
 .chat-status-text {
     font-size: 12px;
-    color: #8e9aaf;
+    color: #b39ddb;
 }
 
 .chat-status-text.online {
@@ -240,14 +240,14 @@ body {
 
 .chat-last-message {
     font-size: 14px;
-    color: #8e9aaf;
+    color: #b39ddb;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .typing-message {
-    color: #2b80ff;
+    color: #d4bfff;
 }
 
 .typing-animation span {
@@ -269,12 +269,12 @@ body {
 
 .chat-time {
     font-size: 11px;
-    color: #5f6b7a;
+    color: #a58bd1;
     margin-top: 4px;
 }
 
 .unread-badge {
-    background: #2b80ff;
+    background: #7c4dff;
     color: white;
     font-size: 12px;
     font-weight: 500;
@@ -303,11 +303,11 @@ body {
     width: 60px;
     height: 60px;
     border-radius: 20px;
-    background: #2b80ff;
+    background: #7c4dff;
     border: none;
     color: white;
     cursor: pointer;
-    box-shadow: 0 8px 20px rgba(43, 128, 255, 0.3);
+    box-shadow: 0 8px 20px rgba(124, 77, 255, 0.3);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -315,7 +315,7 @@ body {
 
 .find-friends-circle-btn:active {
     transform: scale(0.96);
-    background: #1a5bbf;
+    background: #5f3dc4;
 }
 
 .find-friends-icon {
@@ -329,7 +329,7 @@ body {
 }
 
 .chat-item.saved-chat {
-    background: #1a1f26;
+    background: #2d1b4a;
     border-left: 4px solid #34c759;
 }
 
@@ -346,13 +346,13 @@ body {
     display: none;
     flex-direction: column;
     height: 100vh;
-    background: #0a0c0f;
+    background: #1a0b2e;
     position: relative;
     overflow: hidden;
 }
 
 .chat-header {
-    background: #14171c;
+    background: #2d1b4a;
     padding: 12px 16px;
     display: flex;
     align-items: center;
@@ -363,7 +363,7 @@ body {
 .back-btn {
     background: none;
     border: none;
-    color: #8e9aaf;
+    color: #b39ddb;
     font-size: 24px;
     cursor: pointer;
     padding: 6px;
@@ -387,7 +387,7 @@ body {
 .chat-username {
     font-size: 17px;
     font-weight: 500;
-    color: #e8edf2;
+    color: #f0eaff;
     margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
@@ -396,7 +396,7 @@ body {
 
 .chat-status {
     font-size: 12px;
-    color: #8e9aaf;
+    color: #b39ddb;
     height: 16px;
     min-height: 16px;
 }
@@ -405,7 +405,7 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
-    background: #0a0c0f;
+    background: #1a0b2e;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -417,11 +417,11 @@ body {
 }
 
 .private-messages::-webkit-scrollbar-track {
-    background: #14171c;
+    background: #2d1b4a;
 }
 
 .private-messages::-webkit-scrollbar-thumb {
-    background: #2b80ff;
+    background: #7c4dff;
     border-radius: 4px;
 }
 
@@ -447,14 +447,14 @@ body {
 }
 
 .message.me .message-content {
-    background: #2b80ff;
+    background: #7c4dff;
     color: white;
     border-bottom-right-radius: 6px;
 }
 
 .message.other .message-content {
-    background: #1e2228;
-    color: #e8edf2;
+    background: #3f2a5c;
+    color: #f0eaff;
     border-bottom-left-radius: 6px;
 }
 
@@ -473,7 +473,7 @@ body {
     display: flex;
     gap: 10px;
     padding: 12px 16px 16px;
-    background: #0a0c0f;
+    background: #1a0b2e;
     flex-shrink: 0;
     align-items: center;
 }
@@ -483,24 +483,24 @@ body {
     padding: 14px 18px;
     border-radius: 26px;
     border: none;
-    background: #1e2228;
-    color: #e8edf2;
+    background: #3f2a5c;
+    color: #f0eaff;
     font-size: 15px;
     outline: none;
     min-height: 52px;
 }
 
 .message-input:focus {
-    background: #252a32;
+    background: #4f3670;
 }
 
 .attach-btn {
     width: 52px;
     height: 52px;
     border-radius: 26px;
-    background: #1e2228;
+    background: #3f2a5c;
     border: none;
-    color: #8e9aaf;
+    color: #b39ddb;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -509,7 +509,7 @@ body {
 }
 
 .attach-btn:active {
-    background: #252a32;
+    background: #4f3670;
 }
 
 .attach-icon {
@@ -519,14 +519,14 @@ body {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%238e9aaf"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>');
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23b39ddb"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>');
 }
 
 .send-btn {
     width: 52px;
     height: 52px;
     border-radius: 26px;
-    background: #2b80ff;
+    background: #7c4dff;
     border: none;
     color: white;
     cursor: pointer;
@@ -537,7 +537,7 @@ body {
 }
 
 .send-btn:active {
-    background: #1a5bbf;
+    background: #5f3dc4;
     transform: scale(0.96);
 }
 
@@ -561,19 +561,19 @@ body {
 }
 
 .menu-icon {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%238e9aaf"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>');
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23b39ddb"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>');
 }
 
 .edit-icon {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%238e9aaf"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>');
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23b39ddb"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>');
 }
 
 .contacts-icon {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%238e9aaf"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-1 .05 1.16.84 2 1.87 2 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>');
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23b39ddb"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-1 .05 1.16.84 2 1.87 2 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>');
 }
 
 .logout-icon {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%238e9aaf"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>');
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23b39ddb"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>');
 }
 
 .side-menu {
@@ -582,7 +582,7 @@ body {
     right: -300px;
     width: 280px;
     height: 100%;
-    background: #14171c;
+    background: #2d1b4a;
     z-index: 2000;
     transition: right 0.2s ease;
     display: none;
@@ -594,7 +594,7 @@ body {
 
 .side-menu-header {
     padding: 20px 16px;
-    background: #1a1f26;
+    background: #3f2a5c;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -609,7 +609,7 @@ body {
 .user-avatar {
     width: 48px;
     height: 48px;
-    background: #2b80ff;
+    background: #7c4dff;
     border-radius: 16px;
     display: flex;
     align-items: center;
@@ -620,20 +620,20 @@ body {
 }
 
 .user-info h4 {
-    color: #e8edf2;
+    color: #f0eaff;
     font-size: 16px;
     margin-bottom: 4px;
 }
 
 .user-status {
     font-size: 13px;
-    color: #8e9aaf;
+    color: #b39ddb;
 }
 
 .close-menu-btn {
     background: none;
     border: none;
-    color: #8e9aaf;
+    color: #b39ddb;
     font-size: 24px;
     cursor: pointer;
     width: 40px;
@@ -650,10 +650,10 @@ body {
 .side-menu-btn {
     width: 100%;
     padding: 14px;
-    background: #1e2228;
+    background: #3f2a5c;
     border: none;
     border-radius: 14px;
-    color: #e8edf2;
+    color: #f0eaff;
     font-size: 15px;
     cursor: pointer;
     text-align: left;
@@ -664,7 +664,7 @@ body {
 }
 
 .side-menu-btn:active {
-    background: #252a32;
+    background: #4f3670;
 }
 
 .modal {
@@ -682,7 +682,7 @@ body {
 }
 
 .modal-content {
-    background: #14171c;
+    background: #2d1b4a;
     border-radius: 28px;
     width: 100%;
     max-width: 380px;
@@ -692,7 +692,7 @@ body {
 
 .modal-header {
     padding: 18px 20px;
-    background: #1a1f26;
+    background: #3f2a5c;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -701,13 +701,13 @@ body {
 .modal-header h3 {
     font-size: 18px;
     font-weight: 500;
-    color: #e8edf2;
+    color: #f0eaff;
 }
 
 .close-modal {
     background: none;
     border: none;
-    color: #8e9aaf;
+    color: #b39ddb;
     font-size: 24px;
     cursor: pointer;
     width: 34px;
@@ -729,8 +729,8 @@ body {
     padding: 16px;
     border-radius: 16px;
     border: none;
-    background: #1e2228;
-    color: #e8edf2;
+    background: #3f2a5c;
+    color: #f0eaff;
     font-size: 15px;
     outline: none;
     margin-bottom: 16px;
@@ -741,7 +741,7 @@ body {
     padding: 16px;
     border-radius: 16px;
     border: none;
-    background: #2b80ff;
+    background: #7c4dff;
     color: white;
     font-size: 15px;
     font-weight: 500;
@@ -749,7 +749,7 @@ body {
 }
 
 .modal-btn:active {
-    background: #1a5bbf;
+    background: #5f3dc4;
 }
 
 .search-results {
@@ -759,7 +759,7 @@ body {
 }
 
 .user-result {
-    background: #1e2228;
+    background: #3f2a5c;
     border-radius: 16px;
     padding: 14px;
     display: flex;
@@ -770,7 +770,7 @@ body {
 }
 
 .user-result:active {
-    background: #252a32;
+    background: #4f3670;
 }
 
 .user-result-info {
@@ -782,7 +782,7 @@ body {
 .user-result-avatar {
     width: 40px;
     height: 40px;
-    background: #2b80ff;
+    background: #7c4dff;
     border-radius: 14px;
     display: flex;
     align-items: center;
@@ -801,12 +801,12 @@ body {
     width: 10px;
     height: 10px;
     background: #34c759;
-    border: 2px solid #1e2228;
+    border: 2px solid #3f2a5c;
     border-radius: 50%;
 }
 
 .user-result-name {
-    color: #e8edf2;
+    color: #f0eaff;
     font-weight: 500;
     font-size: 15px;
 }
@@ -817,7 +817,7 @@ body {
 }
 
 .contact-item {
-    background: #1e2228;
+    background: #3f2a5c;
     border-radius: 16px;
     padding: 14px;
     display: flex;
@@ -827,13 +827,13 @@ body {
 }
 
 .contact-item:active {
-    background: #252a32;
+    background: #4f3670;
 }
 
 .contact-avatar {
     width: 40px;
     height: 40px;
-    background: #2b80ff;
+    background: #7c4dff;
     border-radius: 14px;
     display: flex;
     align-items: center;
@@ -853,12 +853,12 @@ body {
     width: 10px;
     height: 10px;
     background: #34c759;
-    border: 2px solid #1e2228;
+    border: 2px solid #3f2a5c;
     border-radius: 50%;
 }
 
 .contact-name {
-    color: #e8edf2;
+    color: #f0eaff;
     font-weight: 500;
     font-size: 15px;
 }
@@ -879,18 +879,18 @@ body {
 .spinner {
     width: 48px;
     height: 48px;
-    border: 3px solid rgba(43, 128, 255, 0.1);
+    border: 3px solid rgba(124, 77, 255, 0.1);
     border-radius: 50%;
-    border-top-color: #2b80ff;
+    border-top-color: #7c4dff;
     animation: spin 0.8s linear infinite;
 }
 
 .spinner-small {
     width: 30px;
     height: 30px;
-    border: 2px solid rgba(43, 128, 255, 0.1);
+    border: 2px solid rgba(124, 77, 255, 0.1);
     border-radius: 50%;
-    border-top-color: #2b80ff;
+    border-top-color: #7c4dff;
     animation: spin 0.8s linear infinite;
 }
 
@@ -907,12 +907,12 @@ body {
 }
 
 .date-separator span {
-    background: #14171c;
+    background: #2d1b4a;
     padding: 6px 18px;
     border-radius: 30px;
     font-size: 12px;
-    color: #8e9aaf;
-    border: 1px solid #1e2228;
+    color: #b39ddb;
+    border: 1px solid #3f2a5c;
 }
 
 @media (max-width: 768px) {
