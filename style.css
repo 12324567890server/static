@@ -180,6 +180,18 @@ body {
     background: #2d1b4a;
     margin: 2px 12px;
     border-radius: 20px;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    0% {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 .chat-item:active {
@@ -212,6 +224,16 @@ body {
     background: #34c759;
     border: 2px solid #2d1b4a;
     border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
 }
 
 .chat-info {
@@ -251,7 +273,8 @@ body {
 }
 
 .typing-animation span {
-    animation: speedPulse 0.8s infinite;
+    animation: typingBounce 1.2s infinite;
+    display: inline-block;
 }
 
 .typing-animation span:nth-child(2) {
@@ -262,9 +285,13 @@ body {
     animation-delay: 0.4s;
 }
 
-@keyframes speedPulse {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.2); }
+@keyframes typingBounce {
+    0%, 60%, 100% {
+        transform: translateY(0);
+    }
+    30% {
+        transform: translateY(-4px);
+    }
 }
 
 .chat-time {
@@ -286,6 +313,19 @@ body {
     right: 20px;
     top: 50%;
     transform: translateY(-50%);
+    animation: badgePop 0.3s ease-out;
+}
+
+@keyframes badgePop {
+    0% {
+        transform: translateY(-50%) scale(0);
+    }
+    80% {
+        transform: translateY(-50%) scale(1.1);
+    }
+    100% {
+        transform: translateY(-50%) scale(1);
+    }
 }
 
 .action-buttons {
@@ -311,11 +351,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.2s ease;
 }
 
 .find-friends-circle-btn:active {
-    transform: scale(0.96);
-    background: #5f3dc4;
+    transform: scale(0.9);
 }
 
 .find-friends-icon {
@@ -358,6 +398,18 @@ body {
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .back-btn {
@@ -372,10 +424,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.2s ease;
 }
 
 .back-btn:active {
-    opacity: 0.7;
+    transform: scale(0.9);
 }
 
 .chat-header-info {
@@ -428,69 +481,26 @@ body {
 .message {
     max-width: 80%;
     min-width: 55px;
-    animation: speedNexus 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    animation: messagePop 0.3s ease-out;
 }
 
-@keyframes speedNexus {
-    0% { 
+@keyframes messagePop {
+    0% {
         opacity: 0;
-        transform: translateX(-30px) scale(0.9);
-        filter: blur(3px);
+        transform: scale(0.9);
     }
-    30% { 
-        transform: translateX(5px) scale(1.02);
-        filter: blur(0);
-        text-shadow: 0 0 20px #ff69b4;
-    }
-    60% { 
-        transform: scale(0.98);
-    }
-    100% { 
+    100% {
         opacity: 1;
-        transform: translateX(0) scale(1);
+        transform: scale(1);
     }
 }
 
 .message.me {
     align-self: flex-end;
-    animation: mySpeed 0.5s cubic-bezier(0.3, 1.2, 0.4, 1);
-}
-
-@keyframes mySpeed {
-    0% { 
-        opacity: 0;
-        transform: translateX(50px) rotate(2deg);
-        filter: hue-rotate(90deg);
-    }
-    50% { 
-        transform: translateX(-5px) rotate(-1deg);
-        filter: hue-rotate(0deg) brightness(1.3);
-    }
-    100% { 
-        opacity: 1;
-        transform: translateX(0) rotate(0);
-    }
 }
 
 .message.other {
     align-self: flex-start;
-    animation: otherSpeed 0.6s cubic-bezier(0.2, 0.8, 0.4, 1);
-}
-
-@keyframes otherSpeed {
-    0% { 
-        opacity: 0;
-        transform: translateX(-50px) rotate(-2deg);
-        filter: blur(2px);
-    }
-    70% { 
-        transform: translateX(5px) rotate(1deg);
-        filter: blur(0);
-    }
-    100% { 
-        opacity: 1;
-        transform: translateX(0) rotate(0);
-    }
 }
 
 .message-content {
@@ -499,6 +509,11 @@ body {
     line-height: 1.4;
     word-wrap: break-word;
     font-size: 15px;
+    transition: transform 0.2s ease;
+}
+
+.message-content:active {
+    transform: scale(0.98);
 }
 
 .message.me .message-content {
@@ -518,23 +533,15 @@ body {
 }
 
 .media-message {
-    animation: mediaSpeed 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: mediaPop 0.4s ease-out;
 }
 
-@keyframes mediaSpeed {
-    0% { 
+@keyframes mediaPop {
+    0% {
         opacity: 0;
-        transform: scale(0.5) rotate(-10deg);
-        filter: brightness(0) blur(5px);
+        transform: scale(0.8) rotate(-2deg);
     }
-    40% { 
-        transform: scale(1.1) rotate(2deg);
-        filter: brightness(1.2) blur(0);
-    }
-    80% { 
-        transform: scale(0.98);
-    }
-    100% { 
+    100% {
         opacity: 1;
         transform: scale(1) rotate(0);
     }
@@ -554,6 +561,18 @@ body {
     background: #1a0b2e;
     flex-shrink: 0;
     align-items: center;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .message-input {
@@ -566,10 +585,12 @@ body {
     font-size: 15px;
     outline: none;
     min-height: 52px;
+    transition: all 0.2s ease;
 }
 
 .message-input:focus {
     background: #4f3670;
+    transform: scale(1.02);
 }
 
 .attach-btn {
@@ -584,10 +605,12 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    transition: all 0.2s ease;
 }
 
 .attach-btn:active {
     background: #4f3670;
+    transform: rotate(15deg);
 }
 
 .attach-icon {
@@ -612,11 +635,12 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    transition: all 0.2s ease;
 }
 
 .send-btn:active {
     background: #5f3dc4;
-    transform: scale(0.96);
+    transform: scale(1.1) rotate(360deg);
 }
 
 .send-icon {
@@ -662,7 +686,7 @@ body {
     height: 100%;
     background: #2d1b4a;
     z-index: 2000;
-    transition: right 0.2s ease;
+    transition: right 0.3s ease;
     display: none;
 }
 
@@ -676,6 +700,18 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
+    animation: slideLeft 0.3s ease-out;
+}
+
+@keyframes slideLeft {
+    0% {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 .user-info {
@@ -719,6 +755,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.close-menu-btn:active {
+    transform: rotate(90deg);
 }
 
 .side-menu-content {
@@ -739,10 +780,26 @@ body {
     align-items: center;
     gap: 12px;
     margin-bottom: 8px;
+    transition: all 0.2s ease;
+    animation: slideLeft 0.3s ease-out;
+    animation-fill-mode: both;
+}
+
+.side-menu-btn:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.side-menu-btn:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.side-menu-btn:nth-child(3) {
+    animation-delay: 0.2s;
 }
 
 .side-menu-btn:active {
     background: #4f3670;
+    transform: translateX(5px);
 }
 
 .modal {
@@ -766,6 +823,18 @@ body {
     max-width: 380px;
     max-height: 90vh;
     overflow: hidden;
+    animation: modalFade 0.3s ease-out;
+}
+
+@keyframes modalFade {
+    0% {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .modal-header {
@@ -793,6 +862,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.close-modal:active {
+    transform: rotate(90deg);
 }
 
 .modal-body {
@@ -812,6 +886,12 @@ body {
     font-size: 15px;
     outline: none;
     margin-bottom: 16px;
+    transition: all 0.2s ease;
+}
+
+.modal-input:focus {
+    background: #4f3670;
+    transform: scale(1.02);
 }
 
 .modal-btn {
@@ -824,10 +904,12 @@ body {
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;
+    transition: all 0.2s ease;
 }
 
 .modal-btn:active {
     background: #5f3dc4;
+    transform: scale(0.95);
 }
 
 .search-results {
@@ -845,10 +927,21 @@ body {
     justify-content: space-between;
     margin-bottom: 8px;
     cursor: pointer;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
 }
 
 .user-result:active {
     background: #4f3670;
+    transform: scale(0.98);
 }
 
 .user-result-info {
@@ -881,6 +974,7 @@ body {
     background: #34c759;
     border: 2px solid #3f2a5c;
     border-radius: 50%;
+    animation: pulse 2s infinite;
 }
 
 .user-result-name {
@@ -902,10 +996,12 @@ body {
     align-items: center;
     margin-bottom: 8px;
     cursor: pointer;
+    animation: fadeIn 0.3s ease-out;
 }
 
 .contact-item:active {
     background: #4f3670;
+    transform: scale(0.98);
 }
 
 .contact-avatar {
@@ -933,6 +1029,7 @@ body {
     background: #34c759;
     border: 2px solid #3f2a5c;
     border-radius: 50%;
+    animation: pulse 2s infinite;
 }
 
 .contact-name {
@@ -982,6 +1079,7 @@ body {
     align-items: center;
     margin: 20px 0;
     position: relative;
+    animation: fadeIn 0.3s ease-out;
 }
 
 .date-separator span {
