@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#8a2be2">
 </head>
 <body>
     <div id="loginScreen" class="login-screen">
@@ -135,5 +137,10 @@
     </div>
 
     <script src="chat.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/service-worker.js');
+        }
+    </script>
 </body>
 </html>
