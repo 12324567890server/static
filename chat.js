@@ -87,7 +87,6 @@ let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
 let pendingTransfers = new Map();
-let mediaMessageTimers = {};
 
 function initMediaDB() {
     const request = indexedDB.open('SpeedNexusMedia', 3);
@@ -802,12 +801,6 @@ function setupMessageListener(userId) {
                                 change.doc.ref.update({ 
                                     read: true,
                                     read_at: new Date().toISOString()
-                                }).then(() => {
-                                    if (unreadCounts[userId]) {
-                                        delete unreadCounts[userId];
-                                        updateTitle();
-                                        displayChats();
-                                    }
                                 });
                             }, 500);
                         }
