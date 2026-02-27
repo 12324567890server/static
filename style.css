@@ -180,18 +180,6 @@ body {
     background: #2d1b4a;
     margin: 2px 12px;
     border-radius: 20px;
-    animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-    0% {
-        opacity: 0;
-        transform: translateX(-20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateX(0);
-    }
 }
 
 .chat-item:active {
@@ -224,16 +212,6 @@ body {
     background: #34c759;
     border: 2px solid #2d1b4a;
     border-radius: 50%;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
 }
 
 .chat-info {
@@ -313,19 +291,6 @@ body {
     right: 20px;
     top: 50%;
     transform: translateY(-50%);
-    animation: badgePop 0.3s ease-out;
-}
-
-@keyframes badgePop {
-    0% {
-        transform: translateY(-50%) scale(0);
-    }
-    80% {
-        transform: translateY(-50%) scale(1.1);
-    }
-    100% {
-        transform: translateY(-50%) scale(1);
-    }
 }
 
 .action-buttons {
@@ -351,11 +316,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s ease;
 }
 
 .find-friends-circle-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
+    background: #5f3dc4;
 }
 
 .find-friends-icon {
@@ -398,18 +363,6 @@ body {
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
-    animation: slideDown 0.3s ease-out;
-}
-
-@keyframes slideDown {
-    0% {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 .back-btn {
@@ -424,11 +377,10 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s ease;
 }
 
 .back-btn:active {
-    transform: scale(0.9);
+    opacity: 0.7;
 }
 
 .chat-header-info {
@@ -481,17 +433,17 @@ body {
 .message {
     max-width: 80%;
     min-width: 55px;
-    animation: messagePop 0.3s ease-out;
+    animation: messageFade 0.25s ease-out;
 }
 
-@keyframes messagePop {
+@keyframes messageFade {
     0% {
         opacity: 0;
-        transform: scale(0.9);
+        transform: translateY(8px);
     }
     100% {
         opacity: 1;
-        transform: scale(1);
+        transform: translateY(0);
     }
 }
 
@@ -509,11 +461,6 @@ body {
     line-height: 1.4;
     word-wrap: break-word;
     font-size: 15px;
-    transition: transform 0.2s ease;
-}
-
-.message-content:active {
-    transform: scale(0.98);
 }
 
 .message.me .message-content {
@@ -532,21 +479,6 @@ body {
     padding: 6px;
 }
 
-.media-message {
-    animation: mediaPop 0.4s ease-out;
-}
-
-@keyframes mediaPop {
-    0% {
-        opacity: 0;
-        transform: scale(0.8) rotate(-2deg);
-    }
-    100% {
-        opacity: 1;
-        transform: scale(1) rotate(0);
-    }
-}
-
 .message .time {
     font-size: 10px;
     text-align: right;
@@ -561,18 +493,6 @@ body {
     background: #1a0b2e;
     flex-shrink: 0;
     align-items: center;
-    animation: slideUp 0.3s ease-out;
-}
-
-@keyframes slideUp {
-    0% {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 .message-input {
@@ -585,12 +505,10 @@ body {
     font-size: 15px;
     outline: none;
     min-height: 52px;
-    transition: all 0.2s ease;
 }
 
 .message-input:focus {
     background: #4f3670;
-    transform: scale(1.02);
 }
 
 .attach-btn {
@@ -605,12 +523,10 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: all 0.2s ease;
 }
 
 .attach-btn:active {
     background: #4f3670;
-    transform: rotate(15deg);
 }
 
 .attach-icon {
@@ -635,12 +551,11 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: all 0.2s ease;
 }
 
 .send-btn:active {
     background: #5f3dc4;
-    transform: scale(1.1) rotate(360deg);
+    transform: scale(0.96);
 }
 
 .send-icon {
@@ -686,7 +601,7 @@ body {
     height: 100%;
     background: #2d1b4a;
     z-index: 2000;
-    transition: right 0.3s ease;
+    transition: right 0.2s ease;
     display: none;
 }
 
@@ -700,18 +615,6 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    animation: slideLeft 0.3s ease-out;
-}
-
-@keyframes slideLeft {
-    0% {
-        opacity: 0;
-        transform: translateX(20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateX(0);
-    }
 }
 
 .user-info {
@@ -755,11 +658,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s ease;
-}
-
-.close-menu-btn:active {
-    transform: rotate(90deg);
 }
 
 .side-menu-content {
@@ -780,26 +678,10 @@ body {
     align-items: center;
     gap: 12px;
     margin-bottom: 8px;
-    transition: all 0.2s ease;
-    animation: slideLeft 0.3s ease-out;
-    animation-fill-mode: both;
-}
-
-.side-menu-btn:nth-child(1) {
-    animation-delay: 0.1s;
-}
-
-.side-menu-btn:nth-child(2) {
-    animation-delay: 0.15s;
-}
-
-.side-menu-btn:nth-child(3) {
-    animation-delay: 0.2s;
 }
 
 .side-menu-btn:active {
     background: #4f3670;
-    transform: translateX(5px);
 }
 
 .modal {
@@ -823,18 +705,6 @@ body {
     max-width: 380px;
     max-height: 90vh;
     overflow: hidden;
-    animation: modalFade 0.3s ease-out;
-}
-
-@keyframes modalFade {
-    0% {
-        opacity: 0;
-        transform: scale(0.9);
-    }
-    100% {
-        opacity: 1;
-        transform: scale(1);
-    }
 }
 
 .modal-header {
@@ -862,11 +732,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s ease;
-}
-
-.close-modal:active {
-    transform: rotate(90deg);
 }
 
 .modal-body {
@@ -886,12 +751,6 @@ body {
     font-size: 15px;
     outline: none;
     margin-bottom: 16px;
-    transition: all 0.2s ease;
-}
-
-.modal-input:focus {
-    background: #4f3670;
-    transform: scale(1.02);
 }
 
 .modal-btn {
@@ -904,12 +763,10 @@ body {
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
 }
 
 .modal-btn:active {
     background: #5f3dc4;
-    transform: scale(0.95);
 }
 
 .search-results {
@@ -927,21 +784,10 @@ body {
     justify-content: space-between;
     margin-bottom: 8px;
     cursor: pointer;
-    animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-    0% {
-        opacity: 0;
-    }
-    100% {
-        opacity: 1;
-    }
 }
 
 .user-result:active {
     background: #4f3670;
-    transform: scale(0.98);
 }
 
 .user-result-info {
@@ -974,7 +820,6 @@ body {
     background: #34c759;
     border: 2px solid #3f2a5c;
     border-radius: 50%;
-    animation: pulse 2s infinite;
 }
 
 .user-result-name {
@@ -996,12 +841,10 @@ body {
     align-items: center;
     margin-bottom: 8px;
     cursor: pointer;
-    animation: fadeIn 0.3s ease-out;
 }
 
 .contact-item:active {
     background: #4f3670;
-    transform: scale(0.98);
 }
 
 .contact-avatar {
@@ -1029,7 +872,6 @@ body {
     background: #34c759;
     border: 2px solid #3f2a5c;
     border-radius: 50%;
-    animation: pulse 2s infinite;
 }
 
 .contact-name {
@@ -1079,7 +921,6 @@ body {
     align-items: center;
     margin: 20px 0;
     position: relative;
-    animation: fadeIn 0.3s ease-out;
 }
 
 .date-separator span {
