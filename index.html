@@ -25,12 +25,12 @@
     <div id="chatsScreen" class="chats-screen">
         <div class="chats-header">
             <div class="header-content">
-                <span class="chats-title">Чаты</span>
+                <span id="chatsTitle" class="chats-title">Чаты</span>
                 <div class="header-actions">
-                    <button class="header-action-btn" id="searchHeaderBtn">
+                    <button id="searchHeaderBtn" class="header-action-btn">
                         <span class="search-icon-header"></span>
                     </button>
-                    <button class="header-action-btn" id="profileEditBtn">
+                    <button id="profileEditBtn" class="header-action-btn">
                         <span class="settings-icon-header"></span>
                     </button>
                 </div>
@@ -70,15 +70,43 @@
         </div>
     </div>
 
+    <div id="sideMenu" class="side-menu">
+        <div class="side-menu-header">
+            <div class="user-info">
+                <div id="userAvatar" class="user-avatar">U</div>
+                <div>
+                    <h4 id="currentUsernameDisplay">-</h4>
+                    <div id="userStatusDisplay" class="user-status">не в сети</div>
+                </div>
+            </div>
+            <button id="closeMenu" class="close-menu-btn">×</button>
+        </div>
+        
+        <div class="side-menu-content">
+            <button id="editProfileBtn" class="side-menu-btn">
+                <span class="icon edit-icon"></span>
+                <span class="btn-text">Изменить профиль</span>
+            </button>
+            <button id="contactsBtn" class="side-menu-btn">
+                <span class="icon contacts-icon"></span>
+                <span class="btn-text">Контакты</span>
+            </button>
+            <button id="logoutBtn" class="side-menu-btn">
+                <span class="icon logout-icon"></span>
+                <span class="btn-text">Выйти</span>
+            </button>
+        </div>
+    </div>
+
     <div id="editProfileModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Редактор профиля</h3>
+                <h3>Изменить профиль</h3>
                 <button class="close-modal" data-close="editProfileModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="editUsernameInput" class="modal-input" placeholder="Новый никнейм" maxlength="20">
-                <div id="editProfileError" class="error-message"></div>
+                <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
+                <div id="editUsernameError" class="error-message"></div>
                 <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
             </div>
         </div>
@@ -87,7 +115,7 @@
     <div id="findFriendsModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Найти друзей</h3>
+                <h3>Поиск</h3>
                 <button class="close-modal" data-close="findFriendsModal">×</button>
             </div>
             <div class="modal-body">
