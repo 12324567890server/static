@@ -26,14 +26,9 @@
         <div class="chats-header">
             <div class="header-content">
                 <span id="chatsTitle" class="chats-title">Чаты</span>
-                <div class="header-actions">
-                    <button id="searchHeaderBtn" class="header-action-btn">
-                        <span class="search-icon-header"></span>
-                    </button>
-                    <button id="profileEditBtn" class="header-action-btn">
-                        <span class="settings-icon-header"></span>
-                    </button>
-                </div>
+                <button id="chatsMenuBtn" class="menu-btn">
+                    <span class="icon menu-icon"></span>
+                </button>
             </div>
             <input type="text" id="searchChats" class="search-input" placeholder="Поиск чатов...">
         </div>
@@ -50,7 +45,6 @@
     <div id="chatScreen" class="chat-screen">
         <div class="chat-header">
             <button id="backToChats" class="back-btn">←</button>
-            <div id="chatHeaderAvatar" class="chat-header-avatar"></div>
             <div class="chat-header-info">
                 <div id="chatWithUser" class="chat-username">-</div>
                 <div id="chatStatus" class="chat-status">без связи</div>
@@ -65,7 +59,7 @@
             </button>
             <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
             <button id="sendMessageBtn" class="send-btn">
-                <span class="send-icon-triangle"></span>
+                <span class="send-icon"></span>
             </button>
         </div>
     </div>
