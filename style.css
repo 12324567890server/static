@@ -130,13 +130,7 @@ body {
     background-clip: text;
 }
 
-.top-icons {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-}
-
-.top-icon-btn {
+.settings-btn {
     background: rgba(75, 45, 130, 0.6);
     border: 1px solid rgba(180, 140, 255, 0.3);
     color: white;
@@ -149,7 +143,7 @@ body {
     border-radius: 18px;
 }
 
-.top-icon-btn:active {
+.settings-btn:active {
     background: rgba(95, 65, 160, 0.8);
     transform: scale(0.96);
 }
@@ -895,7 +889,7 @@ body {
         height: 44px;
     }
     
-    .top-icon-btn {
+    .settings-btn {
         width: 46px;
         height: 46px;
     }
