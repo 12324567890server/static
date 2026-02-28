@@ -25,12 +25,12 @@
     <div id="chatsScreen" class="chats-screen">
         <div class="chats-header">
             <div class="header-content">
-                <span id="chatsTitle" class="chats-title">Чаты</span>
+                <span class="chats-title">Чаты</span>
                 <div class="header-actions">
-                    <button id="searchBtnHeader" class="header-action-btn">
+                    <button class="header-action-btn" id="searchHeaderBtn">
                         <span class="search-icon-header"></span>
                     </button>
-                    <button id="profileSettingsBtn" class="header-action-btn">
+                    <button class="header-action-btn" id="profileEditBtn">
                         <span class="settings-icon-header"></span>
                     </button>
                 </div>
@@ -77,9 +77,9 @@
                 <button class="close-modal" data-close="editProfileModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="editUsername" class="modal-input" placeholder="Новый никнейм" maxlength="20">
-                <div id="editUsernameError" class="error-message"></div>
-                <button id="saveProfileBtn" class="modal-btn">Сохранить изменения</button>
+                <input type="text" id="editUsernameInput" class="modal-input" placeholder="Новый никнейм" maxlength="20">
+                <div id="editProfileError" class="error-message"></div>
+                <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
             </div>
         </div>
     </div>
@@ -91,8 +91,8 @@
                 <button class="close-modal" data-close="findFriendsModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя">
-                <button id="searchBtn" class="modal-btn">Поиск</button>
+                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя" maxlength="20">
+                <button id="searchBtn" class="modal-btn">Найти</button>
                 <div id="searchResults" class="search-results"></div>
             </div>
         </div>
@@ -113,28 +113,6 @@
     <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner"></div>
     </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const settingsBtn = document.getElementById('profileSettingsBtn');
-            const editProfileModal = document.getElementById('editProfileModal');
-            
-            if (settingsBtn) {
-                settingsBtn.addEventListener('click', function() {
-                    editProfileModal.style.display = 'flex';
-                });
-            }
-            
-            const closeButtons = document.querySelectorAll('.close-modal');
-            closeButtons.forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const modalId = this.getAttribute('data-close');
-                    const modal = document.getElementById(modalId);
-                    if (modal) modal.style.display = 'none';
-                });
-            });
-        });
-    </script>
 
     <script src="chat.js"></script>
     <script>
