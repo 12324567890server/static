@@ -30,7 +30,7 @@
                     <button id="searchBtnHeader" class="header-action-btn">
                         <span class="search-icon-header"></span>
                     </button>
-                    <button id="settingsBtnHeader" class="header-action-btn">
+                    <button id="profileSettingsBtn" class="header-action-btn">
                         <span class="settings-icon-header"></span>
                     </button>
                 </div>
@@ -78,7 +78,7 @@
             </div>
             <div class="modal-body">
                 <input type="text" id="editUsername" class="modal-input" placeholder="Новый никнейм" maxlength="20">
-                <div id="editStatus" class="modal-input" style="display: none;"></div>
+                <div id="editUsernameError" class="error-message"></div>
                 <button id="saveProfileBtn" class="modal-btn">Сохранить изменения</button>
             </div>
         </div>
@@ -113,6 +113,28 @@
     <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner"></div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const settingsBtn = document.getElementById('profileSettingsBtn');
+            const editProfileModal = document.getElementById('editProfileModal');
+            
+            if (settingsBtn) {
+                settingsBtn.addEventListener('click', function() {
+                    editProfileModal.style.display = 'flex';
+                });
+            }
+            
+            const closeButtons = document.querySelectorAll('.close-modal');
+            closeButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const modalId = this.getAttribute('data-close');
+                    const modal = document.getElementById(modalId);
+                    if (modal) modal.style.display = 'none';
+                });
+            });
+        });
+    </script>
 
     <script src="chat.js"></script>
     <script>
