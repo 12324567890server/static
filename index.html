@@ -26,9 +26,14 @@
         <div class="chats-header">
             <div class="header-content">
                 <span id="chatsTitle" class="chats-title">Чаты</span>
-                <button id="chatsMenuBtn" class="menu-btn">
-                    <span class="icon menu-icon"></span>
-                </button>
+                <div class="header-actions">
+                    <button id="searchBtnHeader" class="header-action-btn">
+                        <span class="search-icon-header"></span>
+                    </button>
+                    <button id="settingsBtnHeader" class="header-action-btn">
+                        <span class="settings-icon-header"></span>
+                    </button>
+                </div>
             </div>
             <input type="text" id="searchChats" class="search-input" placeholder="Поиск чатов...">
         </div>
@@ -45,6 +50,7 @@
     <div id="chatScreen" class="chat-screen">
         <div class="chat-header">
             <button id="backToChats" class="back-btn">←</button>
+            <div id="chatHeaderAvatar" class="chat-header-avatar">A</div>
             <div class="chat-header-info">
                 <div id="chatWithUser" class="chat-username">-</div>
                 <div id="chatStatus" class="chat-status">без связи</div>
@@ -59,35 +65,7 @@
             </button>
             <input type="text" id="messageInput" class="message-input" placeholder="Сообщение..." autocomplete="off">
             <button id="sendMessageBtn" class="send-btn">
-                <span class="send-icon"></span>
-            </button>
-        </div>
-    </div>
-
-    <div id="sideMenu" class="side-menu">
-        <div class="side-menu-header">
-            <div class="user-info">
-                <div id="userAvatar" class="user-avatar">U</div>
-                <div>
-                    <h4 id="currentUsernameDisplay">-</h4>
-                    <div id="userStatusDisplay" class="user-status">не в сети</div>
-                </div>
-            </div>
-            <button id="closeMenu" class="close-menu-btn">×</button>
-        </div>
-        
-        <div class="side-menu-content">
-            <button id="editProfileBtn" class="side-menu-btn">
-                <span class="icon edit-icon"></span>
-                <span class="btn-text">Изменить профиль</span>
-            </button>
-            <button id="contactsBtn" class="side-menu-btn">
-                <span class="icon contacts-icon"></span>
-                <span class="btn-text">Контакты</span>
-            </button>
-            <button id="logoutBtn" class="side-menu-btn">
-                <span class="icon logout-icon"></span>
-                <span class="btn-text">Выйти</span>
+                <span class="send-icon-triangle"></span>
             </button>
         </div>
     </div>
@@ -95,13 +73,13 @@
     <div id="editProfileModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Изменить профиль</h3>
+                <h3>Редактор профиля</h3>
                 <button class="close-modal" data-close="editProfileModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="editUsername" class="modal-input" maxlength="20" placeholder="Новый никнейм">
-                <div id="editUsernameError" class="error-message"></div>
-                <button id="saveProfileBtn" class="modal-btn">Сохранить</button>
+                <input type="text" id="editUsername" class="modal-input" placeholder="Новый никнейм" maxlength="20">
+                <div id="editStatus" class="modal-input" style="display: none;"></div>
+                <button id="saveProfileBtn" class="modal-btn">Сохранить изменения</button>
             </div>
         </div>
     </div>
@@ -109,12 +87,12 @@
     <div id="findFriendsModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Поиск</h3>
+                <h3>Найти друзей</h3>
                 <button class="close-modal" data-close="findFriendsModal">×</button>
             </div>
             <div class="modal-body">
-                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя" maxlength="20">
-                <button id="searchBtn" class="modal-btn">Найти</button>
+                <input type="text" id="searchUsername" class="modal-input" placeholder="Имя пользователя">
+                <button id="searchBtn" class="modal-btn">Поиск</button>
                 <div id="searchResults" class="search-results"></div>
             </div>
         </div>
