@@ -559,7 +559,7 @@ body {
     align-self: flex-end;
 }
 
-.message.other {
+message.other {
     align-self: flex-start;
 }
 
