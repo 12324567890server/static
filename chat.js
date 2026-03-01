@@ -655,6 +655,7 @@ function openSavedMessages() {
         elements.chatHeaderAvatar.style.backgroundRepeat = 'no-repeat';
         elements.chatHeaderAvatar.style.backgroundPosition = 'center';
         elements.chatHeaderAvatar.textContent = '';
+        elements.chatHeaderAvatar.style.background = 'linear-gradient(145deg, #6a4faf 0%, #8a6fd5 100%)';
     }
     elements.chatsScreen.style.display = 'none';
     elements.chatScreen.style.display = 'flex';
@@ -734,6 +735,7 @@ async function showChat(username) {
         if (elements.chatHeaderAvatar) {
             elements.chatHeaderAvatar.textContent = username.charAt(0).toUpperCase();
             elements.chatHeaderAvatar.style.backgroundImage = 'none';
+            elements.chatHeaderAvatar.style.background = 'linear-gradient(145deg, #8a6fd5 0%, #a58be0 100%)';
         }
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'flex';
