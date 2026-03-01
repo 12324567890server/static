@@ -87,7 +87,6 @@ let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.
 let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
-let pendingTransfers = new Map();
 
 function initMediaDB() {
     const request = indexedDB.open('SpeedNexusMedia', 3);
@@ -132,24 +131,6 @@ function getMediaFromIndexedDB(mediaId) {
             getRequest.onerror = () => resolve(null);
         };
         request.onerror = () => resolve(null);
-    });
-}
-
-function getAllMediaFromIndexedDB(chatId) {
-    return new Promise((resolve) => {
-        const request = indexedDB.open('SpeedNexusMedia', 3);
-        request.onsuccess = (event) => {
-            const db = event.target.result;
-            const transaction = db.transaction(['media'], 'readonly');
-            const store = transaction.objectStore('media');
-            const index = store.index('by_chat');
-            const getRequest = index.getAll(chatId);
-            getRequest.onsuccess = () => {
-                resolve(getRequest.result);
-            };
-            getRequest.onerror = () => resolve([]);
-        };
-        request.onerror = () => resolve([]);
     });
 }
 
@@ -422,7 +403,7 @@ async function sendMediaMessage(file) {
             receiver: currentChatUserId
         });
         
-        const messageRef = await db.collection('messages').add({
+        await db.collection('messages').add({
             chat_id: chatId,
             participants: [currentUser.uid, currentChatUserId],
             sender: currentUser.uid,
@@ -663,7 +644,11 @@ function openSavedMessages() {
     isChatActive = true;
     
     elements.chatWithUser.textContent = 'Заметки';
-    elements.chatHeaderAvatar.textContent = '📌';
+    elements.chatHeaderAvatar.style.backgroundImage = 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'white\'><path d=\'M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z\'/></svg>")';
+    elements.chatHeaderAvatar.style.backgroundSize = '24px';
+    elements.chatHeaderAvatar.style.backgroundRepeat = 'no-repeat';
+    elements.chatHeaderAvatar.style.backgroundPosition = 'center';
+    elements.chatHeaderAvatar.textContent = '';
     elements.chatHeaderAvatar.classList.remove('online');
     elements.chatsScreen.style.display = 'none';
     elements.chatScreen.style.display = 'flex';
@@ -741,6 +726,7 @@ async function showChat(username) {
           
         elements.chatWithUser.textContent = username;
         elements.chatHeaderAvatar.textContent = username.charAt(0).toUpperCase();
+        elements.chatHeaderAvatar.style.backgroundImage = 'none';
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
@@ -1058,18 +1044,10 @@ function setupEventListeners() {
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
-            if (elements.sideMenu.classList.contains('show')) {
-                closeMenu();
-            }
         }
     });
 
     elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
-}
-
-function closeMenu() {
-    elements.sideMenu.classList.remove('show');
-    setTimeout(() => elements.sideMenu.style.display = 'none', 300);
 }
 
 function showLoading(show) {
@@ -1312,7 +1290,7 @@ function displayChats() {
     const lastTime = lastSaved ? lastSaved.time : null;
     
     savedElement.innerHTML = `
-        <div class="chat-avatar">📌</div>
+        <div class="chat-avatar"></div>
         <div class="chat-info">
             <div class="chat-name">
                 Заметки
