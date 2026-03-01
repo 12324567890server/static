@@ -34,7 +34,6 @@ const elements = {
     chatScreen: document.getElementById('chatScreen'),
     chatsList: document.getElementById('chatsList'),
     searchChats: document.getElementById('searchChats'),
-    chatsMenuBtn: document.getElementById('chatsMenuBtn'),
     findFriendsCircleBtn: document.getElementById('findFriendsCircleBtn'),
     attachMediaBtn: document.getElementById('attachMediaBtn'),
     backToChats: document.getElementById('backToChats'),
@@ -65,7 +64,10 @@ const elements = {
     searchResults: document.getElementById('searchResults'),
     contactsModal: document.getElementById('contactsModal'),
     contactsList: document.getElementById('contactsList'),
-    chatsTitle: document.getElementById('chatsTitle')
+    chatsTitle: document.getElementById('chatsTitle'),
+    chatHeaderAvatar: document.getElementById('chatHeaderAvatar'),
+    searchFriendsBtn: document.getElementById('searchFriendsBtn'),
+    settingsProfileBtn: document.getElementById('settingsProfileBtn')
 };
 
 let currentUser = null;
@@ -662,6 +664,8 @@ function openSavedMessages() {
     isChatActive = true;
     
     elements.chatWithUser.textContent = 'Заметки';
+    elements.chatHeaderAvatar.textContent = '📌';
+    elements.chatHeaderAvatar.classList.remove('online');
     elements.chatsScreen.style.display = 'none';
     elements.chatScreen.style.display = 'flex';
     elements.privateMessages.innerHTML = '';
@@ -737,10 +741,13 @@ async function showChat(username) {
         isChatActive = true;
           
         elements.chatWithUser.textContent = username;
+        elements.chatHeaderAvatar.textContent = username.charAt(0).toUpperCase();
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
         elements.messageInput.value = '';
+        
+        updateChatHeaderStatus();
           
         await loadMessages(user.uid);
         setupTypingDetection();
@@ -762,6 +769,24 @@ async function showChat(username) {
     } catch (e) {
     } finally {
         showLoading(false);
+    }
+}
+
+function updateChatHeaderStatus() {
+    if (!currentChatUserId || !elements.chatHeaderAvatar) return;
+    
+    if (currentChatUserId.startsWith('saved_')) {
+        elements.chatHeaderAvatar.classList.remove('online');
+        return;
+    }
+    
+    const user = onlineUsers.get(currentChatUserId);
+    const isOnline = user?.is_online === true;
+    
+    if (isOnline) {
+        elements.chatHeaderAvatar.classList.add('online');
+    } else {
+        elements.chatHeaderAvatar.classList.remove('online');
     }
 }
 
@@ -958,24 +983,24 @@ function setupEventListeners() {
     elements.loginButton.addEventListener('click', login);
     elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
 
-    elements.chatsMenuBtn.addEventListener('click', () => {
-        elements.sideMenu.style.display = 'block';
-        setTimeout(() => elements.sideMenu.classList.add('show'), 10);
-    });
-
-    elements.closeMenu.addEventListener('click', closeMenu);
-
-    document.addEventListener('click', e => {
-        if (!elements.sideMenu.contains(e.target) && !elements.chatsMenuBtn.contains(e.target) && elements.sideMenu.classList.contains('show')) {
-            closeMenu();
-        }
-    });
-
     elements.findFriendsCircleBtn.addEventListener('click', () => {
         elements.searchUsername.value = '';
         elements.searchResults.innerHTML = '';
         showModal('findFriendsModal');
         setTimeout(() => searchUsers(), 100);
+    });
+    
+    elements.searchFriendsBtn.addEventListener('click', () => {
+        elements.searchUsername.value = '';
+        elements.searchResults.innerHTML = '';
+        showModal('findFriendsModal');
+        setTimeout(() => searchUsers(), 100);
+    });
+    
+    elements.settingsProfileBtn.addEventListener('click', () => {
+        elements.editUsername.value = currentUser?.username || '';
+        elements.editUsernameError.style.display = 'none';
+        showModal('editProfileModal');
     });
 
     elements.backToChats.addEventListener('click', () => {
@@ -1124,6 +1149,7 @@ function setupRealtimeSubscriptions() {
                 if (currentChatUserId === change.doc.id) {
                     currentChatWith = userData.username;
                     elements.chatWithUser.textContent = userData.username;
+                    updateChatHeaderStatus();
                 }
                 
                 if (currentUser && change.doc.id === currentUser.uid) {
@@ -1766,12 +1792,10 @@ function loadContacts() {
             const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
               
             contactElement.innerHTML = `
-                <div class="contact-info">
-                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
-                    <div>
-                        <div class="contact-name">${escapeHtml(contact.username)}</div>
-                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
-                    </div>
+                <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
+                <div>
+                    <div class="contact-name">${escapeHtml(contact.username)}</div>
+                    <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
                 </div>
             `;
         });
