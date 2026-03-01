@@ -316,10 +316,6 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.settings-circle-btn {
-    background: #8a6fd5;
-}
-
 .find-friends-circle-btn:active, .settings-circle-btn:active {
     background: #7a5bc5;
     transform: scale(0.96);
@@ -361,11 +357,11 @@ body {
 
 .saved-chat .chat-avatar {
     background: linear-gradient(145deg, #6a4faf 0%, #8a6fd5 100%);
-    font-size: 0;
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>');
     background-size: 24px;
     background-repeat: no-repeat;
     background-position: center;
+    font-size: 0;
 }
 
 .chat-screen {
