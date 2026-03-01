@@ -183,6 +183,7 @@ body {
     border-radius: 20px;
     background: rgba(55, 35, 100, 0.5);
     border: 1px solid rgba(180, 140, 255, 0.15);
+    position: relative;
 }
 
 .chat-item:active {
@@ -205,6 +206,25 @@ body {
     position: relative;
 }
 
+.chat-avatar.official-badge::after {
+    content: '✓';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    background: #1E90FF;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #2d1b69;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
 .chat-avatar.online::after {
     content: '';
     position: absolute;
@@ -215,6 +235,15 @@ body {
     background: #4CAF50;
     border: 2px solid #2d1b69;
     border-radius: 50%;
+}
+
+.chat-avatar.official-badge.online::after {
+    content: '';
+    bottom: 2px;
+    right: 2px;
+    width: 10px;
+    height: 10px;
+    background: #4CAF50;
 }
 
 .chat-info {
@@ -420,6 +449,25 @@ body {
     position: relative;
 }
 
+.chat-header-avatar.official-badge::after {
+    content: '✓';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    background: #1E90FF;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #2d1b69;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
 .chat-header-avatar.online::after {
     content: '';
     position: absolute;
@@ -430,6 +478,15 @@ body {
     background: #4CAF50;
     border: 2px solid #2d1b69;
     border-radius: 50%;
+}
+
+.chat-header-avatar.official-badge.online::after {
+    content: '';
+    bottom: 2px;
+    right: 2px;
+    width: 10px;
+    height: 10px;
+    background: #4CAF50;
 }
 
 .chat-header-info {
@@ -445,6 +502,23 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.official-username-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #1E90FF;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    margin-left: 4px;
 }
 
 .chat-status {
@@ -750,11 +824,30 @@ body {
     position: relative;
 }
 
+.user-result-avatar.official-badge::after {
+    content: '✓';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    background: #1E90FF;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #2d1b69;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
 .user-result-avatar.online::after {
     content: '';
     position: absolute;
-    bottom: -1px;
-    right: -1px;
+    bottom: 2px;
+    right: 2px;
     width: 8px;
     height: 8px;
     background: #4CAF50;
@@ -762,10 +855,22 @@ body {
     border-radius: 50%;
 }
 
+.user-result-avatar.official-badge.online::after {
+    content: '';
+    bottom: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    background: #4CAF50;
+}
+
 .user-result-name {
     color: #ffffff;
     font-weight: 500;
     font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .contacts-list {
@@ -803,11 +908,30 @@ body {
     position: relative;
 }
 
+.contact-avatar.official-badge::after {
+    content: '✓';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    background: #1E90FF;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #2d1b69;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
 .contact-avatar.online::after {
     content: '';
     position: absolute;
-    bottom: -1px;
-    right: -1px;
+    bottom: 2px;
+    right: 2px;
     width: 8px;
     height: 8px;
     background: #4CAF50;
@@ -815,10 +939,22 @@ body {
     border-radius: 50%;
 }
 
+.contact-avatar.official-badge.online::after {
+    content: '';
+    bottom: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    background: #4CAF50;
+}
+
 .contact-name {
     color: #ffffff;
     font-weight: 500;
     font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .loading-overlay {
