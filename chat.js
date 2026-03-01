@@ -66,7 +66,6 @@ const elements = {
     contactsList: document.getElementById('contactsList'),
     chatsTitle: document.getElementById('chatsTitle'),
     chatHeaderAvatar: document.getElementById('chatHeaderAvatar'),
-    searchFriendsBtn: document.getElementById('searchFriendsBtn'),
     settingsProfileBtn: document.getElementById('settingsProfileBtn')
 };
 
@@ -984,13 +983,6 @@ function setupEventListeners() {
     elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
 
     elements.findFriendsCircleBtn.addEventListener('click', () => {
-        elements.searchUsername.value = '';
-        elements.searchResults.innerHTML = '';
-        showModal('findFriendsModal');
-        setTimeout(() => searchUsers(), 100);
-    });
-    
-    elements.searchFriendsBtn.addEventListener('click', () => {
         elements.searchUsername.value = '';
         elements.searchResults.innerHTML = '';
         showModal('findFriendsModal');
