@@ -89,6 +89,11 @@ let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
 
+const OFFICIAL_NAMES = new Map([
+    ['SpeedNexus', { name: 'SpeedNexus', official: true }],
+    ['Dmitriy Owner', { name: 'Dmitriy Owner', official: true }]
+]);
+
 function initMediaDB() {
     const request = indexedDB.open('SpeedNexusMedia', 3);
     request.onupgradeneeded = (event) => {
@@ -153,6 +158,25 @@ function showToast(text) {
     toast.textContent = text;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2000);
+}
+
+function isUsernameReserved(username) {
+    return OFFICIAL_NAMES.has(username);
+}
+
+function addOfficialBadgeIfNeeded(element, username) {
+    if (isUsernameReserved(username)) {
+        element.classList.add('official-badge');
+    } else {
+        element.classList.remove('official-badge');
+    }
+}
+
+function formatUsernameWithBadge(username) {
+    if (isUsernameReserved(username)) {
+        return `${username}<span class="official-username-badge">✓</span>`;
+    }
+    return username;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -519,12 +543,29 @@ async function checkUser() {
         const saved = localStorage.getItem('speednexus_user');
         if (saved) {
             const userData = JSON.parse(saved);
+            
+            if (isUsernameReserved(userData.username) && userData.uid !== 'official_speednexus' && userData.uid !== 'official_dmitriy') {
+                localStorage.removeItem('speednexus_user');
+                showLogin();
+                showLoading(false);
+                return;
+            }
+            
             const userDoc = await db.collection('users').doc(userData.uid).get();
               
             if (userDoc.exists) {
+                const username = userDoc.data().username;
+                
+                if (isUsernameReserved(username) && userData.uid !== 'official_speednexus' && userData.uid !== 'official_dmitriy') {
+                    localStorage.removeItem('speednexus_user');
+                    showLogin();
+                    showLoading(false);
+                    return;
+                }
+                
                 currentUser = {
                     uid: userDoc.id,
-                    username: userDoc.data().username
+                    username: username
                 };
                   
                 await createConnection();
@@ -648,7 +689,7 @@ function openSavedMessages() {
     currentChatUserId = 'saved_' + currentUser.uid;
     isChatActive = true;
     
-    elements.chatWithUser.textContent = 'Заметки';
+    elements.chatWithUser.innerHTML = 'Заметки';
     if (elements.chatHeaderAvatar) {
         elements.chatHeaderAvatar.style.backgroundImage = 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'white\'><path d=\'M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z\'/></svg>")';
         elements.chatHeaderAvatar.style.backgroundSize = '24px';
@@ -656,6 +697,7 @@ function openSavedMessages() {
         elements.chatHeaderAvatar.style.backgroundPosition = 'center';
         elements.chatHeaderAvatar.textContent = '';
         elements.chatHeaderAvatar.style.background = 'linear-gradient(145deg, #6a4faf 0%, #8a6fd5 100%)';
+        elements.chatHeaderAvatar.classList.remove('official-badge');
     }
     elements.chatsScreen.style.display = 'none';
     elements.chatScreen.style.display = 'flex';
@@ -727,15 +769,22 @@ async function showChat(username) {
             return;
         }
 
+        if (isUsernameReserved(username) && user.uid !== 'official_speednexus' && user.uid !== 'official_dmitriy') {
+            showToast('Этот никнейм защищен и не может быть использован');
+            showLoading(false);
+            return;
+        }
+
         currentChatWith = username;
         currentChatUserId = user.uid;
         isChatActive = true;
           
-        elements.chatWithUser.textContent = username;
+        elements.chatWithUser.innerHTML = formatUsernameWithBadge(username);
         if (elements.chatHeaderAvatar) {
             elements.chatHeaderAvatar.textContent = username.charAt(0).toUpperCase();
             elements.chatHeaderAvatar.style.backgroundImage = 'none';
             elements.chatHeaderAvatar.style.background = 'linear-gradient(145deg, #8a6fd5 0%, #a58be0 100%)';
+            addOfficialBadgeIfNeeded(elements.chatHeaderAvatar, username);
         }
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'flex';
@@ -942,10 +991,11 @@ function setupMediaRequestListener() {
 function updateUI() {
     if (currentUser) {
         if (elements.currentUsernameDisplay) {
-            elements.currentUsernameDisplay.textContent = currentUser.username;
+            elements.currentUsernameDisplay.innerHTML = formatUsernameWithBadge(currentUser.username);
         }
         if (elements.userAvatar) {
             elements.userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
+            addOfficialBadgeIfNeeded(elements.userAvatar, currentUser.username);
         }
         if (elements.userStatusDisplay) {
             elements.userStatusDisplay.textContent = 'на связи';
@@ -1181,7 +1231,10 @@ function setupRealtimeSubscriptions() {
                 if (currentChatUserId === change.doc.id) {
                     currentChatWith = userData.username;
                     if (elements.chatWithUser) {
-                        elements.chatWithUser.textContent = userData.username;
+                        elements.chatWithUser.innerHTML = formatUsernameWithBadge(userData.username);
+                    }
+                    if (elements.chatHeaderAvatar) {
+                        addOfficialBadgeIfNeeded(elements.chatHeaderAvatar, userData.username);
                     }
                 }
                 
@@ -1406,7 +1459,7 @@ function displayChats() {
             <div class="chat-avatar ${isOnline ? 'online' : ''}">${escapeHtml(chat.username.charAt(0).toUpperCase())}</div>
             <div class="chat-info">
                 <div class="chat-name">
-                    ${escapeHtml(chat.username)}
+                    ${formatUsernameWithBadge(escapeHtml(chat.username))}
                     <span class="chat-status-text ${isOnline ? 'online' : ''}">${isOnline ? 'на связи' : 'без связи'}</span>
                 </div>
                 <div class="chat-last-message ${isTyping ? 'typing-message' : ''}">${displayMessage}</div>
@@ -1414,6 +1467,9 @@ function displayChats() {
             </div>
             ${unreadCount ? `<div class="unread-badge">${unreadCount}</div>` : ''}
         `;
+        
+        const avatarDiv = div.querySelector('.chat-avatar');
+        addOfficialBadgeIfNeeded(avatarDiv, chat.username);
           
         elements.chatsList.appendChild(div);
     });
@@ -1616,12 +1672,23 @@ async function login() {
         return;
     }
 
+    if (isUsernameReserved(username)) {
+        showError(elements.loginError, 'Этот никнейм защищен и не может быть использован');
+        return;
+    }
+
     showLoading(true);
     try {
         const existingUser = await findUserByUsername(username);
         const now = new Date().toISOString();
           
         if (existingUser) {
+            if (isUsernameReserved(existingUser.username) && existingUser.uid !== 'official_speednexus' && existingUser.uid !== 'official_dmitriy') {
+                showError(elements.loginError, 'Этот никнейм защищен');
+                showLoading(false);
+                return;
+            }
+            
             currentUser = {
                 uid: existingUser.uid,
                 username: existingUser.username
@@ -1674,6 +1741,11 @@ async function editProfile() {
       
     if (newUsername.length > 15) {
         showError(elements.editUsernameError, 'Максимум 15 символов');
+        return;
+    }
+
+    if (isUsernameReserved(newUsername)) {
+        showError(elements.editUsernameError, 'Этот никнейм защищен');
         return;
     }
       
@@ -1731,6 +1803,10 @@ async function searchUsers() {
             const userElement = document.createElement('div');
             userElement.className = 'user-result';
             userElement.onclick = () => {
+                if (isUsernameReserved(user.username) && user.uid !== 'official_speednexus' && user.uid !== 'official_dmitriy') {
+                    showToast('Этот пользователь защищен');
+                    return;
+                }
                 hideModal('findFriendsModal');
                 showChat(user.username);
             };
@@ -1741,11 +1817,14 @@ async function searchUsers() {
                 <div class="user-result-info">
                     <div class="user-result-avatar ${isOnline ? 'online' : ''}">${escapeHtml(user.username.charAt(0).toUpperCase())}</div>
                     <div>
-                        <div class="user-result-name">${escapeHtml(user.username)}</div>
+                        <div class="user-result-name">${formatUsernameWithBadge(escapeHtml(user.username))}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
                     </div>
                 </div>
             `;
+              
+            const avatarDiv = userElement.querySelector('.user-result-avatar');
+            addOfficialBadgeIfNeeded(avatarDiv, user.username);
               
             elements.searchResults.appendChild(userElement);
         });
@@ -1759,7 +1838,7 @@ function updateSearchResultsWithStatus() {
     searchResults.forEach(result => {
         const nameElement = result.querySelector('.user-result-name');
         if (nameElement) {
-            const username = nameElement.textContent;
+            const username = nameElement.textContent.replace('✓', '').trim();
             findUserByUsername(username).then(user => {
                 if (user) {
                     const isOnline = onlineUsers.get(user.uid)?.is_online === true;
@@ -1768,6 +1847,7 @@ function updateSearchResultsWithStatus() {
                       
                     if (avatarElement) {
                         avatarElement.className = `user-result-avatar ${isOnline ? 'online' : ''}`;
+                        addOfficialBadgeIfNeeded(avatarElement, user.username);
                     }
                     if (statusElement) {
                         statusElement.textContent = isOnline ? 'на связи' : 'без связи';
@@ -1783,7 +1863,7 @@ function updateContactsWithStatus() {
     contactsItems.forEach(item => {
         const nameElement = item.querySelector('.contact-name');
         if (nameElement) {
-            const username = nameElement.textContent;
+            const username = nameElement.textContent.replace('✓', '').trim();
             findUserByUsername(username).then(user => {
                 if (user) {
                     const isOnline = onlineUsers.get(user.uid)?.is_online === true;
@@ -1792,9 +1872,13 @@ function updateContactsWithStatus() {
                       
                     if (avatarElement) {
                         avatarElement.className = `contact-avatar ${isOnline ? 'online' : ''}`;
+                        addOfficialBadgeIfNeeded(avatarElement, user.username);
                     }
                     if (statusElement) {
                         statusElement.textContent = isOnline ? 'на связи' : 'без связи';
+                    }
+                    if (nameElement) {
+                        nameElement.innerHTML = formatUsernameWithBadge(escapeHtml(user.username));
                     }
                 }
             });
@@ -1815,6 +1899,10 @@ function loadContacts() {
         const contactElement = document.createElement('div');
         contactElement.className = 'contact-item';
         contactElement.onclick = () => {
+            if (isUsernameReserved(contact.username) && contact.uid !== 'official_speednexus' && contact.uid !== 'official_dmitriy') {
+                showToast('Этот пользователь защищен');
+                return;
+            }
             hideModal('contactsModal');
             showChat(contact.username);
         };
@@ -1826,11 +1914,14 @@ function loadContacts() {
                 <div class="contact-info">
                     <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
                     <div>
-                        <div class="contact-name">${escapeHtml(contact.username)}</div>
+                        <div class="contact-name">${formatUsernameWithBadge(escapeHtml(contact.username))}</div>
                         <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
                     </div>
                 </div>
             `;
+            
+            const avatarDiv = contactElement.querySelector('.contact-avatar');
+            addOfficialBadgeIfNeeded(avatarDiv, contact.username);
         });
           
         elements.contactsList.appendChild(contactElement);
