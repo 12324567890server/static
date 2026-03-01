@@ -1,13 +1,10 @@
 {
   "name": "SpeedNexus",
   "short_name": "SpeedNexus",
-  "description": "Modern messenger with unique design",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#2d1b69",
   "theme_color": "#8a6fd5",
-  "orientation": "portrait",
-  "scope": "/",
   "icons": [
     {
       "src": "icon-192.png",
