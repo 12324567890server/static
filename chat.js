@@ -727,6 +727,9 @@ async function showChat(username) {
         elements.chatWithUser.textContent = username;
         elements.chatHeaderAvatar.textContent = username.charAt(0).toUpperCase();
         elements.chatHeaderAvatar.style.backgroundImage = 'none';
+        elements.chatHeaderAvatar.style.backgroundSize = '';
+        elements.chatHeaderAvatar.style.backgroundRepeat = '';
+        elements.chatHeaderAvatar.style.backgroundPosition = '';
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
