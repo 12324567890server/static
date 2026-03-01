@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SpeedNexus</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src * self 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * self 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * self; style-src * self 'unsafe-inline';">
     <link rel="stylesheet" href="style.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#8a6fd5">
 </head>
 <body>
@@ -67,6 +68,34 @@
         </div>
     </div>
 
+    <div id="sideMenu" class="side-menu">
+        <div class="side-menu-header">
+            <div class="user-info">
+                <div id="userAvatar" class="user-avatar">U</div>
+                <div>
+                    <h4 id="currentUsernameDisplay">-</h4>
+                    <div id="userStatusDisplay" class="user-status">не в сети</div>
+                </div>
+            </div>
+            <button id="closeMenu" class="close-menu-btn">×</button>
+        </div>
+        
+        <div class="side-menu-content">
+            <button id="editProfileBtn" class="side-menu-btn">
+                <span class="icon edit-icon"></span>
+                <span class="btn-text">Изменить профиль</span>
+            </button>
+            <button id="contactsBtn" class="side-menu-btn">
+                <span class="icon contacts-icon"></span>
+                <span class="btn-text">Контакты</span>
+            </button>
+            <button id="logoutBtn" class="side-menu-btn">
+                <span class="icon logout-icon"></span>
+                <span class="btn-text">Выйти</span>
+            </button>
+        </div>
+    </div>
+
     <div id="editProfileModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -114,7 +143,7 @@
     <script src="chat.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
+            navigator.serviceWorker.register('/static/sw.js');
         }
     </script>
 </body>
