@@ -966,68 +966,81 @@ function updateUI() {
 }
 
 function setupEventListeners() {
-    elements.loginButton.addEventListener('click', login);
-    elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
+    if (elements.loginButton) elements.loginButton.addEventListener('click', login);
+    if (elements.loginUsername) elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
 
-    elements.findFriendsCircleBtn.addEventListener('click', () => {
-        elements.searchUsername.value = '';
-        elements.searchResults.innerHTML = '';
-        showModal('findFriendsModal');
-        setTimeout(() => searchUsers(), 100);
-    });
+    if (elements.findFriendsCircleBtn) {
+        elements.findFriendsCircleBtn.addEventListener('click', () => {
+            elements.searchUsername.value = '';
+            elements.searchResults.innerHTML = '';
+            showModal('findFriendsModal');
+            setTimeout(() => searchUsers(), 100);
+        });
+    }
     
-    elements.settingsProfileBtn.addEventListener('click', () => {
-        elements.editUsername.value = currentUser?.username || '';
-        elements.editUsernameError.style.display = 'none';
-        showModal('editProfileModal');
-    });
+    if (elements.settingsProfileBtn) {
+        elements.settingsProfileBtn.addEventListener('click', () => {
+            elements.editUsername.value = currentUser?.username || '';
+            elements.editUsernameError.style.display = 'none';
+            showModal('editProfileModal');
+        });
+    }
 
-    elements.backToChats.addEventListener('click', () => {
-        if (messageListener) {
-            messageListener();
-            messageListener = null;
-        }
-        
-        if (typingTimer) {
-            clearTimeout(typingTimer);
-            const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
-            db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
-            typingTimer = null;
-        }
-        
-        currentChatWith = null;
-        currentChatUserId = null;
-        isChatActive = false;
-        showChats();
-    });
+    if (elements.backToChats) {
+        elements.backToChats.addEventListener('click', () => {
+            if (messageListener) {
+                messageListener();
+                messageListener = null;
+            }
+            
+            if (typingTimer) {
+                clearTimeout(typingTimer);
+                const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+                db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+                typingTimer = null;
+            }
+            
+            currentChatWith = null;
+            currentChatUserId = null;
+            isChatActive = false;
+            showChats();
+        });
+    }
 
-    elements.editProfileBtn.addEventListener('click', () => {
-        elements.editUsername.value = currentUser?.username || '';
-        elements.editUsernameError.style.display = 'none';
-        showModal('editProfileModal');
-    });
+    if (elements.editProfileBtn) {
+        elements.editProfileBtn.addEventListener('click', () => {
+            elements.editUsername.value = currentUser?.username || '';
+            elements.editUsernameError.style.display = 'none';
+            showModal('editProfileModal');
+        });
+    }
 
-    elements.saveProfileBtn.addEventListener('click', editProfile);
-    elements.searchBtn.addEventListener('click', searchUsers);
-    elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
-    elements.contactsBtn.addEventListener('click', () => {
-        loadContacts();
-        showModal('contactsModal');
-    });
+    if (elements.saveProfileBtn) elements.saveProfileBtn.addEventListener('click', editProfile);
+    if (elements.searchBtn) elements.searchBtn.addEventListener('click', searchUsers);
+    if (elements.searchUsername) elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
+    
+    if (elements.contactsBtn) {
+        elements.contactsBtn.addEventListener('click', () => {
+            loadContacts();
+            showModal('contactsModal');
+        });
+    }
 
-    elements.logoutBtn.addEventListener('click', logout);
-    elements.sendMessageBtn.addEventListener('click', sendMessage);
+    if (elements.logoutBtn) elements.logoutBtn.addEventListener('click', logout);
+    if (elements.sendMessageBtn) elements.sendMessageBtn.addEventListener('click', sendMessage);
     
     if (elements.attachMediaBtn) {
         elements.attachMediaBtn.addEventListener('click', openMediaPicker);
     }
       
-    elements.messageInput.addEventListener('keypress', e => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+    if (elements.messageInput) {
+        elements.messageInput.addEventListener('keypress', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    }
 
     document.querySelectorAll('.close-modal').forEach(btn => {
         btn.addEventListener('click', e => {
@@ -1048,7 +1061,9 @@ function setupEventListeners() {
         }
     });
 
-    elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+    if (elements.searchChats) {
+        elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+    }
 }
 
 function showLoading(show) {
