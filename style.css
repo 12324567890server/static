@@ -118,6 +118,7 @@ body {
     justify-content: space-between;
     align-items: center;
     min-height: 52px;
+    margin-bottom: 8px;
 }
 
 .chats-title {
@@ -141,8 +142,8 @@ body {
     border: 1.5px solid rgba(180, 140, 255, 0.4);
     color: white;
     cursor: pointer;
-    width: 52px;
-    height: 52px;
+    width: 58px;
+    height: 58px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -154,19 +155,9 @@ body {
     transform: scale(0.95);
 }
 
-.search-icon-header {
-    width: 28px;
-    height: 28px;
-    display: inline-block;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>');
-}
-
 .settings-icon-header {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     display: inline-block;
     background-size: contain;
     background-repeat: no-repeat;
@@ -175,17 +166,17 @@ body {
 }
 
 .search-container {
-    padding: 10px 16px 5px 16px;
+    padding: 0;
 }
 
 .search-input {
     width: 100%;
-    padding: 12px 15px;
-    border-radius: 18px;
+    padding: 14px 18px;
+    border-radius: 24px;
     border: 1.5px solid rgba(180, 140, 255, 0.2);
     background: rgba(55, 35, 100, 0.6);
     color: white;
-    font-size: 14px;
+    font-size: 15px;
     outline: none;
 }
 
@@ -942,13 +933,13 @@ body {
     }
     
     .header-action-btn {
-        width: 48px;
-        height: 48px;
+        width: 52px;
+        height: 52px;
     }
     
-    .search-icon-header, .settings-icon-header {
-        width: 26px;
-        height: 26px;
+    .settings-icon-header {
+        width: 28px;
+        height: 28px;
     }
 }
 
