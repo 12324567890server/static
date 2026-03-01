@@ -90,9 +90,18 @@ let connectionId = null;
 let typingTimer = null;
 
 const OFFICIAL_NAMES = new Map([
-    ['SpeedNexus', { name: 'SpeedNexus', official: true }],
-    ['Dmitriy Owner', { name: 'Dmitriy Owner', official: true }]
+    ['SpeedNexus', { name: 'SpeedNexus', official: true, ownerId: 'owner_speednexus' }],
+    ['Dmitriy Owner', { name: 'Dmitriy Owner', official: true, ownerId: 'owner_dmitriy' }]
 ]);
+
+const OWNER_DEVICE_ID = 'speednexus_owner_device_' + (() => {
+    let id = localStorage.getItem('speednexus_device_id');
+    if (!id) {
+        id = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('speednexus_device_id', id);
+    }
+    return id;
+})();
 
 function initMediaDB() {
     const request = indexedDB.open('SpeedNexusMedia', 3);
@@ -162,6 +171,11 @@ function showToast(text) {
 
 function isUsernameReserved(username) {
     return OFFICIAL_NAMES.has(username);
+}
+
+function isCurrentUserOwner() {
+    const ownerIds = ['owner_speednexus', 'owner_dmitriy'];
+    return currentUser && ownerIds.includes(currentUser.uid);
 }
 
 function addOfficialBadgeIfNeeded(element, username) {
@@ -544,7 +558,7 @@ async function checkUser() {
         if (saved) {
             const userData = JSON.parse(saved);
             
-            if (isUsernameReserved(userData.username) && userData.uid !== 'official_speednexus' && userData.uid !== 'official_dmitriy') {
+            if (isUsernameReserved(userData.username) && !isCurrentUserOwner()) {
                 localStorage.removeItem('speednexus_user');
                 showLogin();
                 showLoading(false);
@@ -556,7 +570,7 @@ async function checkUser() {
             if (userDoc.exists) {
                 const username = userDoc.data().username;
                 
-                if (isUsernameReserved(username) && userData.uid !== 'official_speednexus' && userData.uid !== 'official_dmitriy') {
+                if (isUsernameReserved(username) && !isCurrentUserOwner()) {
                     localStorage.removeItem('speednexus_user');
                     showLogin();
                     showLoading(false);
@@ -769,8 +783,8 @@ async function showChat(username) {
             return;
         }
 
-        if (isUsernameReserved(username) && user.uid !== 'official_speednexus' && user.uid !== 'official_dmitriy') {
-            showToast('Этот никнейм защищен и не может быть использован');
+        if (isUsernameReserved(username) && !isCurrentUserOwner()) {
+            showToast('Этот пользователь защищен');
             showLoading(false);
             return;
         }
@@ -1672,44 +1686,64 @@ async function login() {
         return;
     }
 
-    if (isUsernameReserved(username)) {
-        showError(elements.loginError, 'Этот никнейм защищен и не может быть использован');
-        return;
-    }
-
     showLoading(true);
     try {
+        let uid;
         const existingUser = await findUserByUsername(username);
         const now = new Date().toISOString();
-          
-        if (existingUser) {
-            if (isUsernameReserved(existingUser.username) && existingUser.uid !== 'official_speednexus' && existingUser.uid !== 'official_dmitriy') {
-                showError(elements.loginError, 'Этот никнейм защищен');
-                showLoading(false);
-                return;
+        
+        if (isUsernameReserved(username)) {
+            if (username === 'SpeedNexus') {
+                uid = 'owner_speednexus';
+            } else if (username === 'Dmitriy Owner') {
+                uid = 'owner_dmitriy';
             }
             
-            currentUser = {
-                uid: existingUser.uid,
-                username: existingUser.username
-            };
-            
-            await db.collection('users').doc(currentUser.uid).update({
-                is_online: true,
-                last_seen: now
-            });
+            if (existingUser) {
+                if (existingUser.uid !== uid) {
+                    showError(elements.loginError, 'Этот никнейм защищен');
+                    showLoading(false);
+                    return;
+                }
+                currentUser = {
+                    uid: existingUser.uid,
+                    username: existingUser.username
+                };
+                await db.collection('users').doc(currentUser.uid).update({
+                    is_online: true,
+                    last_seen: now
+                });
+            } else {
+                await db.collection('users').doc(uid).set({
+                    uid: uid,
+                    username: username,
+                    is_online: true,
+                    last_seen: now,
+                    created_at: now
+                });
+                currentUser = { uid, username };
+            }
         } else {
-            const uid = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            
-            await db.collection('users').doc(uid).set({
-                uid: uid,
-                username: username,
-                is_online: true,
-                last_seen: now,
-                created_at: now
-            });
-
-            currentUser = { uid, username };
+            if (existingUser) {
+                currentUser = {
+                    uid: existingUser.uid,
+                    username: existingUser.username
+                };
+                await db.collection('users').doc(currentUser.uid).update({
+                    is_online: true,
+                    last_seen: now
+                });
+            } else {
+                uid = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                await db.collection('users').doc(uid).set({
+                    uid: uid,
+                    username: username,
+                    is_online: true,
+                    last_seen: now,
+                    created_at: now
+                });
+                currentUser = { uid, username };
+            }
         }
 
         await createConnection();
@@ -1744,7 +1778,7 @@ async function editProfile() {
         return;
     }
 
-    if (isUsernameReserved(newUsername)) {
+    if (isUsernameReserved(newUsername) && !isCurrentUserOwner()) {
         showError(elements.editUsernameError, 'Этот никнейм защищен');
         return;
     }
@@ -1803,7 +1837,7 @@ async function searchUsers() {
             const userElement = document.createElement('div');
             userElement.className = 'user-result';
             userElement.onclick = () => {
-                if (isUsernameReserved(user.username) && user.uid !== 'official_speednexus' && user.uid !== 'official_dmitriy') {
+                if (isUsernameReserved(user.username) && !isCurrentUserOwner()) {
                     showToast('Этот пользователь защищен');
                     return;
                 }
@@ -1899,7 +1933,7 @@ function loadContacts() {
         const contactElement = document.createElement('div');
         contactElement.className = 'contact-item';
         contactElement.onclick = () => {
-            if (isUsernameReserved(contact.username) && contact.uid !== 'official_speednexus' && contact.uid !== 'official_dmitriy') {
+            if (isUsernameReserved(contact.username) && !isCurrentUserOwner()) {
                 showToast('Этот пользователь защищен');
                 return;
             }
