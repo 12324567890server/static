@@ -45,6 +45,8 @@ const elements = {
     loginUsername: document.getElementById('loginUsername'),
     loginButton: document.getElementById('loginButton'),
     loginError: document.getElementById('loginError'),
+    sideMenu: document.getElementById('sideMenu'),
+    closeMenu: document.getElementById('closeMenu'),
     currentUsernameDisplay: document.getElementById('currentUsernameDisplay'),
     userAvatar: document.getElementById('userAvatar'),
     userStatusDisplay: document.getElementById('userStatusDisplay'),
@@ -64,7 +66,8 @@ const elements = {
     contactsList: document.getElementById('contactsList'),
     chatsTitle: document.getElementById('chatsTitle'),
     chatHeaderAvatar: document.getElementById('chatHeaderAvatar'),
-    settingsProfileBtn: document.getElementById('settingsProfileBtn')
+    settingsProfileBtn: document.getElementById('settingsProfileBtn'),
+    chatsMenuBtn: document.getElementById('chatsMenuBtn')
 };
 
 let currentUser = null;
@@ -85,6 +88,7 @@ let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.
 let messageListener = null;
 let connectionId = null;
 let typingTimer = null;
+let pendingTransfers = new Map();
 
 function initMediaDB() {
     const request = indexedDB.open('SpeedNexusMedia', 3);
@@ -129,6 +133,24 @@ function getMediaFromIndexedDB(mediaId) {
             getRequest.onerror = () => resolve(null);
         };
         request.onerror = () => resolve(null);
+    });
+}
+
+function getAllMediaFromIndexedDB(chatId) {
+    return new Promise((resolve) => {
+        const request = indexedDB.open('SpeedNexusMedia', 3);
+        request.onsuccess = (event) => {
+            const db = event.target.result;
+            const transaction = db.transaction(['media'], 'readonly');
+            const store = transaction.objectStore('media');
+            const index = store.index('by_chat');
+            const getRequest = index.getAll(chatId);
+            getRequest.onsuccess = () => {
+                resolve(getRequest.result);
+            };
+            getRequest.onerror = () => resolve([]);
+        };
+        request.onerror = () => resolve([]);
     });
 }
 
@@ -401,7 +423,7 @@ async function sendMediaMessage(file) {
             receiver: currentChatUserId
         });
         
-        await db.collection('messages').add({
+        const messageRef = await db.collection('messages').add({
             chat_id: chatId,
             participants: [currentUser.uid, currentChatUserId],
             sender: currentUser.uid,
@@ -410,7 +432,6 @@ async function sendMediaMessage(file) {
             mediaId: mediaId,
             mediaType: file.type.startsWith('image/') ? 'image' : 'video',
             delivered: false,
-            read: false,
             created_at: new Date().toISOString()
         });
         
@@ -430,6 +451,7 @@ async function sendMediaMessage(file) {
             } catch (e) {}
         }, 60000);
         
+        appendMediaMessageToChat(mediaId, true, messageRef.id, mediaData);
         showLoading(false);
         
     } catch (error) {
@@ -438,9 +460,55 @@ async function sendMediaMessage(file) {
     }
 }
 
+function appendMediaMessageToChat(mediaId, isMyMessage, msgId, mediaData) {
+    const messageElement = document.createElement('div');
+    messageElement.className = `message ${isMyMessage ? 'me' : 'other'} media-message`;
+    messageElement.dataset.messageId = msgId;
+    messageElement.dataset.mediaId = mediaId;
+    
+    const timeString = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    
+    if (mediaData) {
+        if (mediaData.includes('image')) {
+            messageElement.innerHTML = `
+                <div class="message-content">
+                    <img src="${mediaData}" class="media-content" 
+                         style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;"
+                         onclick="window.open('${mediaData}')">
+                    <div class="time">${timeString}</div>
+                </div>
+            `;
+        } else {
+            messageElement.innerHTML = `
+                <div class="message-content">
+                    <video src="${mediaData}" controls 
+                           style="max-width: 200px; max-height: 200px; border-radius: 8px;"></video>
+                    <div class="time">${timeString}</div>
+                </div>
+            `;
+        }
+    } else {
+        messageElement.innerHTML = `
+            <div class="message-content">
+                <div style="width: 200px; height: 200px; background: rgba(74,44,140,0.5); 
+                            border-radius: 8px; display: flex; align-items: center; 
+                            justify-content: center;">
+                    <div class="spinner-small"></div>
+                </div>
+                <div class="time">${timeString}</div>
+            </div>
+        `;
+    }
+    
+    elements.privateMessages.appendChild(messageElement);
+    scrollToBottom();
+}
+
 function setupMediaTransferListeners() {
+    if (!currentUser) return;
+    
     db.collection('media_transfers')
-        .where('receiver', '==', currentUser?.uid || '')
+        .where('receiver', '==', currentUser.uid)
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
@@ -647,7 +715,6 @@ function openSavedMessages() {
     elements.chatHeaderAvatar.style.backgroundRepeat = 'no-repeat';
     elements.chatHeaderAvatar.style.backgroundPosition = 'center';
     elements.chatHeaderAvatar.textContent = '';
-    elements.chatHeaderAvatar.classList.remove('online');
     elements.chatsScreen.style.display = 'none';
     elements.chatScreen.style.display = 'flex';
     elements.privateMessages.innerHTML = '';
@@ -725,24 +792,19 @@ async function showChat(username) {
         elements.chatWithUser.textContent = username;
         elements.chatHeaderAvatar.textContent = username.charAt(0).toUpperCase();
         elements.chatHeaderAvatar.style.backgroundImage = 'none';
-        elements.chatHeaderAvatar.style.backgroundSize = '';
-        elements.chatHeaderAvatar.style.backgroundRepeat = '';
-        elements.chatHeaderAvatar.style.backgroundPosition = '';
         elements.chatsScreen.style.display = 'none';
         elements.chatScreen.style.display = 'flex';
         elements.privateMessages.innerHTML = '';
         elements.messageInput.value = '';
-        
-        updateChatHeaderStatus();
           
         await loadMessages(user.uid);
         setupTypingDetection();
-        
+          
         setTimeout(() => {
             if (isChatActive && isPageVisible) {
                 markMessagesAsRead(user.uid);
             }
-        }, 1000);
+        }, 1500);
           
         updateChatStatus();
         scrollToBottom();
@@ -758,68 +820,45 @@ async function showChat(username) {
     }
 }
 
-function updateChatHeaderStatus() {
-    if (!currentChatUserId || !elements.chatHeaderAvatar) return;
-    
-    if (currentChatUserId.startsWith('saved_')) {
-        elements.chatHeaderAvatar.classList.remove('online');
-        return;
-    }
-    
-    const user = onlineUsers.get(currentChatUserId);
-    const isOnline = user?.is_online === true;
-    
-    if (isOnline) {
-        elements.chatHeaderAvatar.classList.add('online');
-    } else {
-        elements.chatHeaderAvatar.classList.remove('online');
-    }
-}
-
 function setupMessageListener(userId) {
     if (messageListener) {
         messageListener();
     }
 
-    const processedIds = new Set();
-    
-    document.querySelectorAll('[data-message-id]').forEach(el => {
-        processedIds.add(el.dataset.messageId);
-    });
-
     messageListener = db.collection('messages')
         .where('chat_id', '==', [currentUser.uid, userId].sort().join('_'))
         .orderBy('created_at')
         .onSnapshot(snapshot => {
+            const existingMessages = new Set();
+            document.querySelectorAll('[data-message-id]').forEach(el => {
+                existingMessages.add(el.dataset.messageId);
+            });
+
             snapshot.docChanges().forEach(change => {
-                const msg = change.doc.data();
-                const msgId = change.doc.id;
-                
                 if (change.type === 'added') {
-                    if (!processedIds.has(msgId) && !document.querySelector(`[data-message-id="${msgId}"]`)) {
-                        processedIds.add(msgId);
-                        
-                        const isMyMessage = (msg.sender === currentUser.uid);
-                        
+                    const msg = change.doc.data();
+                    const msgId = change.doc.id;
+                    
+                    if (!existingMessages.has(msgId) && !document.querySelector(`[data-message-id="${msgId}"]`)) {
                         if (msg.type === 'media') {
-                            displayMediaMessage(msg, isMyMessage, msgId);
+                            displayMediaMessage(msg, msg.sender === currentUser.uid, msgId);
                         } else {
+                            const isMyMessage = (msg.sender === currentUser.uid);
                             displayMessage(msg, isMyMessage, msgId);
                         }
                         
-                        if (isChatActive && currentChatUserId === userId && msg.receiver === currentUser.uid && !msg.read) {
-                            setTimeout(() => {
-                                change.doc.ref.update({ 
-                                    read: true,
-                                    read_at: new Date().toISOString()
-                                });
-                            }, 500);
+                        if (isChatActive && currentChatUserId === userId) {
+                            scrollToBottom();
+                            if (msg.receiver === currentUser.uid && !msg.read) {
+                                markMessagesAsRead(userId);
+                            }
                         }
-                        
-                        scrollToBottom();
                     }
                 } else if (change.type === 'modified') {
+                    const msg = change.doc.data();
+                    const msgId = change.doc.id;
                     const messageElement = document.querySelector(`[data-message-id="${msgId}"]`);
+                    
                     if (messageElement && msg.read) {
                         const timeElement = messageElement.querySelector('.time');
                         if (timeElement && messageElement.classList.contains('me')) {
@@ -852,10 +891,6 @@ function openMediaPicker() {
 }
 
 async function displayMediaMessage(msg, isMyMessage, msgId) {
-    if (document.querySelector(`[data-message-id="${msgId}"]`)) {
-        return;
-    }
-    
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'me' : 'other'} media-message`;
     messageElement.dataset.messageId = msgId;
@@ -863,7 +898,7 @@ async function displayMediaMessage(msg, isMyMessage, msgId) {
     
     const media = await getMediaFromIndexedDB(msg.mediaId);
     const timeString = formatMessageTime(msg.created_at);
-    const statusSymbol = isMyMessage ? (msg.read ? ' ✓✓' : (msg.delivered ? ' ✓' : '')) : '';
+    const statusSymbol = isMyMessage ? (msg.delivered ? ' ✓✓' : ' ✓') : '';
     
     if (media) {
         if (msg.mediaType === 'image') {
@@ -924,8 +959,10 @@ async function requestMediaFromSender(mediaId, senderId) {
 }
 
 function setupMediaRequestListener() {
+    if (!currentUser) return;
+    
     db.collection('media_requests')
-        .where('sender', '==', currentUser?.uid || '')
+        .where('sender', '==', currentUser.uid)
         .where('status', '==', 'pending')
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(async change => {
@@ -966,81 +1003,79 @@ function updateUI() {
 }
 
 function setupEventListeners() {
-    if (elements.loginButton) elements.loginButton.addEventListener('click', login);
-    if (elements.loginUsername) elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
+    elements.loginButton.addEventListener('click', login);
+    elements.loginUsername.addEventListener('keypress', e => e.key === 'Enter' && login());
 
-    if (elements.findFriendsCircleBtn) {
-        elements.findFriendsCircleBtn.addEventListener('click', () => {
-            elements.searchUsername.value = '';
-            elements.searchResults.innerHTML = '';
-            showModal('findFriendsModal');
-            setTimeout(() => searchUsers(), 100);
-        });
-    }
-    
-    if (elements.settingsProfileBtn) {
-        elements.settingsProfileBtn.addEventListener('click', () => {
-            elements.editUsername.value = currentUser?.username || '';
-            elements.editUsernameError.style.display = 'none';
-            showModal('editProfileModal');
+    if (elements.chatsMenuBtn) {
+        elements.chatsMenuBtn.addEventListener('click', () => {
+            elements.sideMenu.style.display = 'block';
+            setTimeout(() => elements.sideMenu.classList.add('show'), 10);
         });
     }
 
-    if (elements.backToChats) {
-        elements.backToChats.addEventListener('click', () => {
-            if (messageListener) {
-                messageListener();
-                messageListener = null;
-            }
-            
-            if (typingTimer) {
-                clearTimeout(typingTimer);
-                const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
-                db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
-                typingTimer = null;
-            }
-            
-            currentChatWith = null;
-            currentChatUserId = null;
-            isChatActive = false;
-            showChats();
-        });
+    if (elements.closeMenu) {
+        elements.closeMenu.addEventListener('click', closeMenu);
     }
 
-    if (elements.editProfileBtn) {
-        elements.editProfileBtn.addEventListener('click', () => {
-            elements.editUsername.value = currentUser?.username || '';
-            elements.editUsernameError.style.display = 'none';
-            showModal('editProfileModal');
-        });
-    }
+    document.addEventListener('click', e => {
+        if (elements.sideMenu && !elements.sideMenu.contains(e.target) && elements.chatsMenuBtn && !elements.chatsMenuBtn.contains(e.target) && elements.sideMenu.classList.contains('show')) {
+            closeMenu();
+        }
+    });
 
-    if (elements.saveProfileBtn) elements.saveProfileBtn.addEventListener('click', editProfile);
-    if (elements.searchBtn) elements.searchBtn.addEventListener('click', searchUsers);
-    if (elements.searchUsername) elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
-    
-    if (elements.contactsBtn) {
-        elements.contactsBtn.addEventListener('click', () => {
-            loadContacts();
-            showModal('contactsModal');
-        });
-    }
+    elements.findFriendsCircleBtn.addEventListener('click', () => {
+        elements.searchUsername.value = '';
+        elements.searchResults.innerHTML = '';
+        showModal('findFriendsModal');
+        setTimeout(() => searchUsers(), 100);
+    });
 
-    if (elements.logoutBtn) elements.logoutBtn.addEventListener('click', logout);
-    if (elements.sendMessageBtn) elements.sendMessageBtn.addEventListener('click', sendMessage);
+    elements.backToChats.addEventListener('click', () => {
+        if (messageListener) {
+            messageListener();
+            messageListener = null;
+        }
+        
+        if (typingTimer) {
+            clearTimeout(typingTimer);
+            const chatId = [currentUser.uid, currentChatUserId].sort().join('_');
+            db.collection('typing').doc(chatId + '_' + currentUser.uid).delete();
+            typingTimer = null;
+        }
+        
+        currentChatWith = null;
+        currentChatUserId = null;
+        isChatActive = false;
+        showChats();
+    });
+
+    elements.editProfileBtn.addEventListener('click', () => {
+        elements.editUsername.value = currentUser?.username || '';
+        elements.editUsernameError.style.display = 'none';
+        showModal('editProfileModal');
+    });
+
+    elements.saveProfileBtn.addEventListener('click', editProfile);
+    elements.searchBtn.addEventListener('click', searchUsers);
+    elements.searchUsername.addEventListener('input', debounce(searchUsers, 300));
+    elements.contactsBtn.addEventListener('click', () => {
+        loadContacts();
+        showModal('contactsModal');
+    });
+
+    elements.logoutBtn.addEventListener('click', logout);
+    elements.sendMessageBtn.addEventListener('click', sendMessage);
     
     if (elements.attachMediaBtn) {
         elements.attachMediaBtn.addEventListener('click', openMediaPicker);
     }
       
-    if (elements.messageInput) {
-        elements.messageInput.addEventListener('keypress', e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-    }
+    elements.messageInput.addEventListener('keypress', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
 
     document.querySelectorAll('.close-modal').forEach(btn => {
         btn.addEventListener('click', e => {
@@ -1058,11 +1093,19 @@ function setupEventListeners() {
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+            if (elements.sideMenu && elements.sideMenu.classList.contains('show')) {
+                closeMenu();
+            }
         }
     });
 
-    if (elements.searchChats) {
-        elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+    elements.searchChats.addEventListener('input', e => filterChats(e.target.value));
+}
+
+function closeMenu() {
+    if (elements.sideMenu) {
+        elements.sideMenu.classList.remove('show');
+        setTimeout(() => elements.sideMenu.style.display = 'none', 300);
     }
 }
 
@@ -1135,7 +1178,6 @@ function setupRealtimeSubscriptions() {
                 if (currentChatUserId === change.doc.id) {
                     currentChatWith = userData.username;
                     elements.chatWithUser.textContent = userData.username;
-                    updateChatHeaderStatus();
                 }
                 
                 if (currentUser && change.doc.id === currentUser.uid) {
@@ -1306,7 +1348,7 @@ function displayChats() {
     const lastTime = lastSaved ? lastSaved.time : null;
     
     savedElement.innerHTML = `
-        <div class="chat-avatar"></div>
+        <div class="chat-avatar">📌</div>
         <div class="chat-info">
             <div class="chat-name">
                 Заметки
@@ -1407,10 +1449,6 @@ async function loadMessages(userId) {
 }
 
 function displayMessage(msg, isMyMessage, msgId) {
-    if (document.querySelector(`[data-message-id="${msgId}"]`)) {
-        return;
-    }
-    
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'me' : 'other'}`;
     messageElement.dataset.messageId = msgId;
@@ -1778,10 +1816,12 @@ function loadContacts() {
             const isOnline = user ? onlineUsers.get(user.uid)?.is_online === true : false;
               
             contactElement.innerHTML = `
-                <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
-                <div>
-                    <div class="contact-name">${escapeHtml(contact.username)}</div>
-                    <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
+                <div class="contact-info">
+                    <div class="contact-avatar ${isOnline ? 'online' : ''}">${escapeHtml(contact.username.charAt(0).toUpperCase())}</div>
+                    <div>
+                        <div class="contact-name">${escapeHtml(contact.username)}</div>
+                        <div style="color: rgba(255,255,255,0.7); font-size: 12px;">${isOnline ? 'на связи' : 'без связи'}</div>
+                    </div>
                 </div>
             `;
         });
