@@ -45,8 +45,6 @@ const elements = {
     loginUsername: document.getElementById('loginUsername'),
     loginButton: document.getElementById('loginButton'),
     loginError: document.getElementById('loginError'),
-    sideMenu: document.getElementById('sideMenu'),
-    closeMenu: document.getElementById('closeMenu'),
     currentUsernameDisplay: document.getElementById('currentUsernameDisplay'),
     userAvatar: document.getElementById('userAvatar'),
     userStatusDisplay: document.getElementById('userStatusDisplay'),
